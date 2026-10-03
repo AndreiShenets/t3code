@@ -98,6 +98,14 @@ describe("EditorConfig tab width", () => {
     ["file{1..1000000}.ts", "file1000001.ts", false],
     ["file{1..1000000}.ts", "file0.ts", false],
     ["src/a**file{1..1000000}.ts", "src/a/nested/file999999.ts", true],
+    ["a**file{1..3}.ts", "a/nested/file2.ts", true],
+    ["a**file{1..3}.ts", "other/a/nested/file2.ts", true],
+    ["a**file{1..3}.ts", "other/afile2.ts", true],
+    ["a**file{1..3}.ts", "a/nested/file4.ts", false],
+    ["**/file{1..3}.ts", "file2.ts", true],
+    ["src/**/file{1..3}.ts", "src/file2.ts", true],
+    ["src/**/file{1..3}.ts", "src/a/b/file2.ts", true],
+    ["a**/file{1..3}.ts", "afile2.ts", false],
     ["file{-1000000..3}.ts", "file-999999.ts", true],
     ["file{-1000000..3}.ts", "file-1000001.ts", false],
     ["file{-1000000..3}.ts", "file0.ts", true],
@@ -105,6 +113,16 @@ describe("EditorConfig tab width", () => {
     ["file{-1000000..-2}.ts", "file-2.ts", true],
     ["file{-1000000..-2}.ts", "file-1.ts", false],
     ["file{1..1000000}{1..3}.ts", "file9999992.ts", true],
+    ["file{1..100}{200..300}.ts", "file1200.ts", true],
+    ["file{1..100}{200..300}.ts", "file1199.ts", false],
+    ["file*{20..30}.ts", "file12325.ts", true],
+    ["file*{20..30}.ts", "file12319.ts", false],
+    ["file\\*{1..3}.ts", "file*2.ts", true],
+    ["file\\*{1..3}.ts", "filex2.ts", false],
+    ["file?{1..3}.ts", "filex2.ts", true],
+    ["file?{1..3}.ts", "file/x2.ts", false],
+    ["file[!a]{1..3}.ts", "fileb2.ts", true],
+    ["file[!a]{1..3}.ts", "filea2.ts", false],
     ["{file{1..1000000},other}.ts", "other.ts", true],
     ["{file{1..1000000},other}.ts", "file999999.ts", true],
     ["file\\{1..1000000\\}.ts", "file{1..1000000}.ts", true],
@@ -127,6 +145,29 @@ describe("EditorConfig tab width", () => {
     expect(
       resolveEditorConfigTabWidth([{ config, relativePath: "file100000000000000000001.ts" }]),
     ).toBe(2);
+  });
+
+  it("keeps valid 900-digit bounds as data rather than compiling their decimal expansion", () => {
+    const upper = `1${"0".repeat(900)}`;
+    const config = parseEditorConfig(`[file{1..${upper}}.ts]\ntab_width = 4`);
+    for (const filename of ["file2.ts", `file${upper}.ts`]) {
+      expect(resolveEditorConfigTabWidth([{ config, relativePath: filename }])).toBe(4);
+    }
+    expect(
+      resolveEditorConfigTabWidth([{ config, relativePath: `file2${"0".repeat(900)}.ts` }]),
+    ).toBe(2);
+    const negative = parseEditorConfig(`[file{-${upper}..-1}.ts]\ntab_width = 4`);
+    expect(
+      resolveEditorConfigTabWidth([{ config: negative, relativePath: "file-999999.ts" }]),
+    ).toBe(4);
+    expect(resolveEditorConfigTabWidth([{ config: negative, relativePath: "file0.ts" }])).toBe(2);
+  });
+
+  it("repartitions adjacent ranges without exponential backtracking on an unmatched suffix", () => {
+    const config = parseEditorConfig(`[file${"{1..1000000}".repeat(10)}.ts]\ntab_width = 4`);
+    const filename = `file${"1".repeat(40)}`;
+    expect(resolveEditorConfigTabWidth([{ config, relativePath: `${filename}.ts` }])).toBe(4);
+    expect(resolveEditorConfigTabWidth([{ config, relativePath: `${filename}.txt` }])).toBe(2);
   });
 
   it.each([
