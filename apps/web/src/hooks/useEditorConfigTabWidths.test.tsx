@@ -121,6 +121,7 @@ describe("workspace EditorConfig lookup", () => {
     ["/repo/frontend", "/repo", "/repo/.editorconfig"],
     ["C:\\repo\\frontend", "C:\\repo", "C:/repo/.editorconfig"],
     ["\\\\host\\share\\repo\\frontend", "\\\\host\\share\\repo", "//host/share/repo/.editorconfig"],
+    ["//HOST/share/repo/frontend", "//host/share/repo", "//host/share/repo/.editorconfig"],
     ["/worktrees/feature/frontend", "/worktrees/feature", "/worktrees/feature/.editorconfig"],
   ])(
     "resolves repository-relative diff paths for nested workspace %s",

@@ -94,6 +94,9 @@ describe("EditorConfig lookup paths", () => {
     ["C:\\repo", "C:/.editorconfig", "C:/.editorconfig"],
     ["\\\\host\\share\\repo", "//host/share/repo/.editorconfig", ".editorconfig"],
     ["\\\\host\\share\\repo", "//host/share/.editorconfig", "//host/share/.editorconfig"],
+    ["//HOST/share/REPO", "//host/share/repo/src/.editorconfig", "src/.editorconfig"],
+    ["//host/share/repo", "//host/share/.editorconfig", "//host/share/.editorconfig"],
+    ["//host/share", "//host/share/.editorconfig", ".editorconfig"],
   ])("shares the save query key for %s and %s", (cwd, configPath, expected) => {
     expect(editorConfigQueryPath(cwd, configPath)).toBe(expected);
   });
@@ -130,4 +133,20 @@ describe("EditorConfig lookup paths", () => {
       "literal\\file.ts",
     );
   });
+
+  it.each(["//host/share/repo", "\\\\host\\share\\repo"])(
+    "preserves the network share root for %s and absolute Git paths",
+    (cwd) => {
+      for (const file of ["src/file.ts", "//host/share/repo/src/file.ts"]) {
+        expect(editorConfigCandidates(cwd, file)).toEqual([
+          { configPath: "//host/share/repo/src/.editorconfig", relativePath: "file.ts" },
+          { configPath: "//host/share/repo/.editorconfig", relativePath: "src/file.ts" },
+          { configPath: "//host/share/.editorconfig", relativePath: "repo/src/file.ts" },
+        ]);
+      }
+      expect(editorConfigCandidates(cwd, "../../../../file.ts")).toEqual([
+        { configPath: "//host/share/.editorconfig", relativePath: "file.ts" },
+      ]);
+    },
+  );
 });

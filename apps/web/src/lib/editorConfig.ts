@@ -53,9 +53,14 @@ export function parseEditorConfig(contents: string) {
 
 export type ParsedEditorConfig = ReturnType<typeof parseEditorConfig>;
 
+// Repository roots from Git may use forward-slash UNC paths.
+function isWindowsConfigPath(path: string): boolean {
+  return isWindowsAbsolutePath(path) || /^\/\/[^/\\]+[/\\][^/\\]+(?:[/\\]|$)/.test(path);
+}
+
 /** Workspace files share the relative query key refreshed by the file editor's save flow. */
 export function editorConfigQueryPath(cwd: string, configPath: string): string {
-  const windows = isWindowsAbsolutePath(cwd);
+  const windows = isWindowsConfigPath(cwd);
   const directory = (windows ? cwd.replaceAll("\\", "/") : cwd).replace(/\/+$/, "");
   const prefix = `${directory}/`;
   const withinWorkspace = windows
@@ -66,7 +71,7 @@ export function editorConfigQueryPath(cwd: string, configPath: string): string {
 
 /** Nearest directory first, including ancestors outside the workspace until the filesystem root. */
 export function editorConfigCandidates(cwd: string, filePath: string) {
-  const windows = isWindowsAbsolutePath(filePath) || isWindowsAbsolutePath(cwd);
+  const windows = isWindowsConfigPath(filePath) || isWindowsConfigPath(cwd);
   const normalize = (path: string) => (windows ? path.replaceAll("\\", "/") : path);
   const file = normalize(filePath);
   const absolute =
