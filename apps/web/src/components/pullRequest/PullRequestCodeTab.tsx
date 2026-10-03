@@ -195,7 +195,6 @@ function PullRequestCodeTab({
   environmentId,
   reference,
   detail,
-  repositoryRoot,
   selectedCommitOid,
   onSelectedCommitChange,
   pendingFinding,
@@ -208,7 +207,6 @@ function PullRequestCodeTab({
   environmentId: EnvironmentId;
   reference: PullRequestRef;
   detail: PullRequestDetailView;
-  repositoryRoot?: string | undefined;
   /** Commit whose diff is open. Null keeps the whole pull-request diff selected. */
   selectedCommitOid: string | null;
   onSelectedCommitChange: (oid: string | null) => void;
@@ -1507,9 +1505,9 @@ function PullRequestCodeTab({
             workspace={{
               environmentId,
               cwd: detail.workspaceRoot,
-              repositoryRoot,
               revision: detail.updatedAt,
               refreshToken,
+              pullRequest: { reference, commit: commit ?? detail.headSha ?? null },
             }}
             // Keep scrollbar space stable so file metadata and line numbers do not shift as a
             // diff crosses the overflow boundary. The viewer is itself focusable for keyboard

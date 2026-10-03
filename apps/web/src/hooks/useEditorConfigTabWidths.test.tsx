@@ -1,5 +1,9 @@
 import { RegistryContext } from "@effect/atom-react";
-import { EnvironmentId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  type PullRequestDiffFileContentsInput,
+} from "@t3tools/contracts";
 import { AtomRegistry } from "effect/unstable/reactivity";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
@@ -9,6 +13,8 @@ const state = vi.hoisted(() => ({
   files: new Map<string, string>(),
   reads: [] as string[],
   pending: new Map<string, Promise<void>>(),
+  reviewFiles: new Map<string, string>(),
+  reviewReads: [] as PullRequestDiffFileContentsInput[],
 }));
 
 vi.mock("../components/files/projectFilesQueryState", async () => {
@@ -40,8 +46,41 @@ vi.mock("../components/files/projectFilesQueryState", async () => {
   };
 });
 
+vi.mock("../state/pullRequests", async () => {
+  const { Atom } = await import("effect/unstable/reactivity");
+  const Effect = await import("effect/Effect");
+  const Schema = await import("effect/Schema");
+  const { EnvironmentId, PullRequestDiffFileContentsInput } = await import("@t3tools/contracts");
+  const decode = Schema.decodeUnknownSync(
+    Schema.fromJsonString(Schema.Tuple([EnvironmentId, PullRequestDiffFileContentsInput])),
+  );
+  const queries = Atom.family((key: string) =>
+    Atom.make(
+      Effect.suspend(() => {
+        const [, input] = decode(key);
+        state.reviewReads.push(input);
+        const contents = state.reviewFiles.get(key);
+        return contents === undefined
+          ? Effect.fail("File not found in revision")
+          : Effect.succeed({ oldContents: "", newContents: contents });
+      }),
+    ).pipe(Atom.swr({ staleTime: 60_000, revalidateOnMount: true }), Atom.setIdleTTL(5 * 60_000)),
+  );
+  return {
+    pullRequestEnvironment: {
+      diffFileContentsQuery: (request: {
+        environmentId: EnvironmentId;
+        input: PullRequestDiffFileContentsInput;
+      }) => queries(JSON.stringify([request.environmentId, request.input])),
+    },
+  };
+});
+
 import { getProjectFileQueryAtom } from "../components/files/projectFilesQueryState";
-import { useEditorConfigTabWidths } from "./useEditorConfigTabWidths";
+import {
+  useEditorConfigTabWidths,
+  type PullRequestEditorConfigSource,
+} from "./useEditorConfigTabWidths";
 
 const environmentId = EnvironmentId.make("editorconfig-test");
 const key = (path: string, environment = environmentId, cwd = "/repo") =>
@@ -54,6 +93,7 @@ function Widths(props: {
   revision?: string;
   refreshToken?: string | number;
   pathRoot?: string;
+  pullRequest?: PullRequestEditorConfigSource;
 }) {
   const widths = useEditorConfigTabWidths(
     props.environmentId ?? environmentId,
@@ -62,6 +102,7 @@ function Widths(props: {
     props.revision,
     props.refreshToken,
     props.pathRoot,
+    props.pullRequest,
   );
   return <output>{props.paths.map((path) => widths.get(path) ?? 2).join(",")}</output>;
 }
@@ -75,6 +116,8 @@ describe("workspace EditorConfig lookup", () => {
     state.files.clear();
     state.reads.length = 0;
     state.pending.clear();
+    state.reviewFiles.clear();
+    state.reviewReads.length = 0;
     registry = AtomRegistry.make();
   });
 
@@ -105,6 +148,71 @@ describe("workspace EditorConfig lookup", () => {
     expect(state.reads.filter((path) => path === key(".editorconfig"))).toHaveLength(1);
     expect(state.reads.filter((path) => path === key("src/.editorconfig"))).toHaveLength(1);
     expect(state.reads).not.toContain(key("/.editorconfig"));
+  });
+
+  it("reads PR config from its snapshot, shares ancestors, and isolates commits and hosts", async () => {
+    const reference = {
+      projectId: ProjectId.make("project"),
+      host: "github.com",
+      repository: "org/repo",
+      number: 12,
+    };
+    const head = "a".repeat(40);
+    const commit = "b".repeat(40);
+    const setConfig = (source: PullRequestEditorConfigSource, path: string, contents: string) => {
+      state.reviewFiles.set(
+        JSON.stringify([
+          environmentId,
+          {
+            ...source.reference,
+            ...(source.commit === null ? {} : { commit: source.commit }),
+            changeType: "new",
+            oldPath: path,
+            newPath: path,
+          },
+        ]),
+        contents,
+      );
+    };
+    const pullRequest = { reference, commit: head };
+    state.files.set(key(".editorconfig"), "root=true\n[*]\ntab_width=2");
+    setConfig(pullRequest, ".editorconfig", "[*]\ntab_width=4");
+    setConfig(pullRequest, "src/.editorconfig", "[special.ts]\ntab_width=8");
+    const props = { paths: ["src/file.ts", "src/special.ts"], pullRequest };
+    expect(await mount(props)).toBe("4,8");
+    expect(state.reads).toEqual([]);
+    expect(state.reviewReads).toHaveLength(2);
+    expect(
+      state.reviewReads.every((read) => read.commit === head && read.changeType === "new"),
+    ).toBe(true);
+    const earlier = { reference, commit };
+    setConfig(earlier, ".editorconfig", "root=true\n[*]\ntab_width=3");
+    expect(await mount({ ...props, pullRequest: earlier })).toBe("3,3");
+    const otherHost = { reference: { ...reference, host: "github.enterprise.test" }, commit: head };
+    setConfig(otherHost, ".editorconfig", "root=true\n[*]\ntab_width=6");
+    expect(await mount({ ...props, pullRequest: otherHost })).toBe("6,6");
+    expect(await mount(props)).toBe("4,8");
+    // Missing configs never inherit a local checkout's unrelated configuration.
+    state.files.set(key(".editorconfig"), "root=true\n[*]\ntab_width=8");
+    expect(await mount({ ...props, pullRequest: { reference, commit: "c".repeat(40) } })).toBe(
+      "2,2",
+    );
+    expect(state.reads).toEqual([]);
+  });
+
+  it("refreshes an unpinned PR snapshot only through the existing refresh token", async () => {
+    const reference = { projectId: ProjectId.make("project"), repository: "org/repo", number: 12 };
+    const pullRequest = { reference, commit: null };
+    const configKey = JSON.stringify([
+      environmentId,
+      { ...reference, changeType: "new", oldPath: ".editorconfig", newPath: ".editorconfig" },
+    ]);
+    state.reviewFiles.set(configKey, "root=true\n[*]\ntab_width=4");
+    const props = { paths: ["file.ts"], pullRequest, refreshToken: 1 };
+    expect(await mount(props)).toBe("4");
+    state.reviewFiles.set(configKey, "root=true\n[*]\ntab_width=8");
+    expect(await mount(props)).toBe("4");
+    expect(await mount({ ...props, refreshToken: 2 })).toBe("8");
   });
 
   it("keeps environments and workspaces isolated when paths have the same name", async () => {
@@ -308,9 +416,9 @@ describe("workspace EditorConfig lookup", () => {
     expect(await mount({ paths: ["file.ts"], revision: "four" })).toBe("4");
   });
 
-  it("falls back without blocking a preview when configs are absent or malformed", async () => {
+  it("falls back for absent configs and resolves large numeric ranges", async () => {
     expect(await mount({ paths: ["file.ts"] })).toBe("2");
     state.files.set(key(".editorconfig"), "root=true\n[file{1..1000000}.ts]\ntab_width=8");
-    expect(await mount({ paths: ["file.ts"], revision: "changed" })).toBe("2");
+    expect(await mount({ paths: ["file999999.ts"], revision: "changed" })).toBe("8");
   });
 });

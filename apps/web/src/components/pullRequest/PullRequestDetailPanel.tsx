@@ -2776,13 +2776,6 @@ export function PullRequestDetailPanel({
                     reference={reference}
                     detail={detail}
                     selectedCommitOid={selectedCodeCommitOid}
-                    repositoryRoot={
-                      projects.find(
-                        (candidate) =>
-                          candidate.environmentId === environmentId &&
-                          candidate.id === detail.projectId,
-                      )?.repositoryIdentity?.rootPath
-                    }
                     onSelectedCommitChange={selectCodeCommit}
                     pendingFinding={handoff}
                     fixFindingLabel={handoffLabels.fixFinding}

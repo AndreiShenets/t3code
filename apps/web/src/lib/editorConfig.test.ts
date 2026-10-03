@@ -73,12 +73,73 @@ describe("EditorConfig tab width", () => {
     ["*.{ts,tsx}", "src/view.tsx", true],
     ["file{1..3}.ts", "file2.ts", true],
     ["file{1..3}.ts", "file4.ts", false],
+    ["file{01..03}.ts", "file02.ts", true],
+    ["file{01..03}.ts", "file2.ts", false],
+    ["file{-03..02}.ts", "file-02.ts", true],
+    ["file{-03..02}.ts", "file002.ts", true],
+    ["file{000001..1000000}.ts", "file0999999.ts", true],
+    ["[a/]foo.ts", "nested/afoo.ts", true],
+    ["[a/]foo.ts", "nested/bfoo.ts", false],
+    ["src/[a/]foo.ts", "src/afoo.ts", true],
+    ["src/[a/]foo.ts", "nested/src/afoo.ts", false],
+    ["/src[/]foo.ts", "src/foo.ts", true],
+    ["/src[/]foo.ts", "nested/src/foo.ts", false],
+    ["[!a/]foo.ts", "nested/bfoo.ts", true],
+    ["[!a/]foo.ts", "nested/afoo.ts", false],
+    ["[a\\/]foo.ts", "nested/afoo.ts", true],
+    ["[\\d/]foo.ts", "nested/dfoo.ts", true],
+    ["[\\d/]foo.ts", "nested/5foo.ts", false],
+    ["[\\!a/]foo.ts", "nested/!foo.ts", true],
+    ["[\\!a/]foo.ts", "nested/bfoo.ts", false],
+    ["[/-9]foo.ts", "nested/5foo.ts", true],
+    ["[a-z/]foo.ts", "nested/mfoo.ts", true],
+    ["file{1..1000000}.ts", "nested/file999999.ts", true],
+    ["file{1..1000000}.ts", "file1000000.ts", true],
+    ["file{1..1000000}.ts", "file1000001.ts", false],
+    ["file{1..1000000}.ts", "file0.ts", false],
+    ["src/a**file{1..1000000}.ts", "src/a/nested/file999999.ts", true],
+    ["file{-1000000..3}.ts", "file-999999.ts", true],
+    ["file{-1000000..3}.ts", "file-1000001.ts", false],
+    ["file{-1000000..3}.ts", "file0.ts", true],
+    ["file{-1000000..3}.ts", "file4.ts", false],
+    ["file{-1000000..-2}.ts", "file-2.ts", true],
+    ["file{-1000000..-2}.ts", "file-1.ts", false],
+    ["file{1..1000000}{1..3}.ts", "file9999992.ts", true],
+    ["{file{1..1000000},other}.ts", "other.ts", true],
+    ["{file{1..1000000},other}.ts", "file999999.ts", true],
+    ["file\\{1..1000000\\}.ts", "file{1..1000000}.ts", true],
+    ["\\[a/\\]foo.ts", "[a/]foo.ts", true],
+    ["EDITORCONFIGTOKEN{1..1000000}.ts", "EDITORCONFIGTOKEN999999.ts", true],
+    ["[{1..1000000}/].ts", "nested/1.ts", true],
     ["[!a].ts", "b.ts", true],
     ["*.ts", ".hidden.ts", true],
     ["!special.ts", "!special.ts", true],
     ["file\\?.ts", "file?.ts", true],
   ])("matches [%s] against %s: %s", (pattern, path, matches) => {
     expect(width(`[${pattern}]\ntab_width = 4`, path)).toBe(matches ? 4 : 2);
+  });
+
+  it("matches very large integer bounds without expanding every number", () => {
+    const config = parseEditorConfig("[file{1..100000000000000000000}.ts]\ntab_width = 4");
+    expect(
+      resolveEditorConfigTabWidth([{ config, relativePath: "file99999999999999999999.ts" }]),
+    ).toBe(4);
+    expect(
+      resolveEditorConfigTabWidth([{ config, relativePath: "file100000000000000000001.ts" }]),
+    ).toBe(2);
+  });
+
+  it.each([
+    [17, 234],
+    [-234, -17],
+    [-17, 234],
+  ])("matches every integer inside %s..%s and excludes nearby integers", (min, max) => {
+    const config = parseEditorConfig(`[file{${min}..${max}}.ts]\ntab_width = 4`);
+    for (let value = -250; value <= 250; value++) {
+      expect(resolveEditorConfigTabWidth([{ config, relativePath: `file${value}.ts` }])).toBe(
+        value >= min && value <= max ? 4 : 2,
+      );
+    }
   });
 });
 

@@ -16,7 +16,10 @@ import {
   resolveFileDiffPath,
 } from "~/lib/diffRendering";
 import { CODE_WHITESPACE_UNSAFE_CSS, renderCodeWhitespace } from "~/lib/codeWhitespace";
-import { useEditorConfigTabWidths } from "~/hooks/useEditorConfigTabWidths";
+import {
+  useEditorConfigTabWidths,
+  type PullRequestEditorConfigSource,
+} from "~/hooks/useEditorConfigTabWidths";
 import { useClientSettings } from "~/hooks/useSettings";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 
@@ -286,6 +289,7 @@ type StyledDiffCodeViewProps<LAnnotation> = (
     readonly repositoryRoot?: string | undefined;
     readonly revision?: string | null;
     readonly refreshToken?: string | number | null;
+    readonly pullRequest?: PullRequestEditorConfigSource;
   };
   /**
    * Appended to the shared stylesheet inside the viewer's shadow root, for a surface that has
@@ -314,6 +318,7 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
     workspace?.revision ?? null,
     workspace?.refreshToken ?? null,
     workspace?.repositoryRoot ?? workspace?.cwd ?? null,
+    workspace?.pullRequest ?? null,
   );
   const surfacePostRender = options?.onPostRender;
   const onPostRender = useCallback<
