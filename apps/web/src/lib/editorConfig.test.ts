@@ -91,8 +91,36 @@ describe("EditorConfig tab width", () => {
     ["[\\d/]foo.ts", "nested/5foo.ts", false],
     ["[\\!a/]foo.ts", "nested/!foo.ts", true],
     ["[\\!a/]foo.ts", "nested/bfoo.ts", false],
-    ["[/-9]foo.ts", "nested/5foo.ts", true],
-    ["[a-z/]foo.ts", "nested/mfoo.ts", true],
+    ["[/-9]foo.ts", "nested/5foo.ts", false],
+    ["[/-9]foo.ts", "nested/-foo.ts", true],
+    ["[a-z/]foo.ts", "nested/mfoo.ts", false],
+    ["[a-z/]foo.ts", "nested/zfoo.ts", true],
+    ["file[0-9].ts", "nested/file5.ts", false],
+    ["file[0-9].ts", "nested/file0.ts", true],
+    ["file[0-9].ts", "nested/file-.ts", true],
+    ["file[0-9].ts", "nested/file9.ts", true],
+    ["file[!0-9].ts", "nested/file5.ts", true],
+    ["file[!0-9].ts", "nested/file0.ts", false],
+    ["file[!0-9].ts", "nested/file-.ts", false],
+    ["file[!0-9].ts", "nested/file9.ts", false],
+    ["file[^a].ts", "nested/file^.ts", true],
+    ["file[^a].ts", "nested/filea.ts", true],
+    ["file[^a].ts", "nested/fileb.ts", false],
+    ["file[!^a].ts", "nested/file^.ts", false],
+    ["file[!^a].ts", "nested/fileb.ts", true],
+    ["file[ab*c{1..2}].ts", "nested/file*.ts", true],
+    ["file[ab*c{1..2}].ts", "nested/file{.ts", true],
+    ["file[ab*c{1..2}].ts", "nested/file..ts", true],
+    ["file[ab*c{1..2}].ts", "nested/file3.ts", false],
+    ["file[!ab*c{1..2}].ts", "nested/file*.ts", false],
+    ["file[!ab*c{1..2}].ts", "nested/file3.ts", true],
+    ["file[\\]a].ts", "nested/file].ts", true],
+    ["file[\\!a].ts", "nested/file!.ts", true],
+    ["file[\\!a].ts", "nested/fileb.ts", false],
+    ["file[[a].ts", "nested/file[.ts", true],
+    ["file[\\\\a].ts", "nested/file\\.ts", true],
+    ["file[0-9]{1..3}.ts", "file52.ts", false],
+    ["file[0-9]{1..3}.ts", "file-2.ts", true],
     ["file{1..1000000}.ts", "nested/file999999.ts", true],
     ["file{1..1000000}.ts", "file1000000.ts", true],
     ["file{1..1000000}.ts", "file1000001.ts", false],
@@ -161,6 +189,15 @@ describe("EditorConfig tab width", () => {
       resolveEditorConfigTabWidth([{ config: negative, relativePath: "file-999999.ts" }]),
     ).toBe(4);
     expect(resolveEditorConfigTabWidth([{ config: negative, relativePath: "file0.ts" }])).toBe(2);
+  });
+
+  it("handles a one-megabyte numeric bound without expanding values or generating a numeric regex", () => {
+    const upper = `1${"0".repeat(1_000_000)}`;
+    const config = parseEditorConfig(`[file{1..${upper}}.ts]\ntab_width = 4`);
+    expect(resolveEditorConfigTabWidth([{ config, relativePath: "file2.ts" }])).toBe(4);
+    for (const filename of ["file0.ts", "file-2.ts", "file2x.ts"]) {
+      expect(resolveEditorConfigTabWidth([{ config, relativePath: filename }])).toBe(2);
+    }
   });
 
   it("repartitions adjacent ranges without exponential backtracking on an unmatched suffix", () => {

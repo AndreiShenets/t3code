@@ -12,7 +12,7 @@ type GlobToken =
   | { kind: "literal"; value: string }
   | { kind: "star"; crossesSlash: boolean }
   | { kind: "directory" }
-  | { kind: "character"; expression: RegExp }
+  | { kind: "character"; characters: ReadonlySet<string>; negated: boolean }
   | { kind: "range"; min: string; max: string; padding: number };
 
 function normalizeInteger(value: string) {
@@ -44,7 +44,9 @@ function matchTokens(tokens: ReadonlyArray<GlobToken>, path: string, directoryRe
           if (path.startsWith(token.value, start)) next.add(start + token.value.length);
           break;
         case "character":
-          if (start < path.length && token.expression.test(path.charAt(start))) next.add(start + 1);
+          if (start < path.length && token.characters.has(path.charAt(start)) !== token.negated) {
+            next.add(start + 1);
+          }
           break;
         case "star":
         case "directory":
@@ -103,18 +105,11 @@ function sectionMatcher(pattern: string) {
     /\\.|\[(?:\\.|[^\]\\])+\]|\{(-?\d+)\.\.(-?\d+)\}|\*\*|\//g,
     (token: string, lower: string | undefined, upper: string | undefined) => {
       if (token.startsWith("[")) {
-        if (token.includes("/")) needsTokenMatcher = true;
-        const source = token
-          .replace(/^\[!/, "[^")
-          .replace(/\\(.)/g, (_escape, character: string) =>
-            "\\]^-[".includes(character) ? `\\${character}` : character,
-          );
-        // Class regexes consume exactly one character; numeric ranges never become regexes.
-        try {
-          return protect({ kind: "character", expression: new RegExp(`^${source}$`) });
-        } catch {
-          return token;
-        }
+        needsTokenMatcher = true;
+        const negated = token.startsWith("[!");
+        // EditorConfig classes are literal sets, not regex ranges; only ! negates.
+        const characters = token.slice(negated ? 2 : 1, -1).replace(/\\(.)/g, "$1");
+        return protect({ kind: "character", characters: new Set(characters.split("")), negated });
       }
       if (lower !== undefined && upper !== undefined) {
         const min = normalizeInteger(lower);
@@ -154,7 +149,7 @@ function sectionMatcher(pattern: string) {
         tokens.push({ kind: "star", crossesSlash: value.startsWith("**") });
         if (value.endsWith("/")) tokens.push({ kind: "literal", value: "/" });
       } else if (value === "?") {
-        tokens.push({ kind: "character", expression: /^[^/]$/ });
+        tokens.push({ kind: "character", characters: new Set(["/"]), negated: true });
       } else {
         const literal = value.startsWith("\\") ? value.slice(1) : value;
         const previous = tokens.at(-1);
