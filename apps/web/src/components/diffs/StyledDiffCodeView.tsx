@@ -273,16 +273,16 @@ ${CODE_WHITESPACE_UNSAFE_CSS}
 `;
 
 export type StyledDiffCodeViewOptions<LAnnotation> = Omit<
-  NonNullable<CodeViewProps<LAnnotation>["options"]>,
+  NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>,
   "unsafeCSS" | "itemMetrics" | "layout"
 >;
 
 type StyledDiffCodeViewProps<LAnnotation> = (
-  | Omit<ControlledCodeViewProps<LAnnotation>, "options">
-  | Omit<UncontrolledCodeViewProps<LAnnotation>, "options">
+  | Omit<ControlledCodeViewProps<LAnnotation, undefined>, "options">
+  | Omit<UncontrolledCodeViewProps<LAnnotation, undefined>, "options">
 ) & {
   readonly options?: StyledDiffCodeViewOptions<LAnnotation>;
-  readonly viewerRef?: Ref<CodeViewHandle<LAnnotation>>;
+  readonly viewerRef?: Ref<CodeViewHandle<LAnnotation, undefined>>;
   readonly workspace?: {
     readonly environmentId: EnvironmentId;
     readonly cwd: string;

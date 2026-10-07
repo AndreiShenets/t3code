@@ -1,4 +1,4 @@
-import type { Editor } from "@pierre/diffs/editor";
+import type { Editor } from "@pierre/diffs/edit";
 
 /** Carry code focus across a view remount, but never reclaim it from another control. */
 export function createFileEditorFocusRestorer() {
@@ -11,7 +11,7 @@ export function createFileEditorFocusRestorer() {
     },
     // onPostRender("mount") precedes editor attachment. Pierre's onAttach runs after
     // the editable DOM and persisted selection are ready, including deferred renders.
-    onAttach(editor: Pick<Editor<unknown>, "getFile" | "focus">) {
+    onAttach(editor: Pick<Editor<"file", unknown, undefined>, "getFile" | "focus">) {
       if (focusedContainer === null || editor.getFile() === undefined) return;
       const previous = focusedContainer;
       focusedContainer = null;

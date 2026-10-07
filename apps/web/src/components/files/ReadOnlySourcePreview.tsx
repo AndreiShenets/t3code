@@ -22,7 +22,7 @@ export default function ReadOnlySourcePreview(props: {
   readonly name: string;
   readonly text: string;
   readonly cacheKey?: string;
-  readonly onPostRender?: FileOptions<unknown>["onPostRender"];
+  readonly onPostRender?: FileOptions<unknown, undefined>["onPostRender"];
   readonly workspace?: {
     readonly environmentId: EnvironmentId;
     readonly cwd: string;
@@ -40,7 +40,7 @@ export default function ReadOnlySourcePreview(props: {
   );
   const tabWidth = tabWidths.get(props.name) ?? DEFAULT_TAB_WIDTH;
   const surfacePostRender = props.onPostRender;
-  const onPostRender = useCallback<NonNullable<FileOptions<unknown>["onPostRender"]>>(
+  const onPostRender = useCallback<NonNullable<FileOptions<unknown, undefined>["onPostRender"]>>(
     (node, instance, phase) => {
       if (phase !== "unmount") renderCodeWhitespace(node, showWhitespace);
       surfacePostRender?.(node, instance, phase);

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { getSharedHighlighter, type FileContents, type File as FileInstance } from "@pierre/diffs";
-import { Editor } from "@pierre/diffs/editor";
+import { Editor, type EditorFactory, type EditorOptions } from "@pierre/diffs/edit";
 import { EditProvider, File, Virtualizer } from "@pierre/diffs/react";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { act } from "react";
@@ -30,6 +30,7 @@ vi.mock("./useFileSaveCoordinator", () => ({
   useFileSaveCoordinator: () => surfaceState.saveCoordinator,
 }));
 vi.mock("./projectFilesQueryState", () => ({
+  getProjectFileContents: vi.fn(),
   setProjectFileQueryData: vi.fn(),
 }));
 
@@ -44,12 +45,15 @@ const { clearRenderQueue } = (await import(/* @vite-ignore */ renderingManagerUr
 const frames = new Map<number, FrameRequestCallback>();
 let nextFrame = 0;
 let root: Root | undefined;
-let editor: Editor<undefined>;
+let editor: Editor<"file", undefined, undefined>;
 let host: HTMLDivElement;
 let restore: ReturnType<typeof createFileEditorFocusRestorer>;
 const mountReadiness: boolean[] = [];
 let stopObserving: (() => void) | undefined;
 const file: FileContents = { name: "file.txt", cacheKey: "focus-test", contents: "\ttext\n" };
+const createEditor: EditorFactory<undefined, undefined> = (type, options, key) =>
+  new Editor(type, options, key);
+let editorOptions: EditorOptions<"file", undefined, undefined>;
 const scrollMethods = ["scrollTo", "scrollIntoView"] as const;
 const scrollDescriptors = scrollMethods.map((method) =>
   Object.getOwnPropertyDescriptor(HTMLElement.prototype, method),
@@ -112,11 +116,12 @@ beforeEach(() => {
   }
   mountReadiness.length = 0;
   restore = createFileEditorFocusRestorer();
-  editor = new Editor({
-    persistState: true,
-    persistStateStorage: "inMemory",
-    onAttach: restore.onAttach,
-  });
+  editorOptions = {
+    onAttach: (attachedEditor) => {
+      editor = attachedEditor;
+      restore.onAttach(attachedEditor);
+    },
+  };
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -127,7 +132,6 @@ afterEach(async () => {
   stopObserving = undefined;
   await act(async () => root?.unmount());
   root = undefined;
-  editor.cleanUp();
   clearRenderQueue();
   frames.clear();
   document.body.replaceChildren();
@@ -154,12 +158,14 @@ async function drainFrames() {
 async function render(width: number, contents = file, showWhitespace = false) {
   await act(async () => {
     root!.render(
-      <EditProvider editor={editor}>
+      <EditProvider createEditor={createEditor}>
         <Virtualizer>
           <File
             key={width}
             file={contents}
-            contentEditable
+            edit
+            editorOptions={editorOptions}
+            {...(contents.cacheKey ? { editStateKey: contents.cacheKey } : {})}
             disableWorkerPool
             options={{
               theme: "pierre-dark",
@@ -168,7 +174,7 @@ async function render(width: number, contents = file, showWhitespace = false) {
               unsafeCSS: `:host { --diffs-tab-size: ${width}; }`,
               onPostRender: (container, _instance, phase) => {
                 if (phase === "unmount") restore.onUnmount(container);
-                if (phase === "mount") mountReadiness.push(editor.getFile() !== undefined);
+                if (phase === "mount") mountReadiness.push(editor?.getFile() !== undefined);
                 if (phase !== "unmount") renderCodeWhitespace(container, showWhitespace);
                 // jsdom does not make contentEditable elements focusable like a browser does.
                 const code = container.shadowRoot?.querySelector<HTMLElement>("[data-content]");
@@ -194,7 +200,7 @@ describe("file editor focus across view remounts", () => {
       environmentId: EnvironmentId.make("draft-test"),
       threadId: ThreadId.make("draft-thread"),
     };
-    let instance: FileInstance<unknown>;
+    let selectLines: FileInstance<undefined, undefined>["options"]["onLineSelectionEnd"];
     const renderSurface = async (width: number) => {
       surfaceState.width = width;
       await act(async () =>
@@ -209,7 +215,7 @@ describe("file editor focus across view remounts", () => {
             revealRequestId={0}
             wordWrap={false}
             onPostRender={(_container, fileInstance) => {
-              instance = fileInstance;
+              selectLines = fileInstance.options.onLineSelectionEnd;
             }}
             onPendingChange={() => {}}
           />,
@@ -220,7 +226,7 @@ describe("file editor focus across view remounts", () => {
     surfaceState.addReviewComment.mockClear();
     surfaceState.removeReviewComment.mockClear();
     await renderSurface(4);
-    await act(async () => instance.options.onLineSelectionEnd?.({ start: 1, end: 1 }));
+    await act(async () => selectLines?.({ start: 1, end: 1 }));
     await drainFrames();
     const textarea = () => host.querySelector("textarea")!;
     const writeComment = async (text: string) => {
@@ -250,14 +256,14 @@ describe("file editor focus across view remounts", () => {
       expect.objectContaining({ text: "Unsent review text" }),
     );
     expect(textarea()).toBeNull();
-    await act(async () => instance.options.onLineSelectionEnd?.({ start: 1, end: 1 }));
+    await act(async () => selectLines?.({ start: 1, end: 1 }));
     await drainFrames();
     await writeComment("Discard this");
     await act(async () =>
       textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
     );
     expect(textarea()).toBeNull();
-    await act(async () => instance.options.onLineSelectionEnd?.({ start: 1, end: 1 }));
+    await act(async () => selectLines?.({ start: 1, end: 1 }));
     await drainFrames();
     expect(textarea().value).toBe("");
     expect(surfaceState.addReviewComment).toHaveBeenCalledTimes(1);
@@ -330,7 +336,7 @@ describe("file editor focus across view remounts", () => {
         composedRange.setStart(world!, start);
         composedRange.setEnd(world!, start + 5);
         document.dispatchEvent(new Event("selectionchange"));
-        expect(editor.getState().selections).toMatchObject([
+        expect(editor.getViewState().selections).toMatchObject([
           { start: { line: 0, character: 9 }, end: { line: 0, character: 14 } },
         ]);
         code.dispatchEvent(
@@ -367,7 +373,7 @@ describe("file editor focus across view remounts", () => {
     editor.focus({ preventScroll: true });
     await drainFrames();
     const before = currentView();
-    const state = editor.getState();
+    const state = editor.getViewState();
     const edited = editor.getText();
     expect(before.container.shadowRoot!.activeElement).toBe(before.code);
     await render(8);
@@ -376,7 +382,7 @@ describe("file editor focus across view remounts", () => {
     const after = currentView();
     expect(after.code).not.toBe(before.code);
     expect(after.container.shadowRoot!.activeElement).toBe(after.code);
-    expect(editor.getState().selections).toEqual(state.selections);
+    expect(editor.getViewState().selections).toEqual(state.selections);
     expect(editor.getText()).toBe(edited);
     after.code.dispatchEvent(
       new InputEvent("beforeinput", {

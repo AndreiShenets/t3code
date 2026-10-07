@@ -30,15 +30,16 @@ describe("code-view tab-width layout", () => {
     const options = { overflow: "wrap", diffStyle: "unified", unsafeCSS: css } as const;
     const viewer = new CodeView(options);
     const layout = viewer as unknown as LayoutProbe;
+    const fileDiff = parseDiffFromFile(
+      { name: "file.txt", contents: "" },
+      { name: "file.txt", contents: "\tline\n".repeat(100) },
+    );
     try {
       viewer.setItems([
         {
           type: "diff",
           id: "file",
-          fileDiff: parseDiffFromFile(
-            { name: "file.txt", contents: "" },
-            { name: "file.txt", contents: "\tline\n".repeat(100) },
-          ),
+          fileDiff,
         },
       ]);
       layout.recomputeLayout();
@@ -46,9 +47,11 @@ describe("code-view tab-width layout", () => {
       const dom = instance as unknown as {
         fileContainer: HTMLElement | undefined;
         codeUnified: HTMLElement | undefined;
+        renderedDiff: typeof fileDiff;
       };
       const estimatedHeight = instance.getVirtualizedHeight();
       dom.fileContainer = document.createElement("diffs-container");
+      dom.renderedDiff = fileDiff;
       dom.codeUnified = document.createElement("code");
       const content = document.createElement("div");
       const row = document.createElement("div");

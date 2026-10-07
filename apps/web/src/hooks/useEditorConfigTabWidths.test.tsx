@@ -4,7 +4,7 @@ import {
   ProjectId,
   type PullRequestDiffFileContentsInput,
 } from "@t3tools/contracts";
-import { AtomRegistry } from "effect/unstable/reactivity";
+import { AtomRegistry } from "effect/reactivity";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -18,7 +18,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("../components/files/projectFilesQueryState", async () => {
-  const { Atom } = await import("effect/unstable/reactivity");
+  const { Atom } = await import("effect/reactivity");
   const Effect = await import("effect/Effect");
   const queries = Atom.family((key: string) =>
     Atom.make(
@@ -47,7 +47,7 @@ vi.mock("../components/files/projectFilesQueryState", async () => {
 });
 
 vi.mock("../state/pullRequests", async () => {
-  const { Atom } = await import("effect/unstable/reactivity");
+  const { Atom } = await import("effect/reactivity");
   const Effect = await import("effect/Effect");
   const Schema = await import("effect/Schema");
   const { EnvironmentId, PullRequestDiffFileContentsInput } = await import("@t3tools/contracts");
