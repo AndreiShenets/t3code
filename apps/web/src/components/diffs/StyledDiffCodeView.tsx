@@ -7,13 +7,16 @@ import {
   type UncontrolledCodeViewProps,
 } from "@pierre/diffs/react";
 /* oxlint-enable eslint/no-restricted-imports */
-import type { Ref } from "react";
+import { useCallback, type Ref } from "react";
 
-import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
+import { useCodeDisplay, type CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";
+import { CODE_WHITESPACE_UNSAFE_CSS } from "~/lib/codeWhitespace";
+import { DIFF_SURFACE_THEME_UNSAFE_CSS, resolveFileDiffPath } from "~/lib/diffRendering";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 
 /** The app's diff stylesheet, shared by single-file renderers so their separators match. */
 export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
+${CODE_WHITESPACE_UNSAFE_CSS}
 :is(
   [data-line],
   [data-line-annotation],
@@ -197,7 +200,7 @@ export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
 
 export type StyledDiffCodeViewOptions<LAnnotation> = Omit<
   NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>,
-  "unsafeCSS" | "itemMetrics" | "layout"
+  "unsafeCSS" | "itemMetrics" | "layout" | "onPostRender"
 >;
 
 type StyledDiffCodeViewProps<LAnnotation> = (
@@ -206,6 +209,7 @@ type StyledDiffCodeViewProps<LAnnotation> = (
 ) & {
   readonly options?: StyledDiffCodeViewOptions<LAnnotation>;
   readonly viewerRef?: Ref<CodeViewHandle<LAnnotation, undefined>>;
+  readonly workspace?: CodeDisplayWorkspace | null;
   /**
    * Appended to the shared stylesheet inside the viewer's shadow root, for a surface that has
    * to restyle chrome the viewer owns — such as replacing its per-file line counts.
@@ -219,8 +223,27 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
   viewerRef,
   className,
   unsafeCSSExtra,
+  workspace,
   ...props
 }: StyledDiffCodeViewProps<LAnnotation>) {
+  const { onPostRender: onCodePostRender } = useCodeDisplay(
+    workspace,
+    (props.items ?? props.initialItems ?? [])
+      .filter((item) => !item.collapsed)
+      .map((item) => (item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name)),
+  );
+  const onPostRender = useCallback<
+    NonNullable<NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>["onPostRender"]>
+  >(
+    (container, _instance, phase, { item }) => {
+      onCodePostRender(
+        container,
+        item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name,
+        phase,
+      );
+    },
+    [onCodePostRender],
+  );
   return (
     <DiffWorkerPoolProvider>
       <CodeView<LAnnotation>
@@ -235,6 +258,7 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
         }
         options={{
           ...options,
+          onPostRender,
           unsafeCSS: unsafeCSSExtra
             ? `${DIFF_VIEW_UNSAFE_CSS}\n${unsafeCSSExtra}`
             : DIFF_VIEW_UNSAFE_CSS,

@@ -29,6 +29,7 @@ export function PullRequestGuideTab({
   reference,
   title,
   workspaceRoot,
+  headSha,
   active,
   canComment,
   onAskAboutLines,
@@ -43,6 +44,8 @@ export function PullRequestGuideTab({
   title: string | null;
   /** The checkout the guide's prose renders against, as the description does. */
   workspaceRoot: string;
+  /** The diff is the current change, even while the guide's prose is stale. */
+  headSha: string | null;
   /** Whether this is the tab on screen. */
   active: boolean;
   /** Whether this reader may queue line comments for a review on this host. */
@@ -159,11 +162,18 @@ export function PullRequestGuideTab({
     ) : null;
 
   return (
-    <GuideProseContext value={{ environmentId, cwd: workspaceRoot }}>
+    <GuideProseContext
+      value={{
+        environmentId,
+        cwd: workspaceRoot,
+        snapshot: { reference, commit: headSha },
+      }}
+    >
       <GuideTour
         environmentId={environmentId}
         reference={reference}
         guide={guide}
+        headSha={headSha}
         banner={banner}
         active={active}
         commenting={commenting}

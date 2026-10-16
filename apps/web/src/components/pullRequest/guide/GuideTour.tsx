@@ -32,6 +32,7 @@ export function GuideTour({
   environmentId,
   reference,
   guide,
+  headSha,
   banner,
   active,
   commenting,
@@ -42,6 +43,8 @@ export function GuideTour({
   environmentId: EnvironmentId;
   reference: PullRequestRef;
   guide: PullRequestReviewGuide;
+  /** The current diff's head; the stored guide can still describe an earlier push. */
+  headSha: string | null;
   /** The stale or failed notice, shown above whichever view is open. */
   banner: ReactNode;
   /** Whether the tour is the tab on screen, which is when J and K step through it. */
@@ -67,7 +70,7 @@ export function GuideTour({
   const diff = useGuideDiffFiles({
     environmentId,
     reference,
-    headSha: guide.headSha,
+    headSha,
     wantedPaths,
   });
   // The same file reads the Code tab uses, so the bars between hunks load what lies between.
@@ -78,9 +81,9 @@ export function GuideTour({
         environmentId,
         reference,
         commit: null,
-        cacheKey: `pull-request-guide:${key}`,
+        cacheKey: `pull-request-guide:${key}:${headSha}`,
       }),
-    [environmentId, getDiffFileContents, key, reference],
+    [environmentId, getDiffFileContents, headSha, key, reference],
   );
 
   // A new stop starts at its top rather than wherever the last one was scrolled to.

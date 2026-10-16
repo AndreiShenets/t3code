@@ -5,13 +5,15 @@ import {
   type DesktopSnapShotState,
 } from "@t3tools/contracts";
 import { parseKeybindingShortcut } from "@t3tools/shared/keybindings";
-import { FileDiff } from "@pierre/diffs/react";
+import { FileDiff, type FileDiffOptions } from "@pierre/diffs/react";
 import { parseDiffFromFile } from "@pierre/diffs";
 import { useMemo, useState } from "react";
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { useTheme } from "../../hooks/useTheme";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { useCodeDisplay } from "../../hooks/useCodeDisplay";
+import { CODE_WHITESPACE_UNSAFE_CSS } from "../../lib/codeWhitespace";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
 import { shortcutToKeybindingInput } from "./KeybindingsSettings.logic";
@@ -79,6 +81,17 @@ export function CaptureShortcutConfig({
           )
         : null,
     [preview, changed],
+  );
+  const { onPostRender: onCodePostRender } = useCodeDisplay(null, []);
+  const diffOptions = useMemo<FileDiffOptions<undefined, undefined>>(
+    () => ({
+      diffStyle: "unified",
+      theme: resolveDiffThemeName(resolvedTheme),
+      overflow: "wrap",
+      unsafeCSS: CODE_WHITESPACE_UNSAFE_CSS,
+      onPostRender: (container, _instance, phase) => onCodePostRender(container, "", phase),
+    }),
+    [onCodePostRender, resolvedTheme],
   );
   const begin = (phase: "reading" | "writing") => {
     setWorking(phase);
@@ -175,14 +188,7 @@ export function CaptureShortcutConfig({
               className="max-h-80 overflow-auto rounded-lg border text-xs"
               aria-label="Shortcut changes"
             >
-              <FileDiff
-                fileDiff={diff}
-                options={{
-                  diffStyle: "unified",
-                  theme: resolveDiffThemeName(resolvedTheme),
-                  overflow: "wrap",
-                }}
-              />
+              <FileDiff fileDiff={diff} options={diffOptions} />
             </div>
           ) : null}
           {changed ? (

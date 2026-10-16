@@ -24,6 +24,7 @@ import {
 } from "@pierre/diffs";
 import {
   Editor,
+  EditStateManager,
   type EditorChangeEvent,
   type EditorFactory,
   type EditorOptions,
@@ -40,7 +41,15 @@ import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
 import { FolderTree, Globe2, WrapTextIcon } from "lucide-react";
 import { Code2, Eye, Table2 } from "lucide";
 import * as Schema from "effect/Schema";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
@@ -53,6 +62,9 @@ import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings"
 import { useTheme } from "~/hooks/useTheme";
 import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
+import { renderCodeDisplay, useCodeDisplay } from "~/hooks/useCodeDisplay";
+import { DEFAULT_CODE_TAB_SIZE } from "~/lib/editorConfig";
+import { useEditorTabSize } from "./useEditorTabSize";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
 import { cn } from "~/lib/utils";
@@ -665,6 +677,7 @@ interface EditableFileSurfaceProps {
   resolvedTheme: "light" | "dark";
   revealRequestId: number;
   wordWrap: boolean;
+  workspaceMutationId: string | null;
   onPostRender: FilePostRender;
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
@@ -683,9 +696,15 @@ function EditableFileSurface({
   resolvedTheme,
   revealRequestId,
   wordWrap,
+  workspaceMutationId,
   onPostRender,
   onPendingChange,
 }: EditableFileSurfaceProps) {
+  const { tabSizes, showWhitespace } = useCodeDisplay(
+    { environmentId, cwd, mutationId: workspaceMutationId },
+    [relativePath],
+  );
+  const editorHasFocus = useRef(false);
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const removeReviewComment = useComposerDraftStore((store) => store.removeReviewComment);
   const [lineAnnotations, setLineAnnotations] = useState<FileCommentLineAnnotation[]>([]);
@@ -711,18 +730,42 @@ function EditableFileSurface({
   const [externalFile, setExternalFile] = useState(() =>
     editableFileContents(environmentId, cwd, relativePath, contents),
   );
+  const surfaceId = useId();
+  const [sourceVersion, setSourceVersion] = useState(0);
   const [editedContents, setEditedContents] = useState<string | null>(null);
   if (contents !== (editedContents ?? externalFile.contents)) {
     setExternalFile(editableFileContents(environmentId, cwd, relativePath, contents));
+    setSourceVersion(sourceVersion + 1);
     setEditedContents(null);
   }
+  const { tabSize, ...compositionHandlers } = useEditorTabSize(
+    tabSizes.get(relativePath) ?? DEFAULT_CODE_TAB_SIZE,
+    sourceVersion,
+  );
+  // Pierre caches tab metrics for an editor's lifetime. Retain the draft across
+  // width-only remounts, but never restore it over an external file replacement.
+  const editStateKey = `${surfaceId}:${sourceVersion}`;
+  useEffect(
+    () => () => {
+      EditStateManager.clear("file", editStateKey);
+    },
+    [editStateKey],
+  );
   const { ready: editable, onPostRender: onEditablePostRender } =
     useEditableAfterHighlight(externalFile);
   const editorRef = useRef<Editor<"file", FileCommentAnnotationGroup, undefined> | null>(null);
   const editorOptions = useMemo<EditorOptions<"file", FileCommentAnnotationGroup, undefined>>(
     () => ({
+      ownsVerticalViewport: true,
       onAttach: (editor) => {
         editorRef.current = editor;
+        if (editorHasFocus.current) editor.focus({ preventScroll: true });
+      },
+      onFocus: () => {
+        editorHasFocus.current = true;
+      },
+      onBlur: () => {
+        editorHasFocus.current = false;
       },
       onComplete: () => {
         editorRef.current = null;
@@ -886,6 +929,7 @@ function EditableFileSurface({
 
   const handlePostRender = useCallback<FilePostRender>(
     (fileContainer, instance, phase) => {
+      renderCodeDisplay(fileContainer, phase, tabSize, showWhitespace);
       onPostRender(fileContainer, instance, phase);
       onEditablePostRender(instance.file, phase);
 
@@ -901,12 +945,12 @@ function EditableFileSurface({
         instance.setSelectedLines(selectedRange, { notify: false });
       });
     },
-    [onEditablePostRender, onPostRender, selectedRange],
+    [onEditablePostRender, onPostRender, selectedRange, tabSize, showWhitespace],
   );
 
   return (
     <EditProvider createEditor={createFileEditor}>
-      <div ref={surfaceRef} className="flex min-h-0 flex-1">
+      <div ref={surfaceRef} className="flex min-h-0 flex-1" {...compositionHandlers}>
         <Virtualizer
           className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
           config={{
@@ -915,6 +959,9 @@ function EditableFileSurface({
           }}
         >
           <File<FileCommentAnnotationGroup>
+            key={`${editStateKey}:${tabSize}`}
+            editStateKey={editStateKey}
+            style={{ "--diffs-tab-size": tabSize } as CSSProperties}
             file={externalFile}
             edit={editable}
             editorOptions={editorOptions}
@@ -973,6 +1020,7 @@ function RenderedMarkdownSurface({
   | "revealLine"
   | "revealRequestId"
   | "wordWrap"
+  | "workspaceMutationId"
   | "onPostRender"
 > & {
   threadRef: ScopedThreadRef;
@@ -1454,6 +1502,7 @@ export default function FilePreviewPanel({
               />
             ) : file.data.truncated || isHostFile || !canWriteFiles ? (
               <SourceFilePreview
+                workspace={{ environmentId, cwd, mutationId: workspaceMutationId }}
                 name={relativePath}
                 text={file.data.contents}
                 cacheKey={projectFileCacheKey(cwd, relativePath, file.data.contents)}
@@ -1471,6 +1520,7 @@ export default function FilePreviewPanel({
                   resolvedTheme={resolvedTheme}
                   revealRequestId={revealRequestId}
                   wordWrap={wordWrap}
+                  workspaceMutationId={workspaceMutationId}
                   onPostRender={onFilePostRender}
                   onPendingChange={onPendingChange}
                 />

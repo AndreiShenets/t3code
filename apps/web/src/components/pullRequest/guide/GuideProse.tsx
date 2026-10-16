@@ -1,15 +1,12 @@
-import type { EnvironmentId } from "@t3tools/contracts";
 import { createContext, useContext } from "react";
 
+import type { CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";
 import { cn } from "~/lib/utils";
 
 import { PullRequestMarkdown } from "../PullRequestMarkdown";
 
 /** Where the guide's prose renders from: the pull request's environment and checkout. */
-export const GuideProseContext = createContext<{
-  readonly environmentId: EnvironmentId;
-  readonly cwd: string;
-} | null>(null);
+export const GuideProseContext = createContext<CodeDisplayWorkspace | null>(null);
 
 /**
  * The guide's sentences, rendered as the pull request's own description is: inline code, and

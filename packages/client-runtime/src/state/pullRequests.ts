@@ -309,6 +309,12 @@ export function createPullRequestEnvironmentAtoms<R, E>(
           return yield* loader.load(prepared.value, input);
         }),
     }),
+    diffFileContentsQuery: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:pull-requests:diff-file-contents",
+      tag: WS_METHODS.pullRequestsDiffFileContents,
+      execute: (input) => routedRequest(WS_METHODS.pullRequestsDiffFileContents, input),
+      staleTimeMs: 60_000,
+    }),
     diffFileContents: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:pull-requests:diff-file-contents",
       tag: WS_METHODS.pullRequestsDiffFileContents,

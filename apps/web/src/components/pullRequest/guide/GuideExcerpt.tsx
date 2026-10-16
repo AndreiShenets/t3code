@@ -4,11 +4,12 @@ import type {
   FileDiffMetadata,
   SelectedLineRange,
 } from "@pierre/diffs";
-import { FileDiff } from "@pierre/diffs/react";
+import { FileDiff, type FileDiffOptions } from "@pierre/diffs/react";
 import type { PullRequestReviewGuideExcerpt, PullRequestReviewPosition } from "@t3tools/contracts";
 import { ArrowUpRightIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useContext, useMemo, useState } from "react";
 
+import { useCodeDisplay } from "~/hooks/useCodeDisplay";
 import { useTheme } from "~/hooks/useTheme";
 import {
   getRenderablePatch,
@@ -38,7 +39,7 @@ import {
   rowsToPatch,
 } from "@t3tools/client-runtime/review-guide-tour";
 import { GuideNoteMarker } from "./GuideNotes";
-import { GuideProse } from "./GuideProse";
+import { GuideProse, GuideProseContext } from "./GuideProse";
 
 // Long lines scroll inside the excerpt. The renderer only shows its scrollbar on hover, which
 // reads as code cut off at the edge, so the excerpt keeps it visible.
@@ -111,6 +112,8 @@ export function GuideExcerpt({
 }) {
   const [draft, setDraft] = useState<ExcerptDraft | null>(null);
   const { resolvedTheme } = useTheme();
+  const workspace = useContext(GuideProseContext);
+  const { onPostRender: onCodePostRender } = useCodeDisplay(workspace, [excerpt.path]);
   const slice = useMemo(() => {
     if (file === null) return null;
     const rows = fileDiffRows(file);
@@ -228,7 +231,7 @@ export function GuideExcerpt({
     if (comment !== null) onAskAgent(comment, request);
   };
 
-  const options = useMemo(
+  const options = useMemo<FileDiffOptions<ExcerptAnnotation, undefined>>(
     () => ({
       diffStyle: "unified" as const,
       lineDiffType: "none" as const,
@@ -237,6 +240,8 @@ export function GuideExcerpt({
       themeType: resolvedTheme,
       preferredHighlighter: PREFERRED_HIGHLIGHTER,
       unsafeCSS: EXCERPT_UNSAFE_CSS,
+      onPostRender: (container, _instance, phase) =>
+        onCodePostRender(container, excerpt.path, phase),
       // Hover a line for the gutter button, or drag across line numbers, as in the Code tab.
       enableGutterUtility: interactive,
       enableLineSelection: interactive,
@@ -247,7 +252,7 @@ export function GuideExcerpt({
         ? { hunkSeparators: "simple" as const }
         : { loadDiffFiles: loadExcerptFiles }),
     }),
-    [resolvedTheme, interactive, beginComment, loadExcerptFiles],
+    [resolvedTheme, interactive, beginComment, loadExcerptFiles, onCodePostRender, excerpt.path],
   );
 
   return (
