@@ -387,6 +387,9 @@ describe("searchSettings", () => {
   it.each([
     ["default model", "default-model", "/settings/general"],
     ["new threads", "new-threads", "/settings/general"],
+    ["show whitespace", "show-whitespace-characters", "/settings/general"],
+    ["spaces tabs", "show-whitespace-characters", "/settings/general"],
+    ["invisible characters", "show-whitespace-characters", "/settings/general"],
     ["agent browser access", "agent-browser-access", "/settings/integrations"],
     ["automatically pull", "automatic-pull", "/settings/source-control"],
     ["actions", "project-actions", "/settings/projects"],

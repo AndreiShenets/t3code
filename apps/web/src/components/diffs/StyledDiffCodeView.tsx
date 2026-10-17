@@ -9,10 +9,13 @@ import {
 /* oxlint-enable eslint/no-restricted-imports */
 import type { Ref } from "react";
 
-import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
+import { useCodeDisplay, type CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";
+import { CODE_WHITESPACE_UNSAFE_CSS } from "~/lib/codeWhitespace";
+import { DIFF_SURFACE_THEME_UNSAFE_CSS, resolveFileDiffPath } from "~/lib/diffRendering";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 
 export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
+${CODE_WHITESPACE_UNSAFE_CSS}
 /* A 1fr track's automatic minimum grows with the currently mounted lines. In split
    wrap mode that shifts width between columns, rewraps rows and makes the virtualizer
    repeatedly correct the scroll position. Keep both code columns at the same width. */
@@ -203,7 +206,7 @@ export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
 
 export type StyledDiffCodeViewOptions<LAnnotation> = Omit<
   NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>,
-  "unsafeCSS" | "itemMetrics" | "layout"
+  "unsafeCSS" | "itemMetrics" | "layout" | "onPostRender"
 >;
 
 type StyledDiffCodeViewProps<LAnnotation> = (
@@ -212,6 +215,7 @@ type StyledDiffCodeViewProps<LAnnotation> = (
 ) & {
   readonly options?: StyledDiffCodeViewOptions<LAnnotation>;
   readonly viewerRef?: Ref<CodeViewHandle<LAnnotation, undefined>>;
+  readonly workspace?: CodeDisplayWorkspace | null;
   readonly unsafeCSSExtra?: string;
 };
 
@@ -220,8 +224,24 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
   viewerRef,
   className,
   unsafeCSSExtra,
+  workspace,
   ...props
 }: StyledDiffCodeViewProps<LAnnotation>) {
+  const { onPostRender: onCodePostRender } = useCodeDisplay(
+    workspace,
+    (props.items ?? props.initialItems ?? [])
+      .filter((item) => !item.collapsed)
+      .map((item) => (item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name)),
+  );
+  const onPostRender: NonNullable<
+    NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>["onPostRender"]
+  > = (container, _instance, phase, { item }) => {
+    onCodePostRender(
+      container,
+      item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name,
+      phase,
+    );
+  };
   return (
     <DiffWorkerPoolProvider>
       <CodeView<LAnnotation>
@@ -234,6 +254,7 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
         }
         options={{
           ...options,
+          onPostRender,
           unsafeCSS: unsafeCSSExtra
             ? `${DIFF_VIEW_UNSAFE_CSS}\n${unsafeCSSExtra}`
             : DIFF_VIEW_UNSAFE_CSS,
