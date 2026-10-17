@@ -129,12 +129,36 @@ describe("ElectronApp", () => {
         const directory = yield* fs.makeTempDirectoryScoped();
         yield* fs.writeFileString(
           `${directory}/package.json`,
-          JSON.stringify({ t3codeCustomBuildStamp: "202610171539" }),
+          JSON.stringify({
+            t3codeCustomBuildStamp: "202610171539",
+            t3codeCustomBuildTimestamp: "2026-10-17T13:42:03.000Z",
+          }),
         );
         getAppPathMock.mockReturnValueOnce(directory);
         const metadata = yield* ElectronApp.make.metadata;
         assert.equal(metadata.customBuildStamp, "202610171539");
+        assert.equal(metadata.customBuildTimestamp, "2026-10-17T13:42:03.000Z");
         assert.equal(metadata.appVersion, "1.2.3");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect.each([undefined, 42])(
+    "retains the custom stamp without a valid timestamp (%s)",
+    (timestamp) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = yield* fs.makeTempDirectoryScoped();
+        yield* fs.writeFileString(
+          `${directory}/package.json`,
+          JSON.stringify({
+            t3codeCustomBuildStamp: "202610171539",
+            t3codeCustomBuildTimestamp: timestamp,
+          }),
+        );
+        getAppPathMock.mockReturnValueOnce(directory);
+        const metadata = yield* ElectronApp.make.metadata;
+        assert.equal(metadata.customBuildStamp, "202610171539");
+        assert.isUndefined(metadata.customBuildTimestamp);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

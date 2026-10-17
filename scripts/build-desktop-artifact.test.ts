@@ -24,7 +24,7 @@ import {
   createStagePatchedDependencies,
   readWorkspaceConfig,
   createBuildConfig,
-  customBuildStampFromBranch,
+  customBuildMetadataFromBranch,
   DESKTOP_ELECTRON_LANGUAGES,
   DESKTOP_FILE_EXCLUSIONS,
   DESKTOP_EXTRA_RESOURCES,
@@ -273,10 +273,17 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
   });
 
-  it("embeds only the custom-build branch timestamp", () => {
-    assert.equal(customBuildStampFromBranch("custom_builds/2026_10_17_15_39\n"), "202610171539");
-    assert.equal(customBuildStampFromBranch("main"), undefined);
-    assert.equal(customBuildStampFromBranch("customizations/custom-build-updater"), undefined);
+  it("embeds the branch stamp and absolute build time only in custom builds", () => {
+    const builtAt = "2026-10-17T13:42:03.000Z";
+    assert.deepEqual(customBuildMetadataFromBranch("custom_builds/2026_10_17_15_39\n", builtAt), {
+      t3codeCustomBuildStamp: "202610171539",
+      t3codeCustomBuildTimestamp: builtAt,
+    });
+    assert.equal(customBuildMetadataFromBranch("main", builtAt), undefined);
+    assert.equal(
+      customBuildMetadataFromBranch("customizations/custom-build-updater", builtAt),
+      undefined,
+    );
   });
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {

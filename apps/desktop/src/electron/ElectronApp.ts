@@ -15,6 +15,7 @@ export interface ElectronAppMetadata {
   readonly resourcesPath: string;
   readonly runningUnderArm64Translation: boolean;
   readonly customBuildStamp?: string;
+  readonly customBuildTimestamp?: string;
 }
 
 export class ElectronAppMetadataReadError extends Schema.TaggedError<ElectronAppMetadataReadError>()(
@@ -120,7 +121,7 @@ export const make = ElectronApp.of({
         }),
     });
 
-    const customBuildStamp = Electron.app.isPackaged
+    const customBuildMetadata = Electron.app.isPackaged
       ? yield* Effect.try(() => NodeFS.readFileSync(`${appPath}/package.json`, "utf8")).pipe(
           Effect.flatMap(
             Schema.decodeEffect(
@@ -129,11 +130,11 @@ export const make = ElectronApp.of({
                   t3codeCustomBuildStamp: Schema.optional(
                     Schema.String.check(Schema.isPattern(/^\d{12}$/)),
                   ),
+                  t3codeCustomBuildTimestamp: Schema.optional(Schema.Unknown),
                 }),
               ),
             ),
           ),
-          Effect.map((metadata) => metadata.t3codeCustomBuildStamp),
           Effect.orElseSucceed(() => undefined),
         )
       : undefined;
@@ -144,7 +145,14 @@ export const make = ElectronApp.of({
       isPackaged: Electron.app.isPackaged,
       resourcesPath: process.resourcesPath,
       runningUnderArm64Translation: Electron.app.runningUnderARM64Translation === true,
-      ...(customBuildStamp ? { customBuildStamp } : {}),
+      ...(customBuildMetadata?.t3codeCustomBuildStamp
+        ? {
+            customBuildStamp: customBuildMetadata.t3codeCustomBuildStamp,
+            ...(typeof customBuildMetadata.t3codeCustomBuildTimestamp === "string"
+              ? { customBuildTimestamp: customBuildMetadata.t3codeCustomBuildTimestamp }
+              : {}),
+          }
+        : {}),
     };
   }),
   name: Effect.sync(() => Electron.app.name),

@@ -1,6 +1,27 @@
 import * as Schema from "effect/Schema";
+import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
 
 export const CUSTOM_BUILD_REPOSITORY = "AndreiShenets/t3code";
+
+export function isNightlyNotNewerThanCustomBuild(
+  version: string,
+  releaseDate: unknown,
+  customBuildTimestamp: string | null,
+) {
+  if (
+    resolveDefaultDesktopUpdateChannel(version) !== "nightly" ||
+    typeof releaseDate !== "string" ||
+    !customBuildTimestamp
+  ) {
+    return false;
+  }
+  // The legacy local build stamp cannot be compared reliably after a timezone change.
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i;
+  if (!hasTimezone.test(releaseDate) || !hasTimezone.test(customBuildTimestamp)) return false;
+  const nightlyTime = Date.parse(releaseDate);
+  const customTime = Date.parse(customBuildTimestamp);
+  return Number.isFinite(nightlyTime) && Number.isFinite(customTime) && nightlyTime <= customTime;
+}
 
 export const CustomBuildReleases = Schema.Array(
   Schema.Struct({

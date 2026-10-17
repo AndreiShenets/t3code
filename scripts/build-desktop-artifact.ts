@@ -42,6 +42,7 @@ import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Config from "effect/Config";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -866,9 +867,14 @@ const resolveGitCommitHash = Effect.fn("resolveGitCommitHash")(function* (repoRo
   return hash.toLowerCase();
 });
 
-export function customBuildStampFromBranch(branch: string) {
+export function customBuildMetadataFromBranch(branch: string, builtAt: string) {
   const match = /^custom_builds\/(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})$/.exec(branch.trim());
-  return match ? match.slice(1).join("") : undefined;
+  return match
+    ? {
+        t3codeCustomBuildStamp: match.slice(1).join(""),
+        t3codeCustomBuildTimestamp: builtAt,
+      }
+    : undefined;
 }
 
 const resolvePythonForNodeGyp = Effect.fn("resolvePythonForNodeGyp")(function* () {
@@ -952,6 +958,7 @@ interface StagePackageJson {
   readonly buildVersion: string;
   readonly t3codeCommitHash: string;
   readonly t3codeCustomBuildStamp?: string;
+  readonly t3codeCustomBuildTimestamp?: string;
   readonly t3codeWebAuthn?: MacWebAuthnEntitlements;
   readonly private: true;
   readonly packageManager: string;
@@ -3526,7 +3533,10 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const branch = yield* spawnAndCollectOutput(
     ChildProcess.make("git", ["branch", "--show-current"], { cwd: repoRoot }),
   ).pipe(Effect.orElseSucceed(() => ({ stdout: "" })));
-  const customBuildStamp = customBuildStampFromBranch(branch.stdout);
+  const customBuildMetadata = customBuildMetadataFromBranch(
+    branch.stdout,
+    DateTime.formatIso(yield* DateTime.now),
+  );
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
     prefix: `t3code-desktop-${options.platform}-stage-`,
@@ -3757,7 +3767,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
-    ...(customBuildStamp ? { t3codeCustomBuildStamp: customBuildStamp } : {}),
+    ...customBuildMetadata,
     // Read by apps/desktop/src/preview/Passkeys.ts; must match the signed entitlements.
     ...(macWebAuthn ? { t3codeWebAuthn: macWebAuthn } : {}),
     private: true,
@@ -3783,7 +3793,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         : undefined,
       bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
       options.arch,
-      customBuildStamp !== undefined,
+      customBuildMetadata !== undefined,
     ),
     dependencies: stageDependencies,
     devDependencies: {
