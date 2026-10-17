@@ -28,12 +28,15 @@ describe("Usage page preferences", () => {
     expect(readUsagePagePreferences()).toEqual({ metric: "limits", windowDays: 30 });
   });
 
-  it.each([1, 7, 30, 90] as const)("round-trips every metric with a %i-day range", (windowDays) => {
-    for (const metric of ["cost", "tokens", "limits"] as const) {
-      saveUsagePagePreferences({ metric, windowDays });
-      expect(readUsagePagePreferences()).toEqual({ metric, windowDays });
-    }
-  });
+  it.each(["today", 1, 7, 30, 90] as const)(
+    "round-trips every metric with range %s",
+    (windowDays) => {
+      for (const metric of ["cost", "tokens", "limits"] as const) {
+        saveUsagePagePreferences({ metric, windowDays });
+        expect(readUsagePagePreferences()).toEqual({ metric, windowDays });
+      }
+    },
+  );
 
   it("round-trips hidden providers and reads older saves without them", () => {
     saveUsagePagePreferences({ metric: "cost", windowDays: 7, hiddenProviders: ["codex"] });
