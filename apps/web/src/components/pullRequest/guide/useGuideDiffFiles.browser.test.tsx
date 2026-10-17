@@ -9,7 +9,7 @@ import {
 } from "@t3tools/contracts";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { act, type ComponentProps } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { GuideStop } from "./GuideStop";
@@ -80,7 +80,8 @@ const guide: PullRequestReviewGuide = {
   })),
 };
 let registry: AtomRegistry.AtomRegistry;
-let renderer: ReactTestRenderer | undefined;
+let renderer: Root | undefined;
+let mount: HTMLDivElement;
 
 function page(path: string, text: string, nextCursor: string | null = null): PullRequestDiffResult {
   return {
@@ -116,8 +117,8 @@ async function render(headSha: string) {
         />
       </RegistryContext.Provider>
     );
-    if (renderer) renderer.update(tree);
-    else renderer = create(tree);
+    renderer ??= createRoot(mount);
+    renderer.render(tree);
   });
 }
 
@@ -132,6 +133,8 @@ async function loadA() {
 }
 
 beforeEach(() => {
+  mount = document.createElement("div");
+  document.body.append(mount);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   registry = AtomRegistry.make();
   state.reads = [];
@@ -150,6 +153,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(() => renderer?.unmount());
+  mount.remove();
   renderer = undefined;
   registry.dispose();
   vi.unstubAllGlobals();
@@ -210,7 +214,7 @@ describe("guide whole-PR diff revisions", () => {
     await act(() => state.reads[2]!.reject(new Error("offline")));
     expect(contents()).toEqual([]);
     expect(stop().diffLoading).toBe(false);
-    expect(JSON.stringify(renderer!.toJSON())).toContain("offline");
+    expect(mount.textContent).toContain("offline");
 
     await act(() =>
       registry.refresh(pullRequestEnvironment.diff({ environmentId, input: reference })),

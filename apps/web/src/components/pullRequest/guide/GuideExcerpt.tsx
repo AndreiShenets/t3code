@@ -204,9 +204,9 @@ function ExcerptDiff({
   onOpenFile: (path: string) => void;
 }) {
   const { resolvedTheme } = useTheme();
-  const loadExcerptFiles = excerptLoader(excerpt, slice.rows, loadDiffFiles);
   const workspace = useContext(GuideProseContext);
   const { onPostRender: onCodePostRender } = useCodeDisplay(workspace, [excerpt.path]);
+  const loadExcerptFiles = excerptLoader(excerpt, slice.rows, loadDiffFiles);
 
   const annotations = (() => {
     const groups = new Map<string, DiffLineAnnotation<ExcerptAnnotation>>();

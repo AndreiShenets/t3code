@@ -62,22 +62,26 @@ function parseConfig(file: ConfigFile) {
   return parsed;
 }
 
-// Callers derive paths on every render; key the subscription by their content.
-const codeDisplayAtom = Atom.family((key: string) => {
-  const [environmentId, cwd, canReadFiles, paths, snapshot]: [
-    EnvironmentId | null,
-    string | null,
-    boolean,
-    ReadonlyArray<string>,
-    NonNullable<CodeDisplayWorkspace["snapshot"]> | null,
-  ] = JSON.parse(key);
+/** Shares configuration reads in the file's environment and displayed revision. */
+export function useCodeDisplay(
+  workspace: CodeDisplayWorkspace | null | undefined,
+  filePaths: ReadonlyArray<string>,
+) {
+  const showWhitespace = useClientSettings((settings) => settings.showWhitespace);
+  const environmentId = workspace?.environmentId ?? null;
+  const cwd = workspace?.cwd ?? null;
+  const { canReadFiles } = useFilesystemReadAccess(environmentId);
+  const pathsKey = JSON.stringify(filePaths);
+  const snapshotKey = JSON.stringify(workspace?.snapshot ?? null);
   const configs = (() => {
+    const snapshot: NonNullable<CodeDisplayWorkspace["snapshot"]> | null = JSON.parse(snapshotKey);
     if (
       environmentId === null ||
       cwd === null ||
       (snapshot === null ? !canReadFiles : snapshot.commit === null)
     )
       return [];
+    const paths: string[] = JSON.parse(pathsKey);
     return paths.map((filePath) => ({
       filePath,
       candidates: editorConfigCandidates(snapshot ? "/" : cwd, filePath).map((candidate) => {
@@ -104,7 +108,7 @@ const codeDisplayAtom = Atom.family((key: string) => {
       }),
     }));
   })();
-  return Atom.make((get) => {
+  const displayAtom = Atom.make((get) => {
     const queries = new Set<Atom.Atom<unknown>>();
     const tabSizes = new Map<string, number>();
     for (const { filePath, candidates } of configs) {
@@ -125,32 +129,16 @@ const codeDisplayAtom = Atom.family((key: string) => {
       const tabSize = resolveEditorConfigTabSize(applicable);
       if (tabSize !== DEFAULT_CODE_TAB_SIZE) tabSizes.set(filePath, tabSize);
     }
-    return {
-      widthsKey: JSON.stringify([...tabSizes].sort(([a], [b]) => a.localeCompare(b))),
-      queries,
-    };
+    return { tabSizes, queries };
   });
-});
-
-/** Shares configuration reads in the file's environment and displayed revision. */
-export function useCodeDisplay(
-  workspace: CodeDisplayWorkspace | null | undefined,
-  filePaths: ReadonlyArray<string>,
-) {
-  const showWhitespace = useClientSettings((settings) => settings.showWhitespace);
-  const environmentId = workspace?.environmentId ?? null;
-  const cwd = workspace?.cwd ?? null;
-  const { canReadFiles } = useFilesystemReadAccess(environmentId);
-  const snapshot = workspace?.snapshot ?? null;
-  const display = useAtomValue(
-    codeDisplayAtom(JSON.stringify([environmentId, cwd, canReadFiles, filePaths, snapshot])),
-  );
+  const display = useAtomValue(displayAtom);
+  const widthsKey = JSON.stringify([...display.tabSizes].sort(([a], [b]) => a.localeCompare(b)));
   // Query refreshes can return equivalent data; keep Pierre's render callback stable then.
-  const tabSizes = new Map<string, number>(JSON.parse(display.widthsKey));
+  const tabSizes = new Map<string, number>(JSON.parse(widthsKey));
   useWorkspaceMutationRefresh({
     mutationId: workspace?.mutationId ?? null,
     refreshOnResourceChange: workspace?.snapshot === undefined,
-    resourceKey: JSON.stringify([environmentId, cwd, snapshot]),
+    resourceKey: JSON.stringify([environmentId, cwd, snapshotKey]),
     refresh: () => {
       for (const query of display.queries) appAtomRegistry.refresh(query);
     },

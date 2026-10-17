@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import {
   EnvironmentId,
@@ -11,7 +10,7 @@ import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { act, useLayoutEffect } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 type FileResult = AsyncResult.AsyncResult<ProjectReadFileResult, Error>;
@@ -96,7 +95,8 @@ import { useCodeDisplay, type CodeDisplayWorkspace } from "./useCodeDisplay";
 
 const environmentId = EnvironmentId.make("remote");
 const workspace = { environmentId, cwd: "/repo" };
-let renderer: ReactTestRenderer | undefined;
+let renderer: Root | undefined;
+let mount: HTMLDivElement;
 
 function putConfig(
   target: CodeDisplayWorkspace,
@@ -145,12 +145,14 @@ async function render(target: CodeDisplayWorkspace | null, paths: string[], elem
         <Surface target={target} paths={paths} element={element} />
       </RegistryContext.Provider>
     );
-    if (renderer) renderer.update(children);
-    else renderer = create(children);
+    renderer ??= createRoot(mount);
+    renderer.render(children);
   });
 }
 
 beforeEach(() => {
+  mount = document.createElement("div");
+  document.body.append(mount);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.registry = AtomRegistry.make();
   state.responses.clear();
@@ -301,6 +303,7 @@ describe("pull request code display", () => {
 });
 
 afterEach(async () => {
+  mount.remove();
   await act(() => renderer?.unmount());
   renderer = undefined;
   state.registry?.dispose();

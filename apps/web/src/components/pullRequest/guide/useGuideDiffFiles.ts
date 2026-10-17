@@ -25,7 +25,6 @@ export function useGuideDiffFiles({
 }: {
   environmentId: EnvironmentId;
   reference: PullRequestRef;
-  /** The current change's head, independent of when the guide was written. */
   headSha: string | null;
   wantedPaths: ReadonlyArray<string>;
 }) {

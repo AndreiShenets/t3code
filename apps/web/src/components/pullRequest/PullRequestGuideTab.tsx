@@ -37,7 +37,6 @@ export function PullRequestGuideTab({
   reference: PullRequestRef;
   title: string | null;
   workspaceRoot: string;
-  /** The diff is the current change, even while the guide's prose is stale. */
   headSha: string | null;
   active: boolean;
   canComment: boolean;

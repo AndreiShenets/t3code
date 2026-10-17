@@ -73,13 +73,6 @@ export function CaptureShortcutConfig({
     },
   });
   const actionBusy = busy || recorder.recording;
-  const diff =
-    preview && changed
-      ? parseDiffFromFile(
-          { name: preview.path, contents: preview.before },
-          { name: preview.path, contents: preview.after },
-        )
-      : null;
   const { onPostRender: onCodePostRender } = useCodeDisplay(null, []);
   const diffOptions: FileDiffOptions<undefined, undefined> = {
     diffStyle: "unified",
@@ -88,6 +81,13 @@ export function CaptureShortcutConfig({
     unsafeCSS: CODE_WHITESPACE_UNSAFE_CSS,
     onPostRender: (container, _instance, phase) => onCodePostRender(container, "", phase),
   };
+  const diff =
+    preview && changed
+      ? parseDiffFromFile(
+          { name: preview.path, contents: preview.before },
+          { name: preview.path, contents: preview.after },
+        )
+      : null;
   const begin = (phase: "reading" | "writing") => {
     setWorking(phase);
     onBusyChange?.(true);

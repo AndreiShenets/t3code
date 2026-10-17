@@ -36,7 +36,6 @@ export function GuideTour({
   environmentId: EnvironmentId;
   reference: PullRequestRef;
   guide: PullRequestReviewGuide;
-  /** The current diff's head; the stored guide can still describe an earlier push. */
   headSha: string | null;
   banner: ReactNode;
   active: boolean;
