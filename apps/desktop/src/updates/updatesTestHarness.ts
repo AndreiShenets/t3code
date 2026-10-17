@@ -33,6 +33,8 @@ export interface UpdatesHarnessOptions {
   readonly platform?: NodeJS.Platform;
   readonly packageType?: string | undefined;
   readonly installRecord?: string | undefined;
+  readonly customBuildStamp?: string;
+  readonly customBuildTimestamp?: string;
 }
 
 export function makeHarness(options: UpdatesHarnessOptions = {}) {
@@ -153,6 +155,8 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
     isPackaged: true,
     resourcesPath: "/missing/resources",
     runningUnderArm64Translation: false,
+    ...(options.customBuildStamp ? { customBuildStamp: options.customBuildStamp } : {}),
+    ...(options.customBuildTimestamp ? { customBuildTimestamp: options.customBuildTimestamp } : {}),
   }).pipe(
     Layer.provide(
       Layer.mergeAll(

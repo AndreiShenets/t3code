@@ -2,13 +2,15 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { beforeEach, vi } from "vite-plus/test";
 
-const { openExternalMock, writeTextMock } = vi.hoisted(() => ({
+const { openExternalMock, openPathMock, writeTextMock } = vi.hoisted(() => ({
   openExternalMock: vi.fn(),
+  openPathMock: vi.fn(),
   writeTextMock: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
   shell: {
+    openPath: openPathMock,
     openExternal: openExternalMock,
   },
   clipboard: {
@@ -21,6 +23,7 @@ import * as ElectronShell from "./ElectronShell.ts";
 describe("ElectronShell", () => {
   beforeEach(() => {
     openExternalMock.mockReset();
+    openPathMock.mockReset();
     writeTextMock.mockReset();
   });
 
@@ -33,6 +36,18 @@ describe("ElectronShell", () => {
 
       assert.equal(result, true);
       assert.deepEqual(openExternalMock.mock.calls, [["https://example.com/path"]]);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
+  it.effect("reports OS installer launch failures instead of assuming success", () =>
+    Effect.gen(function* () {
+      const shell = yield* ElectronShell.ElectronShell;
+      openPathMock.mockResolvedValue("");
+      assert.equal(yield* shell.openPath("installer.exe"), true);
+      openPathMock.mockResolvedValue("Windows could not open this file");
+      assert.equal(yield* shell.openPath("installer.exe"), false);
+      openPathMock.mockRejectedValue(new Error("blocked"));
+      assert.equal(yield* shell.openPath("installer.exe"), false);
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
