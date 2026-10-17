@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 
 /** Keep the composing editor mounted until its native compositionend handler commits. */
 export function useEditorTabSize(resolvedTabSize: number, sourceVersion: number) {
@@ -7,10 +7,7 @@ export function useEditorTabSize(resolvedTabSize: number, sourceVersion: number)
   );
   const tabSize =
     composition?.sourceVersion === sourceVersion ? composition.tabSize : resolvedTabSize;
-  const onCompositionStartCapture = useCallback(
-    () => setComposition({ tabSize, sourceVersion }),
-    [tabSize, sourceVersion],
-  );
-  const onCompositionEnd = useCallback(() => setComposition(null), []);
+  const onCompositionStartCapture = () => setComposition({ tabSize, sourceVersion });
+  const onCompositionEnd = () => setComposition(null);
   return { tabSize, onCompositionStartCapture, onCompositionEnd };
 }

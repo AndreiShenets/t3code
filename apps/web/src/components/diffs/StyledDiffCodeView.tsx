@@ -7,16 +7,22 @@ import {
   type UncontrolledCodeViewProps,
 } from "@pierre/diffs/react";
 /* oxlint-enable eslint/no-restricted-imports */
-import { useCallback, type Ref } from "react";
+import type { Ref } from "react";
 
 import { useCodeDisplay, type CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";
 import { CODE_WHITESPACE_UNSAFE_CSS } from "~/lib/codeWhitespace";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS, resolveFileDiffPath } from "~/lib/diffRendering";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 
-/** The app's diff stylesheet, shared by single-file renderers so their separators match. */
 export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
 ${CODE_WHITESPACE_UNSAFE_CSS}
+/* A 1fr track's automatic minimum grows with the currently mounted lines. In split
+   wrap mode that shifts width between columns, rewraps rows and makes the virtualizer
+   repeatedly correct the scroll position. Keep both code columns at the same width. */
+[data-diff-type="split"][data-overflow="wrap"] {
+  --diffs-code-grid: var(--diffs-grid-number-column-width) minmax(0, 1fr);
+}
+
 :is(
   [data-line],
   [data-line-annotation],
@@ -210,14 +216,9 @@ type StyledDiffCodeViewProps<LAnnotation> = (
   readonly options?: StyledDiffCodeViewOptions<LAnnotation>;
   readonly viewerRef?: Ref<CodeViewHandle<LAnnotation, undefined>>;
   readonly workspace?: CodeDisplayWorkspace | null;
-  /**
-   * Appended to the shared stylesheet inside the viewer's shadow root, for a surface that has
-   * to restyle chrome the viewer owns — such as replacing its per-file line counts.
-   */
   readonly unsafeCSSExtra?: string;
 };
 
-/** The shared web CodeView surface: app styling and virtualized geometry stay paired here. */
 export function StyledDiffCodeView<LAnnotation = undefined>({
   options,
   viewerRef,
@@ -232,25 +233,20 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
       .filter((item) => !item.collapsed)
       .map((item) => (item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name)),
   );
-  const onPostRender = useCallback<
-    NonNullable<NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>["onPostRender"]>
-  >(
-    (container, _instance, phase, { item }) => {
-      onCodePostRender(
-        container,
-        item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name,
-        phase,
-      );
-    },
-    [onCodePostRender],
-  );
+  const onPostRender: NonNullable<
+    NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>["onPostRender"]
+  > = (container, _instance, phase, { item }) => {
+    onCodePostRender(
+      container,
+      item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name,
+      phase,
+    );
+  };
   return (
     <DiffWorkerPoolProvider>
       <CodeView<LAnnotation>
         {...props}
         {...(viewerRef ? { ref: viewerRef } : {})}
-        // The custom element itself is focusable for keyboard scrolling. Its native outline sits
-        // outside the panel clipping boundary; actual controls inside retain their own indicators.
         className={
           className
             ? `diff-render-surface [--code-background:var(--background)] outline-none ${className}`

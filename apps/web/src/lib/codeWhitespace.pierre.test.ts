@@ -8,7 +8,7 @@ import {
 } from "@pierre/diffs";
 import { Editor, EditStateManager, type EditorFactory } from "@pierre/diffs/edit";
 import { EditProvider, File as ReactFile } from "@pierre/diffs/react";
-import { act, createElement, useMemo, type CSSProperties } from "react";
+import { act, createElement, type CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
@@ -300,18 +300,16 @@ describe("Pierre whitespace decoration", () => {
         attached.resolve();
       },
     };
+    const displayOptionsByTabSize = new Map([2, 8].map((tabSize) => [tabSize, {
+        ...options,
+        onPostRender: (container: HTMLElement, instance: unknown, phase: PostRenderPhase) => {
+          container.style.setProperty("--diffs-tab-size", String(tabSize));
+          options.onPostRender(container, instance, phase);
+        },
+      }]));
     function Surface({ resolvedTabSize }: { resolvedTabSize: number }) {
       const { tabSize, ...compositionHandlers } = useEditorTabSize(resolvedTabSize, 0);
-      const displayOptions = useMemo(
-        () => ({
-          ...options,
-          onPostRender: (container: HTMLElement, instance: unknown, phase: PostRenderPhase) => {
-            container.style.setProperty("--diffs-tab-size", String(tabSize));
-            options.onPostRender(container, instance, phase);
-          },
-        }),
-        [tabSize],
-      );
+      const displayOptions = displayOptionsByTabSize.get(tabSize)!;
       return createElement(
         EditProvider<undefined, undefined>,
         { createEditor },

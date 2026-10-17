@@ -9,7 +9,6 @@ import { workspaceRelativeFilePath } from "@t3tools/shared/path";
 import type { PostRenderPhase } from "@pierre/diffs";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { useCallback, useMemo } from "react";
 
 import { releaseCodeWhitespace, renderCodeWhitespace } from "~/lib/codeWhitespace";
 import {
@@ -74,7 +73,7 @@ export function useCodeDisplay(
   const { canReadFiles } = useFilesystemReadAccess(environmentId);
   const pathsKey = JSON.stringify(filePaths);
   const snapshotKey = JSON.stringify(workspace?.snapshot ?? null);
-  const configs = useMemo(() => {
+  const configs = (() => {
     const snapshot: NonNullable<CodeDisplayWorkspace["snapshot"]> | null = JSON.parse(snapshotKey);
     if (
       environmentId === null ||
@@ -108,38 +107,34 @@ export function useCodeDisplay(
         };
       }),
     }));
-  }, [canReadFiles, cwd, environmentId, pathsKey, snapshotKey]);
-  const displayAtom = useMemo(
-    () =>
-      Atom.make((get) => {
-        const queries = new Set<Atom.Atom<unknown>>();
-        const tabSizes = new Map<string, number>();
-        for (const { filePath, candidates } of configs) {
-          const applicable = [];
-          for (const candidate of candidates) {
-            queries.add(candidate.query);
-            const result = get(candidate.query);
-            const file =
-              (candidate.optimistic === null ? null : get(candidate.optimistic)?.data) ??
-              (result._tag === "Failure" ? null : Option.getOrNull(AsyncResult.value(result)));
-            // Wait for each directory before walking farther so root=true is an actual boundary.
-            if (file === null && result._tag === "Initial") break;
-            if (file === null) continue;
-            const config = parseConfig(file);
-            applicable.push({ config, relativeFilePath: candidate.relativeFilePath });
-            if (config.root) break;
-          }
-          const tabSize = resolveEditorConfigTabSize(applicable);
-          if (tabSize !== DEFAULT_CODE_TAB_SIZE) tabSizes.set(filePath, tabSize);
-        }
-        return { tabSizes, queries };
-      }),
-    [configs],
-  );
+  })();
+  const displayAtom = Atom.make((get) => {
+    const queries = new Set<Atom.Atom<unknown>>();
+    const tabSizes = new Map<string, number>();
+    for (const { filePath, candidates } of configs) {
+      const applicable = [];
+      for (const candidate of candidates) {
+        queries.add(candidate.query);
+        const result = get(candidate.query);
+        const file =
+          (candidate.optimistic === null ? null : get(candidate.optimistic)?.data) ??
+          (result._tag === "Failure" ? null : Option.getOrNull(AsyncResult.value(result)));
+        // Wait for each directory before walking farther so root=true is an actual boundary.
+        if (file === null && result._tag === "Initial") break;
+        if (file === null) continue;
+        const config = parseConfig(file);
+        applicable.push({ config, relativeFilePath: candidate.relativeFilePath });
+        if (config.root) break;
+      }
+      const tabSize = resolveEditorConfigTabSize(applicable);
+      if (tabSize !== DEFAULT_CODE_TAB_SIZE) tabSizes.set(filePath, tabSize);
+    }
+    return { tabSizes, queries };
+  });
   const display = useAtomValue(displayAtom);
   const widthsKey = JSON.stringify([...display.tabSizes].sort(([a], [b]) => a.localeCompare(b)));
   // Query refreshes can return equivalent data; keep Pierre's render callback stable then.
-  const tabSizes = useMemo(() => new Map<string, number>(JSON.parse(widthsKey)), [widthsKey]);
+  const tabSizes = new Map<string, number>(JSON.parse(widthsKey));
   useWorkspaceMutationRefresh({
     mutationId: workspace?.mutationId ?? null,
     refreshOnResourceChange: workspace?.snapshot === undefined,
@@ -148,15 +143,12 @@ export function useCodeDisplay(
       for (const query of display.queries) appAtomRegistry.refresh(query);
     },
   });
-  const onPostRender = useCallback(
-    (container: HTMLElement, filePath: string, phase: PostRenderPhase) =>
-      renderCodeDisplay(
-        container,
-        phase,
-        tabSizes.get(filePath) ?? DEFAULT_CODE_TAB_SIZE,
-        showWhitespace,
-      ),
-    [showWhitespace, tabSizes],
-  );
+  const onPostRender = (container: HTMLElement, filePath: string, phase: PostRenderPhase) =>
+    renderCodeDisplay(
+      container,
+      phase,
+      tabSizes.get(filePath) ?? DEFAULT_CODE_TAB_SIZE,
+      showWhitespace,
+    );
   return { onPostRender, tabSizes, showWhitespace };
 }
