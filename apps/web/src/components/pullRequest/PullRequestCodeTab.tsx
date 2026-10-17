@@ -1422,6 +1422,12 @@ function PullRequestCodeTab({
               same one. Scrolling from a parent instead leaves it painting over its neighbours. */}
           <FileViewedToggleContext value={fileViewedToggle}>
             <StyledDiffCodeView<ReviewAnnotationGroup>
+              workspace={{
+                environmentId,
+                cwd: detail.workspaceRoot,
+                snapshot: { reference, commit: commit ?? detail.headSha ?? null },
+                mutationId: String(refreshToken),
+              }}
               className="@container h-full overflow-auto [scrollbar-gutter:stable]"
               containerRef={scrollerRef}
               viewerRef={setViewer}

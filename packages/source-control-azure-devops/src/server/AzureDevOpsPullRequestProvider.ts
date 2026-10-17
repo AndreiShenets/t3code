@@ -475,8 +475,22 @@ export const make = Effect.gen(function* () {
         return slice;
       }).pipe(Effect.mapError(fail("getDiff"))),
 
+    // Ordinary patch expansion reads the latest iteration; historical two-sided diffs are not
+    // supported here. A pinned new-side read can also fetch a file outside the patch, such as
+    // .editorconfig, and must stay at that exact snapshot even if another push has landed.
     getDiffFileContents: (input) =>
       Effect.gen(function* () {
+        if (input.changeType === "new" && input.commit !== undefined) {
+          const location = yield* locationOf(input);
+          if (location === null) return { oldContents: "", newContents: "" };
+          const item = yield* readItemContent({
+            cwd: input.cwd,
+            location,
+            path: input.newPath,
+            commit: input.commit,
+          });
+          return { oldContents: "", newContents: item.contents, binary: item.isBinary };
+        }
         const scope = yield* diffScope(input);
         const iteration = scope?.iterations.at(-1);
         if (scope === null || iteration === undefined) return { oldContents: "", newContents: "" };
