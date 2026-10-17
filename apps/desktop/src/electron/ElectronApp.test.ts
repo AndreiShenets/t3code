@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as FileSystem from "effect/FileSystem";
 import { beforeEach, vi } from "vite-plus/test";
 
 const {
@@ -10,6 +12,7 @@ const {
   getAppPathMock,
   getSystemLocaleMock,
   getVersionMock,
+  isPackagedMock,
   onMock,
   quitMock,
   relaunchMock,
@@ -31,6 +34,7 @@ const {
   getAppPathMock: vi.fn(() => "/app"),
   getSystemLocaleMock: vi.fn(() => "en-GB"),
   getVersionMock: vi.fn(() => "1.2.3"),
+  isPackagedMock: vi.fn(() => true),
   onMock: vi.fn(),
   quitMock: vi.fn(),
   relaunchMock: vi.fn(),
@@ -62,7 +66,9 @@ vi.mock("electron", () => ({
     getAppPath: getAppPathMock,
     getSystemLocale: getSystemLocaleMock,
     getVersion: getVersionMock,
-    isPackaged: true,
+    get isPackaged() {
+      return isPackagedMock();
+    },
     name: "T3 Code",
     on: onMock,
     quit: quitMock,
@@ -117,6 +123,34 @@ describe("ElectronApp", () => {
 
       assert.strictEqual(yield* electronApp.systemLocale, "en-GB");
     }).pipe(Effect.provide(ElectronApp.layer)),
+  );
+
+  it.effect.each([
+    { marker: true, isPackaged: true, expected: true },
+    { marker: false, isPackaged: true, expected: undefined },
+    { marker: undefined, isPackaged: true, expected: undefined },
+    { marker: "nightly", isPackaged: true, expected: undefined },
+    { marker: true, isPackaged: false, expected: undefined },
+  ])(
+    "reads packaged nightly branding without changing the version (%j)",
+    ({ marker, isPackaged, expected }) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = yield* fs.makeTempDirectoryScoped();
+        yield* fs.writeFileString(
+          `${directory}/package.json`,
+          JSON.stringify({ t3codeNightlyBranding: marker }),
+        );
+        getAppPathMock.mockReturnValueOnce(directory);
+        isPackagedMock.mockReturnValue(isPackaged);
+        try {
+          const metadata = yield* ElectronApp.make.metadata;
+          assert.equal(metadata.nightlyBranding, expected);
+          assert.equal(metadata.appVersion, "1.2.3");
+        } finally {
+          isPackagedMock.mockReturnValue(true);
+        }
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("normalizes POSIX-style locale identifiers that Intl rejects", () =>

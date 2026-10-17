@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Argument, Command, Flag } from "effect/cli";
+import { readCustomBuildBranding } from "./lib/custom-build-branding.ts";
 import {
   resolveWebAssetBrandForChannel,
   resolveWebIconOverrides,
@@ -33,7 +34,7 @@ export const applyWebBrandAssets = Effect.fn("applyWebBrandAssets")(function* (
     (override) =>
       fs.copyFile(
         path.join(repoRoot, override.sourceRelativePath),
-        path.join(repoRoot, override.targetRelativePath),
+        path.resolve(repoRoot, override.targetRelativePath),
       ),
     { concurrency: "unbounded" },
   );
@@ -56,15 +57,23 @@ export const applyWebBrandAssetsCommand = Command.make(
     ),
   },
   ({ brand, channel, targetDirectory }) =>
-    applyWebBrandAssets(
-      Option.getOrElse(brand, () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
+      const selectedBrand = Option.getOrElse(brand, () =>
         Option.match(channel, {
           onNone: () => "production" as const,
           onSome: resolveWebAssetBrandForChannel,
         }),
-      ),
-      Option.getOrElse(targetDirectory, () => "apps/web/dist"),
-    ),
+      );
+      // The custom-build skill applies web assets before archiving the Linux/WSL runtime.
+      const customBuild =
+        selectedBrand !== "development" && (yield* readCustomBuildBranding(repoRoot));
+      yield* applyWebBrandAssets(
+        customBuild ? "nightly" : selectedBrand,
+        Option.getOrElse(targetDirectory, () => "apps/web/dist"),
+      );
+    }),
 ).pipe(Command.withDescription("Copy web brand assets into a built hosted web app."));
 
 if (import.meta.main) {

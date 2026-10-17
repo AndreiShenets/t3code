@@ -272,6 +272,53 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
   });
 
+  it("uses purple icons and Nightly product/web branding for custom base-version builds", () => {
+    assert.deepEqual(resolveDesktopBuildIconAssets("0.1.1", true), {
+      macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
+      linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
+      windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
+    });
+    assert.equal(resolveDesktopProductName("0.1.1", true), "T3 Code (Nightly)");
+    assert.equal(resolveDesktopWebAssetBrand("0.1.1", true), "nightly");
+    assert.equal(resolveDesktopUpdateChannel("0.1.1"), "latest");
+  });
+
+  it.effect(
+    "preserves installer identity, artifact naming and update settings when branding custom builds",
+    () =>
+      Effect.gen(function* () {
+        const normal = yield* createBuildConfig(
+          "win",
+          "nsis",
+          "0.1.1",
+          false,
+          false,
+          undefined,
+          undefined,
+          true,
+          "x64",
+        );
+        const custom = yield* createBuildConfig(
+          "win",
+          "nsis",
+          "0.1.1",
+          false,
+          false,
+          undefined,
+          undefined,
+          true,
+          "x64",
+          true,
+        );
+        assert.equal(custom.productName, "T3 Code (Nightly)");
+        assert.equal(normal.productName, "T3 Code (Beta)");
+        assert.equal(custom.appId, normal.appId);
+        assert.equal(custom.artifactName, normal.artifactName);
+        assert.deepEqual(custom.nsis, normal.nsis);
+        assert.deepEqual(custom.publish, normal.publish);
+      }),
+  );
+
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
     assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17"), {
       macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,

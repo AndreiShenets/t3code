@@ -25,6 +25,7 @@ export interface MakeDesktopEnvironmentInput {
   readonly processArch: string;
   readonly appVersion: string;
   readonly appPath: string;
+  readonly nightlyBranding?: boolean;
   readonly isPackaged: boolean;
   readonly resourcesPath: string;
   readonly runningUnderArm64Translation: boolean;
@@ -90,17 +91,19 @@ const APP_BASE_NAME = "T3 Code";
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
   readonly appVersion: string;
+  readonly nightlyBranding?: boolean;
 }): DesktopAppStageLabel {
   if (input.isDevelopment) {
     return "Dev";
   }
 
-  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Beta";
+  return input.nightlyBranding || isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Beta";
 }
 
 export function resolveDesktopAppBranding(input: {
   readonly isDevelopment: boolean;
   readonly appVersion: string;
+  readonly nightlyBranding?: boolean;
 }): DesktopAppBranding {
   const stageLabel = resolveDesktopAppStageLabel(input);
   return {
@@ -170,6 +173,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const branding = resolveDesktopAppBranding({
     isDevelopment,
     appVersion: input.appVersion,
+    ...(input.isPackaged && input.nightlyBranding ? { nightlyBranding: true } : {}),
   });
   const displayName = branding.displayName;
   const stateDir = resolveDesktopStateDir({

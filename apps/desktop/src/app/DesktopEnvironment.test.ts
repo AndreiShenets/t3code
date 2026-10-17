@@ -39,6 +39,37 @@ const makeEnvironment = (
 ) => DesktopEnvironment.DesktopEnvironment.pipe(Effect.provide(layerEnvironment(overrides, env)));
 
 describe("DesktopEnvironment", () => {
+  it.effect(
+    "brands packaged custom builds as Nightly without changing version or state paths",
+    () =>
+      Effect.gen(function* () {
+        const normal = yield* makeEnvironment({ isPackaged: true });
+        const custom = yield* makeEnvironment({ isPackaged: true, nightlyBranding: true });
+        assert.equal(normal.branding.stageLabel, "Beta");
+        assert.equal(custom.branding.stageLabel, "Nightly");
+        assert.equal(custom.displayName, "T3 Code (Nightly)");
+        assert.equal(custom.appVersion, normal.appVersion);
+        assert.equal(custom.stateDir, normal.stateDir);
+        assert.equal(custom.appUserModelId, normal.appUserModelId);
+        assert.equal(
+          custom.defaultDesktopSettings.updateChannel,
+          normal.defaultDesktopSettings.updateChannel,
+        );
+      }),
+  );
+
+  it.effect("keeps unpackaged and development branding despite the packaged override", () =>
+    Effect.gen(function* () {
+      const unpackaged = yield* makeEnvironment({ nightlyBranding: true });
+      assert.equal(unpackaged.branding.stageLabel, "Beta");
+      const development = yield* makeEnvironment(
+        { isPackaged: true, nightlyBranding: true },
+        { VITE_DEV_SERVER_URL: "http://localhost:5173" },
+      );
+      assert.equal(development.branding.stageLabel, "Dev");
+    }),
+  );
+
   it.effect("derives state paths and development identity inside Effect", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment(
