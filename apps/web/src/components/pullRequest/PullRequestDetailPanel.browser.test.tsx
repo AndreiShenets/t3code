@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { page } from "vite-plus/test/browser";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { AppAtomRegistryProvider, appAtomRegistry } from "~/rpc/atomRegistry";
 
 import "~/index.css";
 
@@ -254,14 +254,16 @@ const roots: Root[] = [];
 
 function panel(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = {}) {
   return (
-    <PullRequestDetailPanel
-      environmentId={threadRef.environmentId}
-      reference={detail}
-      context="page"
-      shortcutsEnabled={false}
-      getShortcutContext={shortcutContext}
-      {...props}
-    />
+    <AppAtomRegistryProvider>
+      <PullRequestDetailPanel
+        environmentId={threadRef.environmentId}
+        reference={detail}
+        context="page"
+        shortcutsEnabled={false}
+        getShortcutContext={shortcutContext}
+        {...props}
+      />
+    </AppAtomRegistryProvider>
   );
 }
 
@@ -290,23 +292,119 @@ beforeEach(() => {
   });
 });
 
-it("keeps a multi-page code review in place during background reads and after returning", async () => {
-  codeTest.realViewer = true;
-  const patch = (path: string) => `diff --git a/${path} b/${path}
+const codePatch = (path: string, increment = 1) => `diff --git a/${path} b/${path}
 --- a/${path}
 +++ b/${path}
 @@ -1,150 +1,150 @@
 ${Array.from({ length: 150 }, (_, index) => `-const old${index} = ${index};`).join("\n")}
-${Array.from({ length: 150 }, (_, index) => `+const next${index} = ${index + 1};`).join("\n")}
+${Array.from({ length: 150 }, (_, index) => `+const next${index} = ${index + increment};`).join("\n")}
 `;
+
+it.each([
+  ["first.ts", "folded"],
+  ["second.ts", "folded"],
+  ["first.ts", "expanded"],
+  ["second.ts", "expanded"],
+] as const)(
+  "preserves file folds, focus and position when a turn refresh changes %s (%s by default)",
+  async (changedPath, foldOverride) => {
+    codeTest.realViewer = true;
+    const result = {
+      patch: codePatch("first.ts") + codePatch("second.ts"),
+      truncated: false,
+      nextCursor: null,
+      omittedFileStats: [],
+    } satisfies PullRequestDiffResult;
+    const atom = Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(
+      AsyncResult.success(result),
+    );
+    codeTest.pages.set("first", atom);
+    const viewState = createPullRequestViewState();
+    viewState.setState({
+      tab: "code",
+      condensedByTab: { code: true },
+      code: {
+        scopeKey: `${threadRef.environmentId}:${pullRequestReviewKey(detail)}`,
+        slices: [{ ...result, cursor: null }],
+        toggledFiles: new Set(),
+        foldOverride,
+        visibleCommitCount: 10,
+        wordWrap: false,
+        ignoreWhitespace: false,
+      },
+    });
+    await render({ viewState });
+    const toggle =
+      foldOverride === "folded"
+        ? page.getByRole("button", { name: "Expand diff", exact: true }).nth(1)
+        : page.getByRole("button", { name: "Collapse diff", exact: true }).first();
+    await expect.element(toggle).toBeVisible();
+    await act(async () => {
+      (toggle.element() as HTMLButtonElement).click();
+    });
+    const collapse = page.getByRole("button", { name: "Collapse diff", exact: true });
+    await expect.element(collapse).toBeVisible();
+    const focused = collapse.element() as HTMLButtonElement;
+    const viewer = document.querySelector<HTMLElement>(".diff-render-surface")!;
+    await act(async () => {
+      await document.fonts.ready;
+      viewer.scrollTop = 400;
+      focused.focus({ preventScroll: true });
+      await new Promise(requestAnimationFrame);
+    });
+    const top = viewer.scrollTop;
+    expect(top).toBeGreaterThan(0);
+    expect((focused.getRootNode() as ShadowRoot).activeElement).toBe(focused);
+
+    await act(async () => {
+      appAtomRegistry.set(atom, AsyncResult.waiting(AsyncResult.success(result)));
+      codeTest.turnRefresh++;
+      roots.at(-1)!.render(panel({ viewState }));
+    });
+    const refreshed = {
+      ...result,
+      patch:
+        codePatch("first.ts", changedPath === "first.ts" ? 2 : 1) +
+        codePatch("second.ts", changedPath === "second.ts" ? 2 : 1),
+    };
+    await act(async () => {
+      appAtomRegistry.set(atom, AsyncResult.success(refreshed));
+      codeTest.detail = { ...detail, updatedAt: "2026-09-02T00:00:00Z" };
+      roots.at(-1)!.render(panel({ viewState }));
+    });
+    await expect.poll(() => viewState.getState().code?.slices[0]?.patch).toBe(refreshed.patch);
+    await expect.element(collapse).toBeVisible();
+    expect(collapse.element()).toBe(focused);
+    expect((focused.getRootNode() as ShadowRoot).activeElement).toBe(focused);
+    expect(document.querySelector(".diff-render-surface")).toBe(viewer);
+    expect(viewer.scrollTop).toBe(top);
+    if (changedPath === "second.ts") {
+      await act(async () => {
+        viewer.scrollTop = viewer.scrollHeight;
+      });
+      await expect
+        .element(page.getByText("const next149 = 151;", { exact: true }))
+        .toBeInTheDocument();
+    }
+    await act(async () => {
+      viewer.scrollTop = 0;
+    });
+    await expect
+      .element(page.getByRole("button", { name: "Expand diff", exact: true }))
+      .toBeVisible();
+  },
+);
+
+it("keeps a multi-page code review in place during background reads and after returning", async () => {
+  codeTest.realViewer = true;
   const first = {
-    patch: patch("first.ts"),
+    patch: codePatch("first.ts"),
     truncated: false,
     nextCursor: "second",
     omittedFileStats: [],
   } satisfies PullRequestDiffResult;
   const second = {
-    patch: patch("second.ts"),
+    patch: codePatch("second.ts"),
     truncated: false,
     nextCursor: null,
     omittedFileStats: [],
