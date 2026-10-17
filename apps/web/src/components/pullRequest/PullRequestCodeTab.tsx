@@ -44,7 +44,8 @@ import { pullRequestFindingKey, type PullRequestFinding } from "./pullRequestDet
 import { canEditPullRequestComment, canResolvePullRequestThread } from "./pullRequestEditing.logic";
 import { orderDiffFiles } from "./pullRequestFileOrder.logic";
 import {
-  buildFileDiffRenderKey,
+  buildFileDiffContentVersion,
+  buildFileDiffIdentityKey,
   fnv1a32,
   getDiffLineStat,
   getRenderablePatch,
@@ -504,6 +505,10 @@ function PullRequestCodeTab({
   const files = parsedSlices.flatMap((parsed) =>
     parsed?.kind === "files" ? orderDiffFiles(parsed.files) : [],
   );
+  // Content changes repaint the file, not its identity or the reader's fold/scroll state.
+  const fileVersions = new Map(
+    files.map((file) => [buildFileDiffIdentityKey(file), buildFileDiffContentVersion(file)]),
+  );
   const filePaths = files.map((file) => resolveFileDiffPath(file));
   const omittedFileStats = new Map(
     loadedSlices.flatMap((slice) =>
@@ -516,7 +521,7 @@ function PullRequestCodeTab({
         ? parsed.files.map(
             (file, index) =>
               [
-                buildFileDiffRenderKey(file),
+                buildFileDiffIdentityKey(file),
                 getDiffLineStat([parsed.sourceFiles[index] ?? file]),
               ] as const,
           )
@@ -550,7 +555,7 @@ function PullRequestCodeTab({
   })();
 
   const annotatedFiles = files.map((fileDiff) => {
-    const fileKey = buildFileDiffRenderKey(fileDiff);
+    const fileKey = buildFileDiffIdentityKey(fileDiff);
     const path = resolveFileDiffPath(fileDiff);
     const groups = new Map<string, MutableAnnotationGroup>();
     const groupAt = (side: PullRequestDiffSide, line: number) => {
@@ -671,7 +676,9 @@ function PullRequestCodeTab({
         fileDiff,
         annotations,
         collapsed,
-        version: fnv1a32(`${collapsed ? "1" : "0"}:${viewedMark}:${annotationsVersion}`),
+        version: fnv1a32(
+          `${fileVersions.get(fileKey)}:${collapsed ? "1" : "0"}:${viewedMark}:${annotationsVersion}`,
+        ),
       };
     },
   );
@@ -740,7 +747,7 @@ function PullRequestCodeTab({
     if (!range || !canCommentOnLines) return;
     const item = context.item;
     if (item.type !== "diff") return;
-    const file = files.find((candidate) => buildFileDiffRenderKey(candidate) === item.id);
+    const file = files.find((candidate) => buildFileDiffIdentityKey(candidate) === item.id);
     if (!file) return;
     // A range collapses to its last line: only GitHub carries a multi-line comment, and one
     // that silently lost its first line on the other hosts would be worse than one line.
@@ -768,7 +775,7 @@ function PullRequestCodeTab({
     text: string,
     onFinish: (comment: ReviewCommentContext) => void,
   ) => {
-    const file = files.find((candidate) => buildFileDiffRenderKey(candidate) === anchor.fileKey);
+    const file = files.find((candidate) => buildFileDiffIdentityKey(candidate) === anchor.fileKey);
     const comment =
       file === undefined
         ? null
