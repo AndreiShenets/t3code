@@ -24,6 +24,7 @@ import {
   createStagePatchedDependencies,
   readWorkspaceConfig,
   createBuildConfig,
+  customBuildStampFromBranch,
   DESKTOP_ELECTRON_LANGUAGES,
   DESKTOP_FILE_EXCLUSIONS,
   DESKTOP_EXTRA_RESOURCES,
@@ -272,6 +273,12 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
   });
 
+  it("embeds only the custom-build branch timestamp", () => {
+    assert.equal(customBuildStampFromBranch("custom_builds/2026_10_17_15_39\n"), "202610171539");
+    assert.equal(customBuildStampFromBranch("main"), undefined);
+    assert.equal(customBuildStampFromBranch("customizations/custom-build-updater"), undefined);
+  });
+
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
     assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17"), {
       macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
@@ -330,6 +337,50 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         channel: "nightly",
       });
     }),
+  );
+
+  it.effect("keeps upstream nightly updates separate from custom Windows releases", () =>
+    Effect.gen(function* () {
+      const custom = yield* createBuildConfig(
+        "win",
+        "nsis",
+        "0.1.1",
+        false,
+        false,
+        undefined,
+        undefined,
+        true,
+        "x64",
+        true,
+      );
+      const nightly = yield* createBuildConfig(
+        "win",
+        "nsis",
+        "0.1.1-nightly.20261017.1",
+        false,
+        false,
+        undefined,
+        undefined,
+        true,
+        "x64",
+      );
+      assert.deepStrictEqual(custom.publish, [
+        {
+          provider: "github",
+          owner: "pingdotgg",
+          repo: "t3code",
+          releaseType: "prerelease",
+          channel: "nightly",
+        },
+      ]);
+      assert.equal(custom.appId, nightly.appId);
+    }).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({ env: { GITHUB_REPOSITORY: "AndreiShenets/t3code" } }),
+        ),
+      ),
+    ),
   );
 
   it.effect("omits update feeds for pull request preview builds", () =>
