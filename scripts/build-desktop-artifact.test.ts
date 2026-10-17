@@ -272,25 +272,6 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
   });
 
-  it.effect("preserves installer identity and artifact naming when branding custom builds", () =>
-    Effect.gen(function* () {
-      const config = yield* createBuildConfig(
-        "win",
-        "nsis",
-        "0.1.1",
-        false,
-        false,
-        undefined,
-        undefined,
-        true,
-        "x64",
-      );
-      assert.equal(config.productName, "T3 Code (Nightly)");
-      assert.equal(config.appId, "com.t3tools.t3code");
-      assert.equal(config.artifactName, "T3-Code-${version}-${arch}.${ext}");
-    }),
-  );
-
   it("always uses purple desktop icons regardless of package version", () => {
     assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17"), {
       macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,

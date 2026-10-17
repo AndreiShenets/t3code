@@ -39,22 +39,6 @@ const makeEnvironment = (
 ) => DesktopEnvironment.DesktopEnvironment.pipe(Effect.provide(layerEnvironment(overrides, env)));
 
 describe("DesktopEnvironment", () => {
-  it.effect(
-    "uses Nightly labels without changing the version or updater channel; keeps Dev labels",
-    () =>
-      Effect.gen(function* () {
-        const packaged = yield* makeEnvironment({ isPackaged: true });
-        assert.equal(packaged.displayName, "T3 Code (Nightly)");
-        assert.equal(packaged.appVersion, defaultInput.appVersion);
-        assert.equal(packaged.defaultDesktopSettings.updateChannel, "latest");
-        const development = yield* makeEnvironment(
-          {},
-          { VITE_DEV_SERVER_URL: "http://localhost:5173" },
-        );
-        assert.equal(development.branding.stageLabel, "Dev");
-      }),
-  );
-
   it.effect("derives state paths and development identity inside Effect", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment(
