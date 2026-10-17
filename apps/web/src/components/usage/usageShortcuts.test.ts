@@ -18,11 +18,17 @@ class TestElement extends EventTarget {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Usage shortcuts while typing", () => {
-  it("selects Today without changing the existing 24-hour shortcut", () => {
+  it.each([
+    ["1", "usage.period.today"],
+    ["2", "usage.period.day"],
+    ["3", "usage.period.week"],
+    ["4", "usage.period.month"],
+    ["5", "usage.period.quarter"],
+  ])("maps mod+shift+%s to %s", (key, command) => {
     vi.stubGlobal("HTMLElement", TestElement);
     vi.stubGlobal("navigator", { platform: "Linux" });
     const event = {
-      key: "0",
+      key,
       metaKey: false,
       ctrlKey: true,
       shiftKey: true,
@@ -30,10 +36,7 @@ describe("Usage shortcuts while typing", () => {
       target: new TestElement("BODY"),
     };
 
-    expect(resolveUsageShortcut(event, DEFAULT_RESOLVED_KEYBINDINGS)).toBe("usage.period.today");
-    expect(resolveUsageShortcut({ ...event, key: "1" }, DEFAULT_RESOLVED_KEYBINDINGS)).toBe(
-      "usage.period.day",
-    );
+    expect(resolveUsageShortcut(event, DEFAULT_RESOLVED_KEYBINDINGS)).toBe(command);
   });
 
   it.each([new TestElement("INPUT"), new TestElement("TEXTAREA"), new TestElement("DIV", true)])(
