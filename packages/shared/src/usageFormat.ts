@@ -185,8 +185,10 @@ export function formatRelativeHourShort(
   return formatDateTimeShort(hourStart, timeZone);
 }
 
+export type UsagePeriod = number | "today";
+
 export function makeWindow(
-  days: number,
+  days: UsagePeriod,
   now = new Date(),
   resolution: UsageResolution = "day",
 ): UsageSummaryInput {
@@ -229,7 +231,7 @@ export function makeWindow(
   const [year = 0, month = 1, dayOfMonth = 1] = untilDay
     .split("-")
     .map((part) => Number.parseInt(part, 10));
-  const start = new Date(Date.UTC(year, month - 1, dayOfMonth - (days - 1)));
+  const start = new Date(Date.UTC(year, month - 1, dayOfMonth - (days === "today" ? 0 : days - 1)));
   return {
     sinceDay: UsageDay.make(start.toISOString().slice(0, 10)),
     untilDay: UsageDay.make(untilDay),

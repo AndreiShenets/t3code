@@ -1,4 +1,9 @@
-import { EnvironmentId, ProviderInstanceId, USAGE_CONTRACT_VERSION } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProviderInstanceId,
+  USAGE_CONTRACT_VERSION,
+  type UsageSummaryInput,
+} from "@t3tools/contracts";
 import { mergeUsage } from "@t3tools/shared/usageMerge";
 import { StrictMode, act } from "react";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
@@ -9,6 +14,9 @@ const state = vi.hoisted(() => ({
   presentations: new Map(),
   refreshProviders: vi.fn(async () => undefined),
   metric: "limits",
+  windowDays: 30 as number | "today",
+  usageWindow: null as UsageSummaryInput | null,
+  refreshUsage: vi.fn(async () => undefined),
 }));
 vi.mock("@effect/atom-react", () => ({
   useAtomValue: (atom: unknown) =>
@@ -42,34 +50,37 @@ vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => state.ref
 vi.mock("../../env", () => ({ isElectron: false }));
 vi.mock("../../hooks/useSettings", () => ({ usePrimarySettings: () => "24h" }));
 vi.mock("../../state/usage", () => ({
-  useUsage: () => ({
-    merged: mergeUsage([], USAGE_CONTRACT_VERSION),
-    environments: [
-      {
-        environmentId: EnvironmentId.make("test"),
-        label: "Test",
-        isPending: false,
-        error: null,
-        summary: null,
-      },
-    ],
-    selectedEnvironments: [
-      {
-        environmentId: EnvironmentId.make("test"),
-        label: "Test",
-        isPending: false,
-        error: null,
-        summary: null,
-      },
-    ],
-    isPending: false,
-    shown: null,
-    isPartial: false,
-    refresh: async () => undefined,
-  }),
+  useUsage: (window: UsageSummaryInput) => {
+    state.usageWindow = window;
+    return {
+      merged: mergeUsage([], USAGE_CONTRACT_VERSION),
+      environments: [
+        {
+          environmentId: EnvironmentId.make("test"),
+          label: "Test",
+          isPending: false,
+          error: null,
+          summary: null,
+        },
+      ],
+      selectedEnvironments: [
+        {
+          environmentId: EnvironmentId.make("test"),
+          label: "Test",
+          isPending: false,
+          error: null,
+          summary: null,
+        },
+      ],
+      isPending: false,
+      shown: null,
+      isPartial: false,
+      refresh: state.refreshUsage,
+    };
+  },
 }));
 vi.mock("./usagePagePreferences", () => ({
-  readUsagePagePreferences: () => ({ metric: state.metric, windowDays: 30 }),
+  readUsagePagePreferences: () => ({ metric: state.metric, windowDays: state.windowDays }),
   saveUsagePagePreferences: vi.fn(),
 }));
 vi.mock("../ui/button", () => ({ Button: "button", InlineButton: "button" }));
@@ -119,6 +130,9 @@ beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-11T12:00:00Z"));
   environmentNumber += 1;
   state.metric = "limits";
+  state.windowDays = 30;
+  state.usageWindow = null;
+  state.refreshUsage.mockClear();
   state.refreshProviders.mockClear();
   state.presentations = new Map([
     [
@@ -162,8 +176,62 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(() => renderer?.unmount());
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it.each(["wide", "compact"])("selects Today from the %s period control", async (layout) => {
+  state.metric = "tokens";
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 7, 11, 12, 37));
+  await act(() => {
+    renderer = create(<UsagePage />);
+  });
+  await act(() => {
+    if (layout === "wide") {
+      renderer.root
+        .findAll((node) => node.type === "div" && node.props["aria-label"] === "Usage period")[0]!
+        .props.onValueChange(["today"]);
+    } else {
+      renderer.root
+        .findAll((node) => node.type === "select" && node.props.value === "30")[0]!
+        .props.onValueChange("today");
+    }
+  });
+
+  expect(state.usageWindow).toMatchObject({
+    sinceDay: "2026-08-11",
+    untilDay: "2026-08-11",
+    resolution: "day",
+  });
+});
+
+it("restores Today and refreshes it against the new day after midnight", async () => {
+  state.metric = "tokens";
+  state.windowDays = "today";
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 7, 11, 23, 59));
+  await act(() => {
+    renderer = create(<UsagePage />);
+  });
+  expect(state.usageWindow?.sinceDay).toBe("2026-08-11");
+
+  vi.setSystemTime(new Date(2026, 7, 12, 0, 1));
+  await act(async () => {
+    renderer.root
+      .findAll((node) => node.type === "button" && node.props["aria-label"] === "Refresh usage")[0]!
+      .props.onClick();
+  });
+
+  expect(state.refreshUsage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      sinceDay: "2026-08-12",
+      untilDay: "2026-08-12",
+      resolution: "day",
+    }),
+  );
+  expect(state.usageWindow?.sinceDay).toBe("2026-08-12");
 });
 
 it.each([0, 1])(
