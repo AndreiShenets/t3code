@@ -153,6 +153,12 @@ describe("searchSettings", () => {
     });
   });
 
+  it("offers custom build search only in Windows desktop apps", () => {
+    const custom = SETTINGS_SEARCH_ITEMS.find((item) => item.id === "custom-build");
+    expect(custom).toMatchObject({ to: "/settings/general", desktopOnly: true, windowsOnly: true });
+    expect(searchSettings("AndreiShenets")).toEqual([]);
+  });
+
   it("hides macOS-only settings on other platforms", () => {
     vi.stubGlobal("navigator", { platform: "Win32" });
     try {
