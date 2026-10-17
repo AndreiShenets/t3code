@@ -111,7 +111,7 @@ function isUsageMetric(value: string | null | undefined): value is UsageMetric {
   return METRIC_OPTIONS.some((option) => option.value === value);
 }
 
-function isUsageWindowDays(value: number): value is UsagePagePreferences["windowDays"] {
+function isUsageWindowDays(value: string | number): value is UsagePagePreferences["windowDays"] {
   return WINDOW_OPTIONS.some((option) => option.days === value);
 }
 
@@ -238,7 +238,8 @@ export function UsagePage() {
     setPreferences(nextPreferences);
     saveUsagePagePreferences(nextPreferences);
   };
-  const selectWindow = (days: number) => {
+  const selectWindow = (value: string | number) => {
+    const days = value === "today" ? value : Number(value);
     if (!isUsageWindowDays(days)) return;
     updatePreferences({ windowDays: days });
     setWindowSelection({
@@ -415,7 +416,7 @@ export function UsagePage() {
           disabled={showingLimits}
           onValueChange={(next) => {
             const value = next[0];
-            if (value) selectWindow(Number(value));
+            if (value) selectWindow(value);
           }}
         >
           {WINDOW_OPTIONS.map((option) => (
@@ -463,7 +464,9 @@ export function UsagePage() {
         <Select
           value={String(windowDays)}
           disabled={showingLimits}
-          onValueChange={(value) => selectWindow(Number(value))}
+          onValueChange={(value) => {
+            if (value) selectWindow(value);
+          }}
         >
           <SelectTrigger
             aria-label="Usage period"

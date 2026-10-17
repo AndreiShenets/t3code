@@ -107,3 +107,38 @@ describe("hourly usage formatting", () => {
     }
   });
 });
+
+describe("Today usage window", () => {
+  it.each([
+    ["UTC", "2026-08-11T00:00:00.000Z", "2026-08-11"],
+    ["America/Los_Angeles", "2026-08-11T02:30:00.000Z", "2026-08-10"],
+    ["Asia/Kathmandu", "2026-08-10T18:15:00.000Z", "2026-08-11"],
+    ["America/New_York", "2026-03-09T03:30:00.000Z", "2026-03-08"],
+    ["America/New_York", "2026-11-02T04:30:00.000Z", "2026-11-01"],
+  ])("selects only the current calendar day in %s at %s", (timeZone, instant, day) => {
+    const resolved = new Intl.DateTimeFormat().resolvedOptions();
+    const resolvedOptions = vi
+      .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockReturnValue({ ...resolved, timeZone });
+
+    try {
+      expect(makeWindow("today", new Date(instant))).toEqual({
+        sinceDay: day,
+        untilDay: day,
+        timeZone,
+        resolution: "day",
+      });
+    } finally {
+      resolvedOptions.mockRestore();
+    }
+  });
+
+  it("moves to the new calendar day when rebuilt after midnight", () => {
+    const beforeMidnight = makeWindow("today", new Date(2026, 7, 11, 23, 59));
+    const afterMidnight = makeWindow("today", new Date(2026, 7, 12, 0, 1));
+
+    expect(beforeMidnight.sinceDay).toBe("2026-08-11");
+    expect(afterMidnight.sinceDay).toBe("2026-08-12");
+    expect(afterMidnight.untilDay).toBe("2026-08-12");
+  });
+});

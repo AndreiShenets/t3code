@@ -26,6 +26,7 @@ import {
   formatUsageContractMismatch,
   formatUsd,
   makeWindow,
+  type UsagePeriod,
 } from "@t3tools/shared/usageFormat";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, RefreshControl, View } from "react-native";
@@ -64,6 +65,7 @@ const TAB_OPTIONS = [
 ] as const satisfies readonly { value: UsageTab; label: string }[];
 
 const WINDOW_OPTIONS = [
+  { value: "today", label: "Today", accessibilityLabel: "Today since midnight" },
   { value: 1, label: "24h", accessibilityLabel: "Past 24 hours" },
   { value: 7, label: "7d", accessibilityLabel: "Past 7 days" },
   { value: 30, label: "30d", accessibilityLabel: "Past 30 days" },
@@ -96,7 +98,7 @@ export function UsageRouteScreen() {
   const { tab } = selection;
   const setTab = (tab: UsageTab) => setSelection({ params: route.params, tab });
   const [windowSelection, setWindowSelection] = useState(() => ({
-    days: 30,
+    days: 30 as UsagePeriod,
     window: makeWindow(30),
   }));
   const [metric, setMetric] = useState<UsageChartMetric>("cost");
@@ -166,7 +168,7 @@ export function UsageRouteScreen() {
     refreshing: refreshingUsage,
     providerLabel,
   });
-  const selectWindow = (days: number) => {
+  const selectWindow = (days: UsagePeriod) => {
     setWindowSelection({
       days,
       window: makeWindow(days, undefined, days === 1 ? "hour" : "day"),
