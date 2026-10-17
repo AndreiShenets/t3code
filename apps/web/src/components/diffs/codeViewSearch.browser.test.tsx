@@ -167,6 +167,60 @@ it("keeps the viewer's own find and Escape behavior", async () => {
   expect(container!.querySelector("[data-diffs-search]")).toBeNull();
 });
 
+it.each(["background", "collapsed header"])(
+  "opens review find after clicking the %s outside a preview panel",
+  async (target) => {
+    await mountChatFirst();
+    panel.removeAttribute("data-preview-panel-mode");
+    if (target === "collapsed header") {
+      const header = await vi.waitFor(() => {
+        const element = container!
+          .querySelector("diffs-container")
+          ?.shadowRoot?.querySelector<HTMLElement>("[data-diffs-header]");
+        expect(element).toBeInstanceOf(HTMLElement);
+        return element!;
+      });
+      await userEvent.click(header);
+    } else {
+      await userEvent.click(container!, { position: { x: 320, y: 200 } });
+    }
+    await act(async () => userEvent.keyboard("{Control>}f{/Control}"));
+    expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
+    expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
+    expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
+  },
+);
+
+it.each(["inline", "standalone", "sheet"])(
+  "opens review find after clicking non-focusable %s chrome beside collapsed files",
+  async (mode) => {
+    await mountChatFirst();
+    if (mode === "standalone") panel.removeAttribute("data-preview-panel-mode");
+    if (mode === "sheet") panel.setAttribute("role", "dialog");
+    const composer = document.createElement("textarea");
+    document.body.append(composer);
+    const chrome = document.createElement("div");
+    chrome.textContent = "Review files";
+    scope.prepend(chrome);
+    try {
+      await userEvent.click(composer);
+      await userEvent.click(chrome);
+      await act(async () => userEvent.keyboard("{Control>}f{/Control}"));
+      expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
+      expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
+      expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
+
+      await userEvent.keyboard("{Escape}");
+      await userEvent.click(composer);
+      await act(async () => userEvent.keyboard("{Control>}f{/Control}"));
+      expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+      expect(panel.querySelector("[data-chat-find-open]")).not.toBeNull();
+    } finally {
+      composer.remove();
+    }
+  },
+);
+
 it.each(["hidden", "invisible"])("ignores a %s review tab", async (visibility) => {
   if (visibility === "hidden") scope.style.display = "none";
   else scope.style.visibility = "hidden";

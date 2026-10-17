@@ -12,6 +12,10 @@ export function useDiffSearchShortcut(
     const instance = viewer?.getInstance();
     const container = instance?.getContainerElement();
     if (!instance || !container) return;
+    const focusScope = container.closest("[data-diff-search-scope]") ?? container;
+    const addedTabIndex = !focusScope.hasAttribute("tabindex");
+    // Blank chrome must take native focus too, rather than leaving find owned by chat/body.
+    if (addedTabIndex) focusScope.setAttribute("tabindex", "-1");
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
@@ -45,6 +49,9 @@ export function useDiffSearchShortcut(
       instance.openSearch();
     };
     window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      if (addedTabIndex) focusScope.removeAttribute("tabindex");
+    };
   }, [viewer]);
 }
