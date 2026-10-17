@@ -1,19 +1,14 @@
-import { DownloadIcon, HourglassIcon, PackageCheckIcon, PackageSearchIcon } from "lucide-react";
+import { HourglassIcon } from "lucide-react";
 
 import { useCustomBuildUpdate } from "../../hooks/useCustomBuildUpdate";
 import { SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { DesktopUpdateStatusIcon } from "./DesktopUpdateStatusIcon";
 
 export function SidebarCustomBuildUpdateButton() {
-  const { state, visible, disabled, busy, label, description, change } = useCustomBuildUpdate();
+  const { state, visible, disabled, busy, iconStatus, label, description, change } =
+    useCustomBuildUpdate();
   if (!visible) return null;
-  const Icon = busy
-    ? HourglassIcon
-    : state?.status === "downloaded"
-      ? PackageCheckIcon
-      : state?.status === "available"
-        ? DownloadIcon
-        : PackageSearchIcon;
 
   return (
     <div className="mr-1 shrink-0">
@@ -28,7 +23,7 @@ export function SidebarCustomBuildUpdateButton() {
               isActive={state?.status === "available" || state?.status === "downloaded"}
               onClick={() => change()}
             >
-              <Icon />
+              {busy ? <HourglassIcon /> : <DesktopUpdateStatusIcon status={iconStatus} />}
             </SidebarMenuButton>
           }
         />

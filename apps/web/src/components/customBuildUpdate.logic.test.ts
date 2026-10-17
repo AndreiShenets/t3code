@@ -12,6 +12,18 @@ const idle: DesktopCustomBuildState = {
 };
 
 describe("custom-build controls", () => {
+  it.each([
+    ["idle", "idle"],
+    ["checking", "checking"],
+    ["available", "available"],
+    ["downloading", "downloading"],
+    ["downloaded", "downloaded"],
+    ["installing", "downloaded"],
+    ["up-to-date", "idle"],
+  ] as const)("presents %s with the shared %s update indicator", (status, iconStatus) => {
+    expect(customBuildUpdatePresentation({ ...idle, status }, false)).toMatchObject({ iconStatus });
+  });
+
   it("follows check, download, confirmed install with the same behavior for either entry point", async () => {
     const available = {
       ...idle,
