@@ -1,7 +1,59 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildPeriodColumns, chartScale, niceScale } from "./UsageProviderChart";
+import { buildChart, buildPeriodColumns, chartScale, niceScale } from "./UsageProviderChart";
+import { enumerateDays, makeWindow } from "@t3tools/shared/usageFormat";
 import { providersWithUsage } from "./usageProviders";
+
+describe("single-period chart", () => {
+  it.each(["cost", "tokens"] as const)("draws today's nonzero %s across the plot", (metric) => {
+    const window = makeWindow("today", new Date("2026-10-17T12:00:00Z"));
+    const periods = enumerateDays(window.sinceDay, window.untilDay);
+    const totals = {
+      day: window.sinceDay,
+      costUsd: 21.53,
+      totalTokens: 114_000_000,
+      byProvider: new Map([["opencode" as const, { costUsd: 21.53, totalTokens: 114_000_000 }]]),
+    };
+    const { paths, scale } = buildChart(
+      periods,
+      new Map([[window.sinceDay, totals]]),
+      metric,
+      ["opencode"],
+      new Set(),
+    );
+    const value = metric === "cost" ? totals.costUsd : totals.totalTokens;
+    const y = (260 - (value / scale.max) * 252).toFixed(2);
+
+    expect(paths[0]?.line).toMatch(new RegExp(`^M0\\.00,${y} C.* 960\\.00,${y}$`));
+    expect(paths[0]?.area).toBe(`${paths[0]?.line} L960,260 L0,260 Z`);
+    expect(paths[0]?.total).toBe(value);
+  });
+
+  it("leaves an empty window without a series", () => {
+    const { paths } = buildChart([], new Map(), "cost", ["opencode"], new Set());
+
+    expect(paths[0]).toMatchObject({ line: "", area: "", total: 0 });
+  });
+
+  it("preserves changing values in multi-period charts", () => {
+    const periods = ["2026-10-16", "2026-10-17"];
+    const byPeriod = new Map(
+      periods.map((day, index) => [
+        day,
+        {
+          day,
+          costUsd: index * 20,
+          totalTokens: 0,
+          byProvider: new Map([["opencode" as const, { costUsd: index * 20, totalTokens: 0 }]]),
+        },
+      ]),
+    );
+    const { paths } = buildChart(periods, byPeriod, "cost", ["opencode"], new Set());
+
+    expect(paths[0]?.line).toBe("M0.00,260.00 C320.00,176.00 640.00,92.00 960.00,8.00");
+    expect(paths[0]?.total).toBe(20);
+  });
+});
 
 describe("chartScale", () => {
   const column = (codex: number) => ({
