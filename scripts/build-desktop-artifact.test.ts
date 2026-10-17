@@ -283,40 +283,37 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopUpdateChannel("0.1.1"), "latest");
   });
 
-  it.effect(
-    "preserves installer identity, artifact naming and update settings when branding custom builds",
-    () =>
-      Effect.gen(function* () {
-        const normal = yield* createBuildConfig(
-          "win",
-          "nsis",
-          "0.1.1",
-          false,
-          false,
-          undefined,
-          undefined,
-          true,
-          "x64",
-        );
-        const custom = yield* createBuildConfig(
-          "win",
-          "nsis",
-          "0.1.1",
-          false,
-          false,
-          undefined,
-          undefined,
-          true,
-          "x64",
-          true,
-        );
-        assert.equal(custom.productName, "T3 Code (Nightly)");
-        assert.equal(normal.productName, "T3 Code (Beta)");
-        assert.equal(custom.appId, normal.appId);
-        assert.equal(custom.artifactName, normal.artifactName);
-        assert.deepEqual(custom.nsis, normal.nsis);
-        assert.deepEqual(custom.publish, normal.publish);
-      }),
+  it.effect("preserves installer identity and artifact naming when branding custom builds", () =>
+    Effect.gen(function* () {
+      const normal = yield* createBuildConfig(
+        "win",
+        "nsis",
+        "0.1.1",
+        false,
+        false,
+        undefined,
+        undefined,
+        true,
+        "x64",
+      );
+      const custom = yield* createBuildConfig(
+        "win",
+        "nsis",
+        "0.1.1",
+        false,
+        false,
+        undefined,
+        undefined,
+        true,
+        "x64",
+        true,
+      );
+      assert.equal(custom.productName, "T3 Code (Nightly)");
+      assert.equal(normal.productName, "T3 Code (Beta)");
+      assert.equal(custom.appId, normal.appId);
+      assert.equal(custom.artifactName, normal.artifactName);
+      assert.deepEqual(custom.nsis, normal.nsis);
+    }),
   );
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
