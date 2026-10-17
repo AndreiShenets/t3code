@@ -20,6 +20,7 @@ export function customBuildUpdatePresentation(
     visible: state?.supported === true,
     disabled: pending || busy || !state?.supported,
     busy,
+    iconStatus: status === "up-to-date" ? "idle" : status === "installing" ? "downloaded" : status,
     label: LABELS[status],
     description:
       state?.message ??

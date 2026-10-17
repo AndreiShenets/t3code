@@ -14,6 +14,30 @@ const customBuild = {
 const nightlyVersion = "1.2.4-nightly.20261017.3238";
 
 describe("official updates from custom builds", () => {
+  it.effect("hides the older official nightly from the installed October 17 custom build", () => {
+    const harness = makeHarness({
+      customBuildStamp: "202610172110",
+      customBuildTimestamp: "2026-10-17T19:55:49.067Z",
+    });
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const updates = yield* DesktopUpdates.DesktopUpdates;
+        yield* updates.configure;
+        yield* updates.setChannel("nightly");
+        yield* updates.check("startup");
+        harness.emit("update-available", {
+          version: "0.1.1-nightly.20261017.3272",
+          releaseDate: "2026-10-17T17:53:55.986Z",
+        });
+        yield* flushCallbacks;
+        const state = yield* updates.getState;
+        assert.equal(state.status, "up-to-date");
+        assert.isNull(state.availableVersion);
+        assert.isNull(state.downloadedVersion);
+      }),
+    ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+  });
+
   it.effect.each(["2026-10-17T16:59:00Z", "2026-10-17T17:01:00Z", "2026-10-18T01:00:00+08:00"])(
     "hides an older/equal nightly (%s) across checks and late downloads",
     (releaseDate) => {
