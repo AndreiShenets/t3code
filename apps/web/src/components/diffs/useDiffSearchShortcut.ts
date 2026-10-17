@@ -12,7 +12,6 @@ export function useDiffSearchShortcut(
     const instance = viewer?.getInstance();
     const container = instance?.getContainerElement();
     if (!instance || !container) return;
-    const scope = container.closest("[data-diff-search-scope]") ?? container;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
@@ -27,14 +26,16 @@ export function useDiffSearchShortcut(
         return;
 
       const target = event.target;
+      const panel = container.closest("[data-preview-panel-mode]");
+      const scope = panel ?? container.closest("[data-diff-search-scope]") ?? container;
+      const dialog = container.closest('[role="dialog"]');
       // Keep the viewer's own search/editor shortcuts, and other panes' find, untouched.
       if (
         !(target instanceof Element) ||
         container.contains(target) ||
-        (target !== document.body && !scope.contains(target)) ||
-        target.closest(
-          'input, textarea, [contenteditable="true"], [role="dialog"], [role="menu"]',
-        ) ||
+        (!scope.contains(target) && !(panel === null && target === document.body)) ||
+        target.closest('input, textarea, [contenteditable="true"], [role="menu"]') ||
+        target.closest('[role="dialog"]') !== dialog ||
         !container.checkVisibility({ visibilityProperty: true })
       )
         return;
