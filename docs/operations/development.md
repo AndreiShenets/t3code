@@ -154,9 +154,8 @@ DMGs default to the host architecture. Use `--arch` to choose another target and
 to retain packaging files for inspection. Run `vp run dist:desktop:artifact --help` for other
 options.
 
-Builds on `custom_builds/yyyy_MM_dd_HH_mm` use purple Nightly icons, web assets, and app labels
-without changing package versions, installer identity, or update feeds. Other branches keep their
-normal branding; development stays Dev. The web-asset CLI also enforces this before Linux/WSL archiving.
+This customization always uses purple Nightly release icons, web assets, and app labels.
+Package versions, installer identity, and update feeds are unchanged; development stays Dev.
 
 ### Linux AppImage prerequisites
 

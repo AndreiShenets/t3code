@@ -3,15 +3,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-// @effect-diagnostics-next-line nodeBuiltinImport:off - Metadata is acquired before Clerk registration, where yielding would race Electron's ready event.
-import * as NodeFS from "node:fs";
 
 import * as Electron from "electron";
 
 export interface ElectronAppMetadata {
   readonly appVersion: string;
   readonly appPath: string;
-  readonly nightlyBranding?: true;
   readonly isPackaged: boolean;
   readonly resourcesPath: string;
   readonly runningUnderArm64Translation: boolean;
@@ -120,27 +117,12 @@ export const make = ElectronApp.of({
         }),
     });
 
-    const nightlyBranding = Electron.app.isPackaged
-      ? yield* Effect.try(() => NodeFS.readFileSync(`${appPath}/package.json`, "utf8")).pipe(
-          Effect.flatMap(
-            Schema.decodeEffect(
-              Schema.fromJsonString(
-                Schema.Struct({ t3codeNightlyBranding: Schema.optional(Schema.Boolean) }),
-              ),
-            ),
-          ),
-          Effect.map((metadata) => metadata.t3codeNightlyBranding === true),
-          Effect.orElseSucceed(() => false),
-        )
-      : false;
-
     return {
       appVersion,
       appPath,
       isPackaged: Electron.app.isPackaged,
       resourcesPath: process.resourcesPath,
       runningUnderArm64Translation: Electron.app.runningUnderARM64Translation === true,
-      ...(nightlyBranding ? { nightlyBranding: true as const } : {}),
     };
   }),
   name: Effect.sync(() => Electron.app.name),
