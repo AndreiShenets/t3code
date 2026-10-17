@@ -1,33 +1,36 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { buildChart, buildPeriodColumns, chartScale, niceScale } from "./UsageProviderChart";
-import { enumerateDays, makeWindow } from "@t3tools/shared/usageFormat";
+import { enumerateDays, enumerateHourStarts, makeWindow } from "@t3tools/shared/usageFormat";
 import { providersWithUsage } from "./usageProviders";
 
 describe("single-period chart", () => {
-  it.each(["cost", "tokens"] as const)("draws today's nonzero %s across the plot", (metric) => {
-    const window = makeWindow("today", new Date("2026-10-17T12:00:00Z"));
-    const periods = enumerateDays(window.sinceDay, window.untilDay);
-    const totals = {
-      day: window.sinceDay,
-      costUsd: 21.53,
-      totalTokens: 114_000_000,
-      byProvider: new Map([["opencode" as const, { costUsd: 21.53, totalTokens: 114_000_000 }]]),
-    };
-    const { paths, scale } = buildChart(
-      periods,
-      new Map([[window.sinceDay, totals]]),
-      metric,
-      ["opencode"],
-      new Set(),
-    );
-    const value = metric === "cost" ? totals.costUsd : totals.totalTokens;
-    const y = (260 - (value / scale.max) * 252).toFixed(2);
+  it.each(["cost", "tokens"] as const)(
+    "draws a single bucket's nonzero %s across the plot",
+    (metric) => {
+      const window = makeWindow("today", new Date("2026-10-17T12:00:00Z"), "day");
+      const periods = enumerateDays(window.sinceDay, window.untilDay);
+      const totals = {
+        day: window.sinceDay,
+        costUsd: 21.53,
+        totalTokens: 114_000_000,
+        byProvider: new Map([["opencode" as const, { costUsd: 21.53, totalTokens: 114_000_000 }]]),
+      };
+      const { paths, scale } = buildChart(
+        periods,
+        new Map([[window.sinceDay, totals]]),
+        metric,
+        ["opencode"],
+        new Set(),
+      );
+      const value = metric === "cost" ? totals.costUsd : totals.totalTokens;
+      const y = (260 - (value / scale.max) * 252).toFixed(2);
 
-    expect(paths[0]?.line).toMatch(new RegExp(`^M0\\.00,${y} C.* 960\\.00,${y}$`));
-    expect(paths[0]?.area).toBe(`${paths[0]?.line} L960,260 L0,260 Z`);
-    expect(paths[0]?.total).toBe(value);
-  });
+      expect(paths[0]?.line).toMatch(new RegExp(`^M0\\.00,${y} C.* 960\\.00,${y}$`));
+      expect(paths[0]?.area).toBe(`${paths[0]?.line} L960,260 L0,260 Z`);
+      expect(paths[0]?.total).toBe(value);
+    },
+  );
 
   it("leaves an empty window without a series", () => {
     const { paths } = buildChart([], new Map(), "cost", ["opencode"], new Set());
@@ -185,6 +188,36 @@ describe("providersWithUsage", () => {
 });
 
 describe("hourly chart columns", () => {
+  it.each(["cost", "tokens"] as const)(
+    "plots Today's varying hourly %s, including the partial hour",
+    (metric) => {
+      const window = makeWindow("today", new Date(2026, 9, 17, 12, 37));
+      const periods = enumerateHourStarts(window.sinceTime ?? "", window.untilTime ?? "");
+      const byPeriod = new Map(
+        periods.map((hourStart, index) => [
+          hourStart,
+          {
+            day: window.sinceDay,
+            hourStart,
+            costUsd: index,
+            totalTokens: index * 100,
+            byProvider: new Map([
+              ["opencode" as const, { costUsd: index, totalTokens: index * 100 }],
+            ]),
+          },
+        ]),
+      );
+      const { columns, paths } = buildChart(periods, byPeriod, metric, ["opencode"], new Set());
+
+      expect(columns).toHaveLength(13);
+      expect(columns[0]?.total).toBe(0);
+      expect(columns[12]?.total).toBe(metric === "cost" ? 12 : 1200);
+      expect(paths[0]?.line).toMatch(/^M0\.00,260\.00 C/);
+      expect(paths[0]?.line).toMatch(/960\.00,58\.40$/);
+      expect(paths[0]?.total).toBe(metric === "cost" ? 78 : 7800);
+    },
+  );
+
   it("zero-fills inactive hours and preserves hourly provider values", () => {
     const byHour = new Map([
       [
