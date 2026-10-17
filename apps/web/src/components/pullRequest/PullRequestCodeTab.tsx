@@ -4,7 +4,6 @@ import type {
   EnvironmentId,
   PullRequestDetailView,
   PullRequestDiffSide,
-  PullRequestOmittedFileStat,
   PullRequestRef,
   PullRequestReviewPosition,
   PullRequestReviewThread,
@@ -31,6 +30,7 @@ import {
   use,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -98,9 +98,12 @@ import {
 import {
   isFileDiffCollapsed,
   isLineInFileDiff,
+  reconcileDiffSlices,
   toggleFileDiffFoldForViewed,
   type DiffFoldOverride,
+  type DiffSlice,
 } from "./pullRequestDiff.logic";
+import type { PullRequestViewStateStore } from "./pullRequestViewState";
 import { PullRequestDiffStat, PullRequestMetaLine } from "./pullRequestPresentation";
 import { usePullRequestFilesViewed } from "./usePullRequestFilesViewed";
 import {
@@ -122,14 +125,6 @@ type ReviewAnnotation = DiffLineAnnotation<ReviewAnnotationGroup>;
 const COMMIT_PAGE_SIZE = 10;
 
 const PULL_REQUEST_FILE_TREE_STORAGE_KEY = "t3code.pullRequestFileTreeOpen";
-
-interface DiffSlice {
-  readonly cursor: string | null;
-  readonly patch: string;
-  readonly truncated: boolean;
-  readonly nextCursor: string | null;
-  readonly omittedFileStats: ReadonlyArray<PullRequestOmittedFileStat>;
-}
 
 /**
  * The viewer's own per-file counts are hidden and drawn from this side of its shadow root
@@ -251,6 +246,8 @@ function PullRequestCodeTab({
   onAddToAgentSelection,
   onRefresh,
   refreshToken = 0,
+  backgroundRefreshToken = 0,
+  viewState,
   revealRequest = null,
 }: {
   scrollerRef: (node: HTMLDivElement | null) => void;
@@ -265,8 +262,15 @@ function PullRequestCodeTab({
   onAddToAgentSelection?: (input: PullRequestAgentSelectionInput) => void;
   onRefresh: () => void;
   refreshToken?: number;
+  backgroundRefreshToken?: number;
+  viewState?: PullRequestViewStateStore;
   revealRequest?: { readonly path: string; readonly nonce: number } | null;
 }) {
+  const referenceKey = pullRequestReviewKey(reference);
+  const commit = selectedCommitOid;
+  const scopeKey = `${environmentId}:${referenceKey}${commit === null ? "" : `@${commit}`}`;
+  const savedView = viewState?.getState();
+  const savedCode = savedView?.code?.scopeKey === scopeKey ? savedView.code : undefined;
   const { resolvedTheme } = useTheme();
   const settings = useClientSettings((settings) => ({
     diffFilesCollapsed: settings.diffFilesCollapsed,
@@ -274,15 +278,23 @@ function PullRequestCodeTab({
     diffLayout: settings.diffLayout,
     wordWrap: settings.wordWrap,
   }));
-  const [toggledFiles, setToggledFiles] = useState<ReadonlySet<string>>(() => new Set());
-  const [visibleCommitCount, setVisibleCommitCount] = useState(COMMIT_PAGE_SIZE);
-  const [foldOverride, setFoldOverride] = useState<DiffFoldOverride>(null);
+  const [toggledFiles, setToggledFiles] = useState<ReadonlySet<string>>(
+    () => savedCode?.toggledFiles ?? new Set(),
+  );
+  const [visibleCommitCount, setVisibleCommitCount] = useState(
+    savedCode?.visibleCommitCount ?? COMMIT_PAGE_SIZE,
+  );
+  const [foldOverride, setFoldOverride] = useState<DiffFoldOverride>(
+    savedCode?.foldOverride ?? null,
+  );
   const effectiveFoldOverride =
     foldOverride ?? (settings.diffFilesCollapsed ? "folded" : "expanded");
   const diffLayout = settings.diffLayout;
   const updateClientSettings = useUpdateClientSettings();
-  const [wordWrap, setWordWrap] = useState(settings.wordWrap);
-  const [ignoreWhitespace, setIgnoreWhitespace] = useState(settings.diffIgnoreWhitespace);
+  const [wordWrap, setWordWrap] = useState(savedCode?.wordWrap ?? settings.wordWrap);
+  const [ignoreWhitespace, setIgnoreWhitespace] = useState(
+    savedCode?.ignoreWhitespace ?? settings.diffIgnoreWhitespace,
+  );
   const [fileTreeOpen, setFileTreeOpen] = useLocalStorage(
     PULL_REQUEST_FILE_TREE_STORAGE_KEY,
     false,
@@ -301,14 +313,14 @@ function PullRequestCodeTab({
     readonly key: string;
     readonly cursor: string | null;
     readonly slices: ReadonlyArray<DiffSlice>;
-  }>({ key: "", cursor: null, slices: NO_SLICES });
+  }>(() => ({ key: scopeKey, cursor: null, slices: savedCode?.slices ?? NO_SLICES }));
   const [viewer, setViewer] = useState<CodeViewHandle<ReviewAnnotationGroup, undefined> | null>(
     null,
   );
+  const scrollToRestore = useRef(
+    savedCode && savedView?.scrollByTab.code ? { ...savedView.scrollByTab.code, scopeKey } : null,
+  );
 
-  const referenceKey = pullRequestReviewKey(reference);
-  const commit = selectedCommitOid;
-  const scopeKey = commit === null ? referenceKey : `${referenceKey}@${commit}`;
   // The panel keeps this mounted across pull requests, so an open composer would otherwise
   // survive the switch and attach its comment to whichever one is on screen when it is sent.
   const [stateScopeKey, setStateScopeKey] = useState(scopeKey);
@@ -335,56 +347,39 @@ function PullRequestCodeTab({
       },
     }),
   );
+  const [revalidateAfter, setRevalidateAfter] = useState(() => (savedCode ? Date.now() : 0));
   // Pages accumulate into slices as each answer arrives, so the slice list is adjusted while
   // rendering the answer rather than one commit later.
   const [appliedPage, setAppliedPage] = useState<{
     readonly data: typeof diffQuery.data;
     readonly cursor: string | null;
     readonly scopeKey: string;
+    readonly dataUpdatedAt: number;
   } | null>(null);
   const data = diffQuery.data;
   if (
     data !== null &&
+    !diffQuery.isPending &&
+    diffQuery.error === null &&
+    diffQuery.dataUpdatedAt >= revalidateAfter &&
     (appliedPage?.data !== data ||
       appliedPage.cursor !== cursor ||
-      appliedPage.scopeKey !== scopeKey)
+      appliedPage.scopeKey !== scopeKey ||
+      appliedPage.dataUpdatedAt !== diffQuery.dataUpdatedAt)
   ) {
-    setAppliedPage({ data, cursor, scopeKey });
+    setAppliedPage({ data, cursor, scopeKey, dataUpdatedAt: diffQuery.dataUpdatedAt });
     setSliceState((previous) => {
       const slices = previous.key === scopeKey ? previous.slices : NO_SLICES;
-      const next = {
+      const next = reconcileDiffSlices(slices, {
         cursor,
         patch: data.patch,
         truncated: data.truncated,
         nextCursor: data.nextCursor,
         omittedFileStats: data.omittedFileStats ?? [],
-      };
-      const index = slices.findIndex((slice) => slice.cursor === cursor);
-      if (index === -1) {
-        return { key: scopeKey, cursor, slices: [...slices, next] };
-      }
-      const existing = slices[index];
-      if (
-        existing !== undefined &&
-        existing.patch === next.patch &&
-        existing.truncated === next.truncated &&
-        existing.nextCursor === next.nextCursor &&
-        existing.omittedFileStats.length === next.omittedFileStats.length &&
-        existing.omittedFileStats.every((file, index) => {
-          const refreshed = next.omittedFileStats[index];
-          return (
-            refreshed !== undefined &&
-            refreshed.path === file.path &&
-            refreshed.additions === file.additions &&
-            refreshed.deletions === file.deletions
-          );
-        })
-      ) {
-        return previous;
-      }
-      // A page that came back different means the diff moved under the review. The slices
-      // after it go with the replacement: their cursors were positions in the old diff.
-      return { key: scopeKey, cursor, slices: [...slices.slice(0, index), next] };
+      });
+      return next.slices === slices && next.cursor === previous.cursor && previous.key === scopeKey
+        ? previous
+        : { key: scopeKey, ...next };
     });
   }
   const refreshFirstDiffPage = useAtomRefresh(
@@ -432,6 +427,50 @@ function PullRequestCodeTab({
     refreshFirstDiffPage();
     refreshFilesViewed();
   }, [refreshToken, scopeKey, refreshFirstDiffPage, refreshFilesViewed]);
+
+  const appliedBackgroundRefreshToken = useRef(backgroundRefreshToken);
+  useEffect(() => {
+    if (appliedBackgroundRefreshToken.current === backgroundRefreshToken) return;
+    appliedBackgroundRefreshToken.current = backgroundRefreshToken;
+    // Background reads must not unmount the viewer or discard its later pages.
+    setRevalidateAfter(Date.now());
+    setSliceState((previous) => ({ ...previous, cursor: null }));
+    refreshFirstDiffPage();
+    refreshFilesViewed();
+  }, [backgroundRefreshToken, refreshFirstDiffPage, refreshFilesViewed]);
+  const {
+    dataUpdatedAt,
+    isPending: diffPending,
+    error: diffError,
+    refresh: refreshDiffPage,
+  } = diffQuery;
+  useEffect(() => {
+    if (data !== null && !diffPending && diffError === null && dataUpdatedAt < revalidateAfter) {
+      refreshDiffPage();
+    }
+  }, [data, diffPending, diffError, dataUpdatedAt, refreshDiffPage, revalidateAfter]);
+  useLayoutEffect(() => {
+    viewState?.setState({
+      code: {
+        scopeKey,
+        slices: loadedSlices,
+        toggledFiles,
+        foldOverride,
+        visibleCommitCount,
+        wordWrap,
+        ignoreWhitespace,
+      },
+    });
+  }, [
+    viewState,
+    scopeKey,
+    loadedSlices,
+    toggledFiles,
+    foldOverride,
+    visibleCommitCount,
+    wordWrap,
+    ignoreWhitespace,
+  ]);
 
   // The sentinel is held as state rather than a ref because the viewer mounts its own footer:
   // an effect reading a ref could run before that node exists and would never arm the observer.
@@ -646,6 +685,7 @@ function PullRequestCodeTab({
   // sentinel on screen, so re-arming it after a failure would request the same slice forever.
   const canLoadNextSlice =
     nextCursor !== null &&
+    cursor === (loadedSlices.at(-1)?.cursor ?? null) &&
     nextCursor !== cursor &&
     !diffQuery.isPending &&
     diffQuery.error === null;
@@ -1262,6 +1302,17 @@ function PullRequestCodeTab({
   );
   // The effects sit after every derivation: a hook between the diff's derivations and their
   // later readers (the viewer options, the reveal handler) would leave them uncached.
+  useLayoutEffect(() => {
+    const position = scrollToRestore.current;
+    if (position === null || position.scopeKey !== scopeKey || items.length === 0) return;
+    const instance = viewer?.getInstance();
+    const container = instance?.getContainerElement();
+    if (!container) return;
+    // The items are installed now. Restore the raw offset: viewer.scrollTo subtracts the
+    // sticky header's height, which would move the review up one header on every return.
+    container.scrollTo({ top: position.top, left: position.left });
+    scrollToRestore.current = null;
+  }, [viewer, scopeKey, items.length]);
   useEffect(() => {
     if (sentinel === null || !canLoadNextSlice) return;
     const observer = new IntersectionObserver(
