@@ -1,5 +1,6 @@
 // @effect-diagnostics globalDate:off -- Usage windows are calendar days in the viewer's zone, derived from wall-clock "now" via Intl.
 import { UsageDay, type UsageResolution, type UsageSummaryInput } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 
 import type { UsageContractMismatch } from "./usageMerge.ts";
 
@@ -190,7 +191,7 @@ export type UsagePeriod = number | "today";
 export function makeWindow(
   days: UsagePeriod,
   now = new Date(),
-  resolution: UsageResolution = "day",
+  resolution: UsageResolution = days === "today" || days === 1 ? "hour" : "day",
 ): UsageSummaryInput {
   let timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   let format: Intl.DateTimeFormat;
@@ -212,8 +213,17 @@ export function makeWindow(
   }
   const untilDay = format.format(now);
   if (resolution === "hour") {
-    const untilTimeMs = Math.floor(now.getTime() / 60_000) * 60_000;
-    const sinceTimeMs = untilTimeMs - 24 * HOUR_MS;
+    const sinceTimeMs =
+      days === "today"
+        ? DateTime.toEpochMillis(
+            DateTime.startOf(DateTime.makeZonedUnsafe(now, { timeZone }), "day"),
+          )
+        : Math.floor(now.getTime() / 60_000) * 60_000 - 24 * HOUR_MS;
+    // The server requires a nonempty window, even at the exact instant of midnight.
+    const untilTimeMs =
+      days === "today"
+        ? Math.max(now.getTime(), sinceTimeMs + 1)
+        : Math.floor(now.getTime() / 60_000) * 60_000;
     const sinceTime = new Date(sinceTimeMs);
     const untilTime = new Date(untilTimeMs);
     return {

@@ -191,7 +191,9 @@ it.each([
   expect(state.usageWindow).toMatchObject({
     sinceDay: "2026-08-11",
     untilDay: "2026-08-11",
-    resolution: "day",
+    resolution: "hour",
+    sinceTime: new Date(2026, 7, 11).toISOString(),
+    untilTime: new Date(2026, 7, 11, 12, 37).toISOString(),
   });
 });
 
@@ -200,11 +202,23 @@ it("restores Today and refreshes it against the new day after midnight", async (
   vi.setSystemTime(new Date(2026, 7, 11, 23, 59));
   localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ metric: "tokens", windowDays: "today" }));
   await render();
-  expect(state.usageWindow?.sinceDay).toBe("2026-08-11");
+  expect(state.usageWindow).toMatchObject({
+    sinceDay: "2026-08-11",
+    untilDay: "2026-08-11",
+    resolution: "hour",
+    sinceTime: new Date(2026, 7, 11).toISOString(),
+    untilTime: new Date(2026, 7, 11, 23, 59).toISOString(),
+  });
   vi.setSystemTime(new Date(2026, 7, 12, 0, 1));
   await userEvent.click(page.getByRole("button", { name: "Refresh usage" }));
   expect(state.refreshUsage).toHaveBeenCalledWith(
-    expect.objectContaining({ sinceDay: "2026-08-12", untilDay: "2026-08-12", resolution: "day" }),
+    expect.objectContaining({
+      sinceDay: "2026-08-12",
+      untilDay: "2026-08-12",
+      resolution: "hour",
+      sinceTime: new Date(2026, 7, 12).toISOString(),
+      untilTime: new Date(2026, 7, 12, 0, 1).toISOString(),
+    }),
   );
   expect(state.usageWindow?.sinceDay).toBe("2026-08-12");
 });
