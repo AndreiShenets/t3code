@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as HttpClient from "effect/http/HttpClient";
@@ -40,6 +41,7 @@ const DEFAULT_VERSION_STDOUT = "opencode 1.14.19\n";
 it.effect("reads Go limits with the instance's XDG credentials and preserves reset times", () =>
   Effect.gen(function* () {
     const resetsAt = "2026-09-17T12:00:00.000Z";
+    const path = yield* Path.Path;
     const limits = yield* readOpenCodeGoUsageLimits({
       enabled: true,
       serverUrl: "",
@@ -48,8 +50,8 @@ it.effect("reads Go limits with the instance's XDG credentials and preserves res
       Effect.provideService(
         FileSystem.FileSystem,
         FileSystem.makeNoop({
-          readFileString: (path) => {
-            NodeAssert.equal(path, "/instance/data/opencode/auth.json");
+          readFileString: (filePath) => {
+            NodeAssert.equal(filePath, path.join("/instance/data", "opencode", "auth.json"));
             return Effect.succeed(
               JSON.stringify({ "opencode-go": { type: "api", key: "instance-key" } }),
             );
@@ -75,7 +77,6 @@ it.effect("reads Go limits with the instance's XDG credentials and preserves res
           );
         }),
       ),
-      Effect.provide(NodeServices.layer),
     );
     NodeAssert.equal(limits.unavailable, undefined);
     NodeAssert.equal(
@@ -94,7 +95,7 @@ it.effect("reads Go limits with the instance's XDG credentials and preserves res
         { kind: "monthly", usedPercent: 100, reset: resetsAt },
       ],
     );
-  }),
+  }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 it.effect("does not read local credentials for external or disabled OpenCode instances", () =>
