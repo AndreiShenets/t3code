@@ -1008,6 +1008,103 @@ index 39fe30e..600442e 100644
  			properties: { "data-additions-count": "" }
  		}));
  	}
+diff --git a/dist/editor/platform.d.ts b/dist/editor/platform.d.ts
+--- a/dist/editor/platform.d.ts
++++ b/dist/editor/platform.d.ts
+@@ -1,6 +1,6 @@
+ import { isLinux, isMacLike, isSafari, resetPlatformDetection } from "../utils/platform.js";
+ //#region src/editor/platform.d.ts
+ declare function isPrimaryModifier({ metaKey, ctrlKey }: MouseEvent | KeyboardEvent, isMac?: boolean): boolean;
+-declare function isMoveCursorShortcut(e: KeyboardEvent): 'up' | 'down' | 'left' | 'right' | 'start' | 'textStart' | 'end' | undefined;
++declare function isMoveCursorShortcut(e: KeyboardEvent): 'up' | 'down' | 'left' | 'right' | 'start' | 'textStart' | 'end' | 'wordLeft' | 'wordRight' | undefined;
+ //#endregion
+ export { isLinux, isMacLike, isMoveCursorShortcut, isPrimaryModifier, isSafari, resetPlatformDetection };
+diff --git a/dist/editor/platform.js b/dist/editor/platform.js
+--- a/dist/editor/platform.js
++++ b/dist/editor/platform.js
+@@ -20,7 +20,12 @@ function isMoveCursorShortcut(e) {
+ 		else if (e.key === "Home") return "start";
+ 		else if (e.key === "End") return "end";
+ 	}
+-	if (isPrimaryModifier(e)) {
++	const isMac = isMacLike();
++	if (isMac ? e.altKey && !e.ctrlKey && !e.metaKey : e.ctrlKey && !e.altKey && !e.metaKey) {
++		if (e.key === "ArrowLeft") return "wordLeft";
++		else if (e.key === "ArrowRight") return "wordRight";
++	}
++	if (isMac && e.metaKey && !e.ctrlKey && !e.altKey) {
+ 		if (e.key === "ArrowLeft") return "textStart";
+ 		else if (e.key === "ArrowRight") return "end";
+ 	}
+diff --git a/dist/editor/selection.d.ts b/dist/editor/selection.d.ts
+--- a/dist/editor/selection.d.ts
++++ b/dist/editor/selection.d.ts
+@@ -33,12 +33,12 @@ type ResolveRenderableLine = (line: number, direction: 'up' | 'down') => number
+ /**
+  * Maps the cursor move to all selections.
+  */
+-declare function mapCursorMove(textDocument: TextDocument, selections: EditorSelection[], shortcut: 'textStart' | 'start' | 'end' | 'up' | 'down' | 'left' | 'right', options?: CursorMoveOptions): EditorSelection[];
++declare function mapCursorMove(textDocument: TextDocument, selections: EditorSelection[], shortcut: 'textStart' | 'start' | 'end' | 'up' | 'down' | 'left' | 'right' | 'wordLeft' | 'wordRight', options?: CursorMoveOptions): EditorSelection[];
+ declare function snapCharacterToGraphemeBoundary(lineText: string, character: number): number;
+ /**
+  * Same as mapCursorMove, but with shift key pressed.
+  */
+-declare function mapSelectionShift(textDocument: TextDocument, selections: EditorSelection[], shortcut: 'textStart' | 'start' | 'end' | 'up' | 'down' | 'left' | 'right', options?: CursorMoveOptions): EditorSelection[];
++declare function mapSelectionShift(textDocument: TextDocument, selections: EditorSelection[], shortcut: 'textStart' | 'start' | 'end' | 'up' | 'down' | 'left' | 'right' | 'wordLeft' | 'wordRight', options?: CursorMoveOptions): EditorSelection[];
+ /**
+  * Applies a text change to the given text document
+  */
+diff --git a/dist/editor/selection.js b/dist/editor/selection.js
+--- a/dist/editor/selection.js
++++ b/dist/editor/selection.js
+@@ -101,8 +101,12 @@ function resolveIndentEdits(textDocument, selection, tabSize, outdent) {
+ function mapCursorMove(textDocument, selections, shortcut, options = {}) {
+ 	const lineCount = textDocument.lineCount;
+ 	return selections.map((selection) => {
+-		let { line, character } = shortcut === "up" || shortcut === "left" ? selection.start : selection.end;
+-		if (shortcut === "textStart" || shortcut === "start" || shortcut === "end") {
++		let { line, character } = shortcut === "up" || shortcut === "left" || shortcut === "wordLeft" ? selection.start : selection.end;
++		if (shortcut === "wordLeft" || shortcut === "wordRight") {
++			const moved = moveByWord(textDocument, line, character, shortcut === "wordRight", options);
++			line = moved.line;
++			character = moved.character;
++		} else if (shortcut === "textStart" || shortcut === "start" || shortcut === "end") {
+ 			const caret = getCaretPosition(selection);
+ 			line = caret.line;
+ 			character = caret.character;
+@@ -159,6 +163,32 @@ function mapCursorMove(textDocument, selections, shortcut, options = {}) {
+ 		};
+ 	});
+ }
++function moveByWord(textDocument, line, character, forward, options) {
++	const lineText = textDocument.getLineText(line);
++	character = Math.max(0, Math.min(character, lineText.length));
++	if (forward ? character === lineText.length : character === 0) {
++		const nextLine = line + (forward ? 1 : -1);
++		if (nextLine < 0 || nextLine >= textDocument.lineCount) return { line, character };
++		const targetLine = options.resolveRenderableLine == null ? nextLine : options.resolveRenderableLine(nextLine, forward ? "down" : "up");
++		if (targetLine === void 0) return { line, character };
++		line = Math.max(0, Math.min(targetLine, textDocument.lineCount - 1));
++		return { line, character: forward ? 0 : textDocument.getLineLength(line) };
++	}
++	// Use the same grapheme and character classes as word deletion, not browser-native selection.
++	const graphemeStarts = getLineGraphemeStarts(lineText);
++	let match;
++	for (let index = forward ? 0 : graphemeStarts.length - 1; index >= 0 && index < graphemeStarts.length; index += forward ? 1 : -1) {
++		const start = graphemeStarts[index];
++		const end = graphemeStarts[index + 1] ?? lineText.length;
++		if (forward ? end <= character : start >= character) continue;
++		const cluster = lineText.slice(start, end);
++		const nextMatch = !/\S/.test(cluster) ? 0 : /\p{Alphabetic}|\p{Number}|_/u.test(cluster) ? 1 : 2;
++		if (match !== void 0 && nextMatch !== match) break;
++		if (nextMatch !== 0) match = nextMatch;
++		character = forward ? end : start;
++	}
++	return { line, character };
++}
+ function moveBySoftLine(textDocument, line, character, direction, options) {
+ 	if (options.getSoftLineOffsets === void 0) return;
+ 	const current = getSoftLineInfo(textDocument, line, character, options);
 diff --git a/package.json b/package.json
 index d9dc7b5..3c37bae 100644
 --- a/package.json
