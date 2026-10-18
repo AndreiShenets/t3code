@@ -1,5 +1,4 @@
 import * as NodeAssert from "node:assert/strict";
-import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
@@ -50,7 +49,7 @@ it.effect("reads Go limits with the instance's XDG credentials and preserves res
         FileSystem.FileSystem,
         FileSystem.makeNoop({
           readFileString: (path) => {
-            NodeAssert.equal(path, NodePath.join("/instance/data", "opencode", "auth.json"));
+            NodeAssert.equal(path.replaceAll("\\", "/"), "/instance/data/opencode/auth.json");
             return Effect.succeed(
               JSON.stringify({ "opencode-go": { type: "api", key: "instance-key" } }),
             );
