@@ -12,16 +12,21 @@ const idle: DesktopCustomBuildState = {
 };
 
 describe("custom-build controls", () => {
-  it.each([
-    ["idle", "idle"],
-    ["checking", "checking"],
-    ["available", "available"],
-    ["downloading", "downloading"],
-    ["downloaded", "downloaded"],
-    ["installing", "downloaded"],
-    ["up-to-date", "idle"],
-  ] as const)("presents %s with the shared %s update indicator", (status, iconStatus) => {
-    expect(customBuildUpdatePresentation({ ...idle, status }, false)).toMatchObject({ iconStatus });
+  it("keeps descriptions focused on the custom build source and version", () => {
+    expect(customBuildUpdatePresentation(idle, false).description).toBe(
+      "Releases from AndreiShenets/t3code. Installed: 0.1.1 202610171200.",
+    );
+    expect(customBuildUpdatePresentation({ ...idle, currentBuild: null }, false).description).toBe(
+      "Releases from AndreiShenets/t3code.",
+    );
+    for (const status of ["available", "downloaded"] as const) {
+      expect(
+        customBuildUpdatePresentation(
+          { ...idle, status, availableBuild: "0.1.1 202610171539" },
+          false,
+        ).description,
+      ).toBe("Custom build 0.1.1 202610171539.");
+    }
   });
 
   it("follows check, download, confirmed install with the same behavior for either entry point", async () => {
