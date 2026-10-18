@@ -8400,6 +8400,7 @@ export default function ChatView(props: ChatViewProps) {
               availableEditors={availableEditors}
               showOpenInPicker={showOpenInPicker}
               gitCwd={gitCwd}
+              mcpProvider={activeProviderStatus}
               isGitRepo={isGitRepo}
               envLocked={envLocked}
               availableEnvironments={logicalProjectEnvironments}
