@@ -455,15 +455,21 @@ export const make = Effect.gen(function* () {
   ) {
     yield* Effect.annotateCurrentSpan({ channel });
     const allowsPrerelease = channel === "nightly";
+    // A custom build's stable base sorts above same-base nightlies in semver.
+    // Request the target's notes rather than filtering them against that base.
+    const fullChangelog =
+      allowsPrerelease &&
+      (!environment.customBuildStamp ||
+        resolveDefaultDesktopUpdateChannel(environment.appVersion) === "nightly");
     yield* electronUpdater.setChannel(channel);
     yield* electronUpdater.setAllowPrerelease(allowsPrerelease);
     yield* electronUpdater.setAllowDowngrade(allowsPrerelease);
-    yield* electronUpdater.setFullChangelog(allowsPrerelease);
+    yield* electronUpdater.setFullChangelog(fullChangelog);
     yield* logUpdaterInfo("using update channel", {
       channel,
       allowPrerelease: allowsPrerelease,
       allowDowngrade: allowsPrerelease,
-      fullChangelog: allowsPrerelease,
+      fullChangelog,
     });
   });
 

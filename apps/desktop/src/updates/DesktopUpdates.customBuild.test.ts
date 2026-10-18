@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
+import { computeReleaseNotes } from "electron-updater/out/providers/GitHubProvider.js";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopUpdates from "./DesktopUpdates.ts";
@@ -14,6 +15,60 @@ const customBuild = {
 const nightlyVersion = "1.2.4-nightly.20261017.3238";
 
 describe("official updates from custom builds", () => {
+  it.effect.each(["0.1.1", "0.1.1-nightly.20261017.3272"])(
+    "publishes the offered nightly's changelog from custom build %s",
+    (appVersion) => {
+      const harness = makeHarness({
+        appVersion,
+        platform: "win32",
+        customBuildStamp: "202610172110",
+        customBuildTimestamp: "2026-10-17T19:55:49.067Z",
+      });
+      return Effect.scoped(
+        Effect.gen(function* () {
+          const updates = yield* DesktopUpdates.DesktopUpdates;
+          const environment = yield* DesktopEnvironment.DesktopEnvironment;
+          yield* updates.configure;
+          yield* updates.setChannel("nightly");
+
+          const version = "0.1.1-nightly.20261018.3302";
+          const latestRelease = {
+            element: () => ({
+              attribute: () => `https://github.com/pingdotgg/t3code/releases/tag/v${version}`,
+            }),
+            elementValueOrEmpty: () => "<ul><li>Fix update changelog</li></ul>",
+          } as unknown as Parameters<typeof computeReleaseNotes>[3];
+          const releaseNotes = computeReleaseNotes(
+            { raw: environment.appVersion } as Parameters<typeof computeReleaseNotes>[0],
+            harness.fullChangelog(),
+            { getElements: () => [latestRelease] } as unknown as Parameters<
+              typeof computeReleaseNotes
+            >[2],
+            latestRelease,
+          );
+          harness.emit("update-available", {
+            version,
+            releaseDate: "2026-10-18T07:36:01Z",
+            releaseNotes,
+          });
+          yield* flushCallbacks;
+
+          const state = yield* updates.getState;
+          assert.equal(state.status, "available");
+          assert.equal(state.availableVersion, version);
+          assert.deepEqual(state.releaseNotes, [
+            { version, items: ["Fix update changelog"], totalItems: 1 },
+          ]);
+          assert.deepEqual(harness.sentStates.at(-1)?.releaseNotes, state.releaseNotes);
+
+          harness.emit("update-downloaded", { version });
+          yield* flushCallbacks;
+          assert.deepEqual((yield* updates.getState).releaseNotes, state.releaseNotes);
+        }),
+      ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+    },
+  );
+
   it.effect("hides the older official nightly from the installed October 17 custom build", () => {
     const harness = makeHarness({
       customBuildStamp: "202610172110",
