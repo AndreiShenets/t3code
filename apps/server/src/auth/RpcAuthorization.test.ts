@@ -41,6 +41,12 @@ describe("RPC authorization scopes", () => {
       AuthOrchestrationOperateScope,
     );
   });
+  it("separates reading MCP status from changing workspace connections", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.providerMcpList)).toBe(AuthOrchestrationReadScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.providerMcpSetEnabled)).toBe(
+      AuthProvidersManageScope,
+    );
+  });
 
   it("authorizes background policy reporting and observation deliberately", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.serverReportClientActivity)).toBe(
