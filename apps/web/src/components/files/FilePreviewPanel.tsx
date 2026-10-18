@@ -639,7 +639,7 @@ interface EditableFileSurfaceProps {
   resolvedTheme: "light" | "dark";
   revealRequestId: number;
   wordWrap: boolean;
-  workspaceMutationId: string | null;
+  workspaceMutationId?: string | null;
   onPostRender: FilePostRender;
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
@@ -658,7 +658,7 @@ function EditableFileSurface({
   resolvedTheme,
   revealRequestId,
   wordWrap,
-  workspaceMutationId,
+  workspaceMutationId = null,
   onPostRender,
   onPendingChange,
 }: EditableFileSurfaceProps) {
