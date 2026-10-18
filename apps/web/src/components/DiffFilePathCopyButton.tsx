@@ -28,7 +28,10 @@ export function DiffFilePathCopyButton({ filePath }: { filePath: string }) {
             size="icon-micro"
             variant="ghost-muted"
             aria-label="Copy file path"
-            onClick={() => copyToClipboard(filePath, undefined)}
+            onClick={(event) => {
+              event.stopPropagation();
+              copyToClipboard(filePath, undefined);
+            }}
           />
         }
       >
