@@ -31,8 +31,11 @@ export interface UpdatesHarnessOptions {
   readonly startBackend?: Effect.Effect<void>;
   readonly env?: Record<string, string | undefined>;
   readonly platform?: NodeJS.Platform;
+  readonly appVersion?: string;
   readonly packageType?: string | undefined;
   readonly installRecord?: string | undefined;
+  readonly customBuildStamp?: string;
+  readonly customBuildTimestamp?: string;
 }
 
 export function makeHarness(options: UpdatesHarnessOptions = {}) {
@@ -148,11 +151,13 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
     homeDirectory: `/tmp/t3-desktop-updates-home-${process.pid}`,
     platform: options.platform ?? "darwin",
     processArch: "x64",
-    appVersion: "1.2.3",
+    appVersion: options.appVersion ?? "1.2.3",
     appPath: "/repo",
     isPackaged: true,
     resourcesPath: "/missing/resources",
     runningUnderArm64Translation: false,
+    ...(options.customBuildStamp ? { customBuildStamp: options.customBuildStamp } : {}),
+    ...(options.customBuildTimestamp ? { customBuildTimestamp: options.customBuildTimestamp } : {}),
   }).pipe(
     Layer.provide(
       Layer.mergeAll(
