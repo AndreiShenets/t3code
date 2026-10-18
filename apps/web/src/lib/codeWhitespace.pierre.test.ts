@@ -300,13 +300,18 @@ describe("Pierre whitespace decoration", () => {
         attached.resolve();
       },
     };
-    const displayOptionsByTabSize = new Map([2, 8].map((tabSize) => [tabSize, {
-        ...options,
-        onPostRender: (container: HTMLElement, instance: unknown, phase: PostRenderPhase) => {
-          container.style.setProperty("--diffs-tab-size", String(tabSize));
-          options.onPostRender(container, instance, phase);
+    const displayOptionsByTabSize = new Map(
+      [2, 8].map((tabSize) => [
+        tabSize,
+        {
+          ...options,
+          onPostRender: (container: HTMLElement, instance: unknown, phase: PostRenderPhase) => {
+            container.style.setProperty("--diffs-tab-size", String(tabSize));
+            options.onPostRender(container, instance, phase);
+          },
         },
-      }]));
+      ]),
+    );
     function Surface({ resolvedTabSize }: { resolvedTabSize: number }) {
       const { tabSize, ...compositionHandlers } = useEditorTabSize(resolvedTabSize, 0);
       const displayOptions = displayOptionsByTabSize.get(tabSize)!;
