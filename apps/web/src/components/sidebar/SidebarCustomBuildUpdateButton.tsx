@@ -29,15 +29,15 @@ export function SidebarCustomBuildUpdateButton() {
               isActive={hasUpdate}
               onClick={() => change()}
             >
-              <span className="relative grid size-4 place-items-center">
+              <div className="relative grid size-4 place-items-center">
                 <Icon className="size-4" />
                 {hasUpdate && (
                   <span
                     aria-hidden="true"
-                    className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-current ring-2 ring-sidebar-control-surface"
+                    className="absolute -top-1.5 -right-1.5 size-1.5 rounded-full bg-current ring-2 ring-sidebar-control-surface"
                   />
                 )}
-              </span>
+              </div>
             </SidebarMenuButton>
           }
         />
