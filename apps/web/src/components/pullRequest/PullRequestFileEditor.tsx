@@ -78,6 +78,7 @@ export default function PullRequestFileEditor({
                 resolvedTheme={resolvedTheme}
                 revealRequestId={0}
                 wordWrap={wordWrap}
+                workspaceMutationId={null}
                 onPostRender={ignorePostRender}
                 onPendingChange={ignorePendingChange}
               />
