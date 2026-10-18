@@ -3,6 +3,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 import { extractFile } from "@electron/asar";
 import { assert, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -1245,13 +1246,18 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
               stageResourcesDir,
               arch,
               verbose: false,
-            }).pipe(Effect.provide(spawner));
+            }).pipe(
+              Effect.provide(spawner),
+              Effect.provideService(SpawnExecutableResolution, (command) => command),
+            );
             const installed = path.join(
               stageResourcesDir,
               `${backend}-capture/t3-${backend}-snap-shot`,
             );
             assert.equal(yield* fs.readFileString(installed), `helper-${arch}`);
-            assert.equal((yield* fs.stat(installed)).mode & 0o777, 0o755);
+            if ((yield* HostProcess.Platform) !== "win32") {
+              assert.equal((yield* fs.stat(installed)).mode & 0o777, 0o755);
+            }
             if (backend === "hyprland")
               assert.equal(
                 yield* fs.readFileString(
