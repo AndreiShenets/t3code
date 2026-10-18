@@ -20,15 +20,14 @@ export function customBuildUpdatePresentation(
     visible: state?.supported === true,
     disabled: pending || busy || !state?.supported,
     busy,
-    iconStatus: status === "up-to-date" ? "idle" : status === "installing" ? "downloaded" : status,
     label: LABELS[status],
     description:
       state?.message ??
       (status === "up-to-date"
         ? "No newer custom Windows build is available."
         : state?.availableBuild
-          ? `Custom build ${state.availableBuild}. Nightly updates remain separate.`
-          : `Releases from AndreiShenets/t3code.${state?.currentBuild ? ` Installed: ${state.currentBuild}.` : ""} Nightly updates remain separate.`),
+          ? `Custom build ${state.availableBuild}.`
+          : `Releases from AndreiShenets/t3code.${state?.currentBuild ? ` Installed: ${state.currentBuild}.` : ""}`),
   };
 }
 
