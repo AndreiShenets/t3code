@@ -1217,13 +1217,19 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
               `release/t3-${backend}-snap-shot`,
             );
             const stageResourcesDir = path.join(repoRoot, "stage", backend, arch);
+            const chmodCalls: Array<{ path: string; mode: number }> = [];
             const spawner = Layer.succeed(
               ChildProcessSpawner.ChildProcessSpawner,
               ChildProcessSpawner.make((command) =>
                 Effect.gen(function* () {
                   assert.equal(command._tag, "StandardCommand");
                   if (command._tag !== "StandardCommand") return mockProcess(1);
-                  assert.equal(command.command, "cargo");
+                  assert.equal(
+                    NodePath.basename(command.command)
+                      .toLowerCase()
+                      .replace(/\.exe$/, ""),
+                    "cargo",
+                  );
                   assert.deepEqual(command.args, [
                     "build",
                     "--locked",
@@ -1245,13 +1251,22 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
               stageResourcesDir,
               arch,
               verbose: false,
-            }).pipe(Effect.provide(spawner));
+            }).pipe(
+              Effect.provide(spawner),
+              Effect.provideService(FileSystem.FileSystem, {
+                ...fs,
+                chmod: (path, mode) =>
+                  Effect.sync(() => {
+                    chmodCalls.push({ path, mode });
+                  }).pipe(Effect.andThen(fs.chmod(path, mode))),
+              }),
+            );
             const installed = path.join(
               stageResourcesDir,
               `${backend}-capture/t3-${backend}-snap-shot`,
             );
             assert.equal(yield* fs.readFileString(installed), `helper-${arch}`);
-            assert.equal((yield* fs.stat(installed)).mode & 0o777, 0o755);
+            assert.deepEqual(chmodCalls, [{ path: installed, mode: 0o755 }]);
             if (backend === "hyprland")
               assert.equal(
                 yield* fs.readFileString(
