@@ -72,6 +72,13 @@ import { hasProviderUsageLimits, isUsageLimitsCommand } from "@t3tools/shared/us
 import { COMPOSER_LAYOUT_TRANSITION, ComposerSurface } from "./ThreadComposer";
 import { ComposerCommandPopover } from "./ComposerCommandPopover";
 import { useComposerCommandMenu } from "./use-composer-command-menu";
+import { ComposerMcpSheet } from "./ComposerMcpSheet";
+import {
+  MCP_COMMAND_USAGE,
+  parseMcpCommand,
+  supportsMcpManagement,
+  type McpManagementRequest,
+} from "@t3tools/client-runtime/mcpCommands";
 import {
   ComposerDictationCancelAction,
   ComposerDictationPrimaryAction,
@@ -475,6 +482,16 @@ export function NewTaskDraftScreen(props: {
     (flow.workspaceMode === "worktree"
       ? selectedProject?.workspaceRoot
       : (flow.selectedWorktreePath ?? selectedProject?.workspaceRoot)) || null;
+  const [mcpRequest, setMcpRequest] = useState<McpManagementRequest | null>(null);
+  const openMcp = () => {
+    const provider = flow.selectedProviderStatus;
+    if (selectedProject && composerWorkspaceCwd && provider)
+      setMcpRequest({
+        environmentId: selectedProject.environmentId,
+        target: { instanceId: provider.instanceId, cwd: composerWorkspaceCwd },
+        command: { action: "list" },
+      });
+  };
   const stripAttachments = useMemo(
     () => composerStripAttachments(flow.attachments),
     [flow.attachments],
@@ -496,6 +513,7 @@ export function NewTaskDraftScreen(props: {
     enabled: isComposerFocused && !isComposerInteractionLocked,
     onChangeDraftMessage: flow.setPrompt,
     onUpdateInteractionMode: flow.planModeEnabled ? flow.setInteractionMode : undefined,
+    onMcp: openMcp,
   });
   const voiceInput = useVoiceInputController({
     ownerKey: flow.draftKey,
@@ -1210,6 +1228,28 @@ export function NewTaskDraftScreen(props: {
     const workspaceMode = draft.workspaceSelection?.mode ?? flow.workspaceMode;
     const selectedBranchName = draft.workspaceSelection?.branch ?? flow.selectedBranchName;
     const initialMessageText = draft.text.trim();
+    const mcp = parseMcpCommand(initialMessageText);
+    if (mcp !== null) {
+      if (
+        !supportsMcpManagement(flow.selectedProviderStatus) ||
+        !flow.selectedProviderStatus ||
+        !composerWorkspaceCwd
+      ) {
+        Dialog.alert("MCP unavailable", "MCP management requires OpenCode V2 and a workspace.");
+      } else if (mcp.action === "invalid") {
+        Dialog.alert("MCP command", MCP_COMMAND_USAGE);
+      } else if (draft.attachments.length > 0) {
+        Dialog.alert("MCP command", "Remove attachments before running an MCP command.");
+      } else {
+        setMcpRequest({
+          environmentId: selectedProject.environmentId,
+          target: { instanceId: flow.selectedProviderStatus.instanceId, cwd: composerWorkspaceCwd },
+          command: mcp,
+        });
+        flow.setPrompt("");
+      }
+      return;
+    }
 
     if (
       attachmentBlockReason !== null ||
@@ -1822,6 +1862,13 @@ export function NewTaskDraftScreen(props: {
 
   return (
     <View className="flex-1 bg-sheet" collapsable={false}>
+      {mcpRequest ? (
+        <ComposerMcpSheet
+          key={JSON.stringify([mcpRequest.environmentId, mcpRequest.target])}
+          {...mcpRequest}
+          onClose={() => setMcpRequest(null)}
+        />
+      ) : null}
       <NativeStackScreenOptions
         options={{
           headerBackVisible: false,
