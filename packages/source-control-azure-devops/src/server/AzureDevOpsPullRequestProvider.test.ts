@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import * as AzureDevOpsCli from "./AzureDevOpsCli.ts";
 import * as AzureDevOpsPullRequestCli from "./AzureDevOpsPullRequestCli.ts";
 import {
   LOCATION_CACHE_CAPACITY,
@@ -178,6 +179,144 @@ describe("getChangeRequest", () => {
 
       expect(detail.changedFiles).toBe(2);
     }),
+  );
+});
+
+describe("getDiffFileContents", () => {
+  const input = {
+    cwd: "/w",
+    repository: "acme/web",
+    host: "dev.azure.com",
+    number: 7,
+    changeType: "new" as const,
+    oldPath: ".editorconfig",
+    newPath: ".editorconfig",
+  };
+
+  it.effect("keeps selected and head snapshots pinned when the latest iteration advances", () =>
+    Effect.gen(function* () {
+      const iterations = [ITERATION];
+      const contents = new Map([
+        ["selected", "[*]\nindent_size = 2\n"],
+        [ITERATION.headCommit, "[*]\nindent_size = 4\n"],
+        ["next-head", "[*]\nindent_size = 8\n"],
+      ]);
+      const provider = yield* make.pipe(
+        Effect.provide(
+          Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({
+            getPullRequest: () => Effect.succeed(PULL_REQUEST),
+            listIterations: () => Effect.succeed(iterations),
+            readItemContent: (item) =>
+              Effect.succeed({ contents: contents.get(item.commit) ?? "", isBinary: false }),
+          }),
+        ),
+      );
+      const read = provider.getDiffFileContents!;
+
+      expect((yield* read(input)).newContents).toBe(contents.get(ITERATION.headCommit));
+      expect((yield* read({ ...input, commit: "selected" })).newContents).toBe(
+        contents.get("selected"),
+      );
+      iterations.push({ id: 4, headCommit: "next-head", mergeBaseCommit: "next-base" });
+
+      expect((yield* read(input)).newContents).toBe(contents.get("next-head"));
+      for (const commit of ["selected", ITERATION.headCommit]) {
+        expect(yield* read({ ...input, commit })).toEqual({
+          oldContents: "",
+          newContents: contents.get(commit),
+          binary: false,
+        });
+      }
+    }),
+  );
+
+  it.effect("reads a pinned snapshot without needing pull request iterations", () =>
+    Effect.gen(function* () {
+      const provider = yield* make.pipe(
+        Effect.provide(
+          Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({
+            getPullRequest: () => Effect.succeed(PULL_REQUEST),
+            readItemContent: (item) => {
+              expect(item).toEqual({
+                cwd: input.cwd,
+                location: PULL_REQUEST.location,
+                path: input.newPath,
+                commit: "selected",
+              });
+              return Effect.succeed({ contents: "binary content", isBinary: true });
+            },
+          }),
+        ),
+      );
+
+      expect(yield* provider.getDiffFileContents!({ ...input, commit: "selected" })).toEqual({
+        oldContents: "",
+        newContents: "binary content",
+        binary: true,
+      });
+    }),
+  );
+
+  it.effect("fails a missing snapshot instead of reading a file added in a newer iteration", () =>
+    Effect.gen(function* () {
+      const reads: string[] = [];
+      const missing = new AzureDevOpsCli.AzureDevOpsPullRequestNotFoundError({
+        command: "az",
+        cwd: input.cwd,
+        operation: "execute",
+        argumentCount: 1,
+        cause: "The path does not exist at the selected commit",
+      });
+      const provider = yield* make.pipe(
+        Effect.provide(
+          Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({
+            getPullRequest: () => Effect.succeed(PULL_REQUEST),
+            listIterations: () => Effect.succeed([ITERATION]),
+            readItemContent: (item) => {
+              reads.push(item.commit);
+              return item.commit === "selected"
+                ? Effect.fail(missing)
+                : Effect.succeed({ contents: "[*]\nindent_size = 8\n", isBinary: false });
+            },
+          }),
+        ),
+      );
+
+      const error = yield* Effect.flip(
+        provider.getDiffFileContents!({ ...input, commit: "selected" }),
+      );
+      expect(error).toMatchObject({
+        _tag: "PullRequestProviderError",
+        operation: "getDiffFileContents",
+        reason: "not-found",
+        cause: missing,
+      });
+      expect(reads).toEqual(["selected"]);
+    }),
+  );
+
+  it.effect.each([undefined, "selected"])(
+    "keeps ordinary diff expansion on the latest iteration (commit=%s)",
+    (commit) =>
+      Effect.gen(function* () {
+        const provider = yield* make.pipe(
+          Effect.provide(
+            Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({
+              getPullRequest: () => Effect.succeed(PULL_REQUEST),
+              listIterations: () => Effect.succeed([ITERATION]),
+              readItemContent: (item) => Effect.succeed({ contents: item.commit, isBinary: false }),
+            }),
+          ),
+        );
+
+        expect(
+          yield* provider.getDiffFileContents!({ ...input, changeType: "change", commit }),
+        ).toEqual({
+          oldContents: ITERATION.mergeBaseCommit,
+          newContents: ITERATION.headCommit,
+          binary: false,
+        });
+      }),
   );
 });
 
