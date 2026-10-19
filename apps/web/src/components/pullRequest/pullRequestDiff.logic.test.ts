@@ -95,6 +95,18 @@ describe("reconcileDiffSlices", () => {
       expect(reconcileDiffSlices(loaded, changed).slices).toEqual([changed]);
     }
   });
+
+  it("replaces unchanged patch text when the review snapshot changes", () => {
+    const first = { ...loaded[0]!, headSha: "head-a", baseSha: "base-a" };
+    const pages = [first, ...loaded.slice(1)];
+    expect(reconcileDiffSlices(pages, { ...first }).slices).toBe(pages);
+    for (const changed of [
+      { ...first, headSha: "head-b" },
+      { ...first, baseSha: "base-b" },
+    ]) {
+      expect(reconcileDiffSlices(pages, changed)).toEqual({ cursor: null, slices: [changed] });
+    }
+  });
 });
 
 describe("isFileDiffCollapsed", () => {
