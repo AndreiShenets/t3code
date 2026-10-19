@@ -258,6 +258,7 @@ function PullRequestCodeTab({
   onAddToAgentSelection,
   onRefresh,
   refreshToken = 0,
+  backgroundRefreshToken = 0,
   revealRequest = null,
   onOpenFile,
 }: {
@@ -273,6 +274,7 @@ function PullRequestCodeTab({
   onAddToAgentSelection?: (input: PullRequestAgentSelectionInput) => void;
   onRefresh: () => void;
   refreshToken?: number;
+  backgroundRefreshToken?: number;
   revealRequest?: { readonly path: string; readonly nonce: number } | null;
   onOpenFile?: ((path: string) => void) | undefined;
 }) {
@@ -1434,6 +1436,12 @@ function PullRequestCodeTab({
               same one. Scrolling from a parent instead leaves it painting over its neighbours. */}
           <FileViewedToggleContext value={fileViewedToggle}>
             <StyledDiffCodeView<ReviewAnnotationGroup>
+              workspace={{
+                environmentId,
+                cwd: detail.workspaceRoot,
+                snapshot: { reference, commit: commit ?? detail.headSha ?? null },
+                mutationId: `${refreshToken}:${backgroundRefreshToken}`,
+              }}
               className="@container h-full overflow-auto [scrollbar-gutter:stable]"
               containerRef={scrollerRef}
               viewerRef={setViewer}
