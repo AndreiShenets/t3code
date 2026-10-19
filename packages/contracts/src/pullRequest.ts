@@ -81,6 +81,9 @@ export const PullRequestBaseComparison = Schema.Literals(["up-to-date", "behind"
 export type PullRequestBaseComparison = typeof PullRequestBaseComparison.Type;
 
 export const PullRequestActor = Schema.Struct({
+  reviewOutcome: Schema.optional(
+    Schema.Literals(["approved", "approved-with-suggestions", "waiting", "rejected", "none"]),
+  ),
   isBot: Schema.optional(Schema.Boolean),
   login: TrimmedNonEmptyString,
   name: Schema.NullOr(Schema.String),
@@ -237,6 +240,7 @@ export const PullRequestCommit = Schema.Struct({
 export type PullRequestCommit = typeof PullRequestCommit.Type;
 
 export const PullRequestReviewCapabilities = Schema.Struct({
+  verdictOnly: Schema.optional(Schema.Boolean),
   inlineComment: Schema.Boolean,
   reply: Schema.Boolean,
   resolve: Schema.Boolean,
@@ -272,6 +276,8 @@ export const PullRequestCapabilities = Schema.Struct({
   updateMethods: Schema.optional(Schema.Array(PullRequestUpdateMethod)),
   search: Schema.Boolean,
   reactions: Schema.optional(Schema.Boolean),
+  reactionContents: Schema.optional(Schema.Array(PullRequestReactionContent)),
+  descriptionReactions: Schema.optional(Schema.Boolean),
   viewedFiles: Schema.optional(PullRequestViewedFilesStore),
   review: PullRequestReviewCapabilities,
   reviewers: PullRequestReviewerCapabilities,
@@ -632,6 +638,8 @@ export const PullRequestOmittedFileStat = Schema.Struct({
 export type PullRequestOmittedFileStat = typeof PullRequestOmittedFileStat.Type;
 
 export const PullRequestDiffResult = Schema.Struct({
+  baseSha: Schema.optional(TrimmedNonEmptyString),
+  headSha: Schema.optional(TrimmedNonEmptyString),
   patch: Schema.String,
   /**
    * Something inside this slice could not be shown — a binary file, or a hunk the host declined
@@ -760,6 +768,8 @@ export const PullRequestReviewPosition = Schema.Union([
 export type PullRequestReviewPosition = typeof PullRequestReviewPosition.Type;
 
 export const PullRequestReviewCommentDraft = Schema.Struct({
+  baseSha: Schema.optional(TrimmedNonEmptyString),
+  headSha: Schema.optional(TrimmedNonEmptyString),
   path: TrimmedNonEmptyString,
   /**
    * GitLab resolves a position against both sides of the diff, so a comment on a renamed file
@@ -778,6 +788,21 @@ export const PullRequestSubmitReviewInput = Schema.Struct({
   comments: Schema.Array(PullRequestReviewCommentDraft),
 });
 export type PullRequestSubmitReviewInput = typeof PullRequestSubmitReviewInput.Type;
+
+export const PullRequestSubmitReviewPartialResult = Schema.Struct({
+  status: Schema.Literal("partial"),
+  postedCommentIndexes: Schema.Array(NonNegativeInt),
+  summaryPosted: Schema.Boolean,
+  outcomeUnknown: Schema.Boolean,
+  message: Schema.String,
+});
+export type PullRequestSubmitReviewPartialResult = typeof PullRequestSubmitReviewPartialResult.Type;
+// Void decodes any input to undefined, so the structured result must be tried first.
+export const PullRequestSubmitReviewResult = Schema.Union([
+  PullRequestSubmitReviewPartialResult,
+  Schema.Void,
+]);
+export type PullRequestSubmitReviewResult = typeof PullRequestSubmitReviewResult.Type;
 
 export const PullRequestThreadCommentsInput = Schema.Struct({
   ...PullRequestRef.fields,

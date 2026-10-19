@@ -96,6 +96,22 @@ az extension add --name azure-devops
 az login
 ```
 
+### JDWeb Server (custom)
+
+For Azure DevOps Server 2022 (REST API 7.0), open **Settings → Source Control → JDWeb Server (custom)**
+and enter the full collection URL, including any installation path and port. On Windows,
+**Automatic** uses the account running the T3 server through system curl, with a saved PAT as
+fallback when Windows authentication is unavailable or rejected. Choose **PAT** to always use
+the saved token; macOS and Linux need a PAT. Credentials stay on the server and apply only to
+the configured collection. Git clone, fetch and push use Git's own authentication separately.
+
+This integration supports comments, inline discussions, replies, editing your comments, and
+resolving/reopening threads. Reactions are comment likes (👍) only. **Request changes** casts
+Azure's **Waiting for author** vote; a comment-only review leaves your vote unchanged. If a PR
+changes while you draft inline comments, re-check them against the refreshed diff. If a review
+is only partly submitted, T3 keeps the unposted drafts; check the PR before retrying any write
+whose result is uncertain.
+
 ### GitCafe
 
 Install the GitCafe CLI and sign in:
@@ -191,7 +207,7 @@ for ten minutes during a GitHub outage; new credentials must be verified first. 
 an uncertain result is never automatically retried elsewhere. Listings, diffs, and checkout or
 PR creation from Git actions continue to use the project's environment.
 
-For Azure DevOps, use the host website to change comments. Bitbucket does not support reopening a
+For Azure DevOps cloud, use the host website to change comments. Bitbucket does not support reopening a
 declined pull request.
 
 ### Review guides

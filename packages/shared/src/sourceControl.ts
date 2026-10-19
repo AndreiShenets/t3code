@@ -112,6 +112,16 @@ export function resolveChangeRequestPresentation(
       return FORGEJO_CHANGE_REQUEST_PRESENTATION;
     case "azure-devops":
       return AZURE_DEVOPS_CHANGE_REQUEST_PRESENTATION;
+    case "azure-devops-custom-server":
+      return {
+        icon: "azure-devops",
+        providerName: "JDWeb Server (custom)",
+        shortName: "PR",
+        longName: "pull request",
+        pluralLongName: "pull requests",
+        providerLongName: "JDWeb Server (custom) pull request",
+        urlExample: "https://server.example/collection/project/_git/repo/pullrequest/42",
+      };
     case "bitbucket":
       return BITBUCKET_CHANGE_REQUEST_PRESENTATION;
     case "gitcafe":
@@ -217,6 +227,22 @@ export function detectSourceControlProviderFromRemoteUrl(
   }
   const hostname = parseHostName(host);
 
+  if (!isAzureDevOpsHost(hostname)) {
+    try {
+      const url = new URL(remoteUrl.trim());
+      if (
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        /^\/(?:[^/]+\/)+_git\/[^/]+\/?$/iu.test(url.pathname)
+      ) {
+        return {
+          kind: SourceControlProviderKind.make("azure-devops-custom-server"),
+          name: "JDWeb Server (custom)",
+          baseUrl: url.origin,
+        };
+      }
+    } catch {}
+  }
+
   if (isGitCafeHost(hostname)) {
     return {
       kind: SourceControlProviderKind.make("gitcafe"),
@@ -291,7 +317,7 @@ export function sourceControlRepositorySelector(
     | undefined,
 ): string | null {
   if (!identity) return null;
-  if (identity.provider === "azure-devops") {
+  if (identity.provider === "azure-devops" || identity.provider === "azure-devops-custom-server") {
     const segments = (identity.displayName ?? "").split("/").filter((part) => part !== "_git");
     return identity.name || segments.at(-1) || null;
   }
