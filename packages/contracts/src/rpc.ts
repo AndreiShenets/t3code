@@ -22,6 +22,12 @@ import {
   ChatGptHandoffState,
 } from "./providerSetup.ts";
 import * as Schema from "effect/Schema";
+import {
+  ProviderMcpError,
+  ProviderMcpTarget,
+  ProviderMcpSetEnabledInput,
+  ProviderMcpListResult,
+} from "./providerMcp.ts";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
@@ -465,6 +471,8 @@ export const WS_METHODS = {
   serverProbe: "server.probe",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
+  providerMcpList: "provider.mcp.list",
+  providerMcpSetEnabled: "provider.mcp.setEnabled",
   serverUpdateProvider: "server.updateProvider",
   serverUpdateServer: "server.updateServer",
   serverUpdateServerWithProgress: "server.updateServerWithProgress",
@@ -613,6 +621,18 @@ const WsServerUpdateProviderRpc = Rpc.make(WS_METHODS.serverUpdateProvider, {
   payload: ServerProviderUpdateInput,
   success: ServerProviderUpdatedPayload,
   error: Schema.Union([ServerProviderUpdateError, EnvironmentAuthorizationError]),
+});
+
+const WsProviderMcpListRpc = Rpc.make(WS_METHODS.providerMcpList, {
+  payload: ProviderMcpTarget,
+  success: ProviderMcpListResult,
+  error: Schema.Union([ProviderMcpError, EnvironmentAuthorizationError]),
+});
+
+const WsProviderMcpSetEnabledRpc = Rpc.make(WS_METHODS.providerMcpSetEnabled, {
+  payload: ProviderMcpSetEnabledInput,
+  success: ProviderMcpListResult,
+  error: Schema.Union([ProviderMcpError, EnvironmentAuthorizationError]),
 });
 
 const ProviderSetupRpcError = Schema.Union([ProviderSetupError, EnvironmentAuthorizationError]);
@@ -1856,6 +1876,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
+  WsProviderMcpListRpc,
+  WsProviderMcpSetEnabledRpc,
   WsServerUpdateProviderRpc,
   WsProviderConsumeResetCreditRpc,
   WsProviderAuthStartRpc,
