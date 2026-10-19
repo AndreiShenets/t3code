@@ -72,7 +72,8 @@ const RATES_REFRESH_FLOOR_MS = 60 * 1000;
  * last write lands just before local midnight on the window's first day.
  */
 const MTIME_SLACK_MS = 36 * 60 * 60 * 1000;
-const MAX_HOURLY_WINDOW_MS = 24 * 60 * 60 * 1000;
+// A calendar day can span 25 hours when daylight saving time ends.
+const MAX_HOURLY_WINDOW_MS = 25 * 60 * 60 * 1000;
 
 const CACHE_RETENTION_DAYS = 92;
 
@@ -656,7 +657,7 @@ export const make = Effect.gen(function* () {
       if (durationMs <= 0 || durationMs > MAX_HOURLY_WINDOW_MS) {
         return yield* new UsageReadError({
           reason: "invalidWindow",
-          detail: "Hourly usage window must be greater than zero and at most 24 hours",
+          detail: "Hourly usage window must be greater than zero and at most 25 hours",
         });
       }
       hourlyWindow = { sinceTimeMs, untilTimeMs };

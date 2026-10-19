@@ -18,6 +18,27 @@ class TestElement extends EventTarget {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Usage shortcuts while typing", () => {
+  it.each([
+    ["1", "usage.period.today"],
+    ["2", "usage.period.day"],
+    ["3", "usage.period.week"],
+    ["4", "usage.period.month"],
+    ["5", "usage.period.quarter"],
+  ])("maps mod+shift+%s to %s", (key, command) => {
+    vi.stubGlobal("HTMLElement", TestElement);
+    vi.stubGlobal("navigator", { platform: "Linux" });
+    const event = {
+      key,
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
+      target: new TestElement("BODY"),
+    };
+
+    expect(resolveUsageShortcut(event, DEFAULT_RESOLVED_KEYBINDINGS)).toBe(command);
+  });
+
   it.each([new TestElement("INPUT"), new TestElement("TEXTAREA"), new TestElement("DIV", true)])(
     "leaves letters to the focused $tagName field",
     (target) => {
