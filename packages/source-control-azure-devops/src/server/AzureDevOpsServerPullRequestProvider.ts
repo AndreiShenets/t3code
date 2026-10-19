@@ -16,6 +16,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as Client from "./AzureDevOpsServerClient.ts";
 import * as Json from "./azureDevOpsServerJson.ts";
+import * as Viewed from "./azureDevOpsServerViewedFiles.ts";
 import {
   azureDevOpsFilePatch,
   azureDevOpsUnreadableFilePatch,
@@ -56,7 +57,7 @@ const CAPABILITIES: PullRequestCapabilities = {
   },
   reviewers: { request: false, listCandidates: false },
   edit: { changeRequest: true, comment: true },
-  viewedFiles: "environment",
+  viewedFiles: "host",
 };
 const PERMISSIONS: PullRequestViewerPermissions = {
   actions: CAPABILITIES.actions,
@@ -85,6 +86,7 @@ function failure(operation: string, detail: string) {
 export const make = Effect.gen(function* () {
   const client = yield* Client.AzureDevOpsServerClient;
   const fileReads = yield* Semaphore.make(8);
+  const viewedWrites = new Map<string, { readonly gate: Semaphore.Semaphore; pending: number }>();
 
   const request = (input: Parameters<typeof client.request>[0]) =>
     client.request(input).pipe(
@@ -268,6 +270,83 @@ export const make = Effect.gen(function* () {
       failure(operation, "This action is not supported by this Azure DevOps Server integration."),
     );
 
+  const viewedScope = (input: Request) =>
+    Effect.gen(function* () {
+      const { context, raw } = yield* readPr(input);
+      const projectId = raw.repository.project?.id;
+      if (!projectId)
+        return yield* failure(
+          "filesViewed",
+          "Azure DevOps Server omitted the project identity needed for native viewed-file tracking.",
+        );
+      const iteration = (yield* iterations(input, context)).at(-1);
+      const listed = iteration
+        ? yield* changes(input, context, iteration)
+        : { entries: [], truncated: false };
+      const url = `${context.collectionUrl}/_apis/Contribution/HierarchyQuery/project/${encode(projectId)}?api-version=7.0-preview.1`;
+      const query = (modifications: Readonly<Record<string, unknown>> = {}) =>
+        request({
+          cwd: input.cwd,
+          url,
+          method: "POST",
+          body: {
+            contributionIds: [Viewed.VIEWED_PROVIDER_ID],
+            dataProviderContext: {
+              properties: {
+                repositoryId: raw.repository.id,
+                pullRequestId: input.number,
+                ...modifications,
+              },
+            },
+          },
+        }).pipe(
+          Effect.flatMap((data) => decode(Viewed.ViewedResponse, data)),
+          Effect.filterOrFail(
+            (data) =>
+              Object.keys(data.dataProviderExceptions ?? {}).length === 0 &&
+              Object.keys(data.exceptions ?? {}).length === 0,
+            () =>
+              failure(
+                "filesViewed",
+                "Azure DevOps Server could not supply its native viewed-file state.",
+              ),
+          ),
+        );
+      const hashes = () =>
+        query().pipe(
+          Effect.flatMap((data) => {
+            const state = data.dataProviders[Viewed.VIEWED_PROVIDER_ID].visit.viewedState;
+            return state === null || state === ""
+              ? Effect.succeed({} as Readonly<Record<string, 2>>)
+              : decode(Viewed.ViewedStateJson, state).pipe(Effect.map((value) => value.hashes));
+          }),
+        );
+      return { context, raw, projectId, listed, query, hashes };
+    });
+
+  const inViewedOrder = (
+    input: Request,
+    operation: Effect.Effect<void, PullRequestProviderError>,
+  ) =>
+    Effect.suspend(() => {
+      const key = [input.host.toLowerCase(), input.repository.toLowerCase(), input.number].join(
+        "\0",
+      );
+      const entry = viewedWrites.get(key) ?? { gate: Semaphore.makeUnsafe(1), pending: 0 };
+      viewedWrites.set(key, entry);
+      entry.pending += 1;
+      return entry.gate
+        .withPermits(1)(operation)
+        .pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              entry.pending -= 1;
+              if (entry.pending === 0) viewedWrites.delete(key);
+            }),
+          ),
+        );
+    });
+
   const provider: PullRequestProviderApi = {
     kind: KIND,
     capabilities: CAPABILITIES,
@@ -434,21 +513,111 @@ export const make = Effect.gen(function* () {
           oldPath: input.oldPath,
         });
       }),
-    getFileRevisions: (input) =>
+    getFilesViewed: (input) =>
       Effect.gen(function* () {
-        const context = yield* resolve(input);
-        const iteration = (yield* iterations(input, context)).at(-1);
-        const revisions = new Map<string, string>();
-        if (!iteration) return { revisions };
-        const listed = yield* changes(input, context, iteration);
-        const entries = listed.entries.map(Json.changeEntry);
-        for (const path of input.paths) {
-          const entry = entries.find((change) => change.path === path);
-          if (entry?.objectId) revisions.set(path, entry.objectId);
-          else if (!listed.truncated) revisions.set(path, "");
-        }
-        return { revisions };
+        const scope = yield* viewedScope(input);
+        return Viewed.viewedFiles(
+          scope.listed.entries,
+          yield* scope.hashes(),
+          scope.listed.truncated,
+        );
       }),
+    setFilesViewed: (input) =>
+      input.files.length === 0
+        ? Effect.void
+        : inViewedOrder(
+            input,
+            Effect.gen(function* () {
+              const scope = yield* viewedScope(input);
+              const requested = new Map(input.files.map((file) => [file.path, file.viewed]));
+              const candidates = new Map<string, Json.Change | null>();
+              for (const entry of scope.listed.entries) {
+                const path = entry.item.path.slice(1);
+                candidates.set(path, candidates.has(path) ? null : entry);
+              }
+              const prepared: Array<{
+                readonly path: string;
+                readonly token: string;
+                readonly viewed: boolean;
+              }> = [];
+              for (const [path, viewed] of requested) {
+                const change = candidates.get(path);
+                const token = change ? Viewed.viewedToken(change) : null;
+                if (!token)
+                  return yield* failure(
+                    "setFilesViewed",
+                    "Native viewed-file tracking is unavailable for a requested file. Refresh the PR; no viewed marks were changed.",
+                  );
+                prepared.push({ path: `/${path}`, token, viewed });
+              }
+              const before = yield* scope.hashes();
+              const mark = prepared.filter((file) => file.viewed).map((file) => file.token);
+              const unmark = [
+                ...new Set(
+                  prepared
+                    .filter((file) => !file.viewed)
+                    .flatMap((file) => Viewed.unviewTokens(file.path, file.token, before)),
+                ),
+              ];
+              const update = (tokens: ReadonlyArray<string>, status: 1 | 2) =>
+                scope.query({
+                  projectId: scope.projectId,
+                  modifyHashes: tokens,
+                  modifyViewedStatus: status,
+                  sourcePage: {
+                    url: `${scope.context.repositoryUrl}/pullrequest/${input.number}?_a=files`,
+                    routeId: "ms.vss-code-web.pull-request-details-route",
+                    routeValues: {
+                      project: scope.context.project,
+                      GitRepositoryName: scope.raw.repository.name,
+                      parameters: String(input.number),
+                      vctype: "git",
+                      controller: "ContributedPage",
+                      action: "Execute",
+                    },
+                  },
+                });
+              let updated = false;
+              yield* Effect.gen(function* () {
+                if (mark.length) {
+                  yield* update(mark, 2);
+                  updated = true;
+                }
+                if (unmark.length) {
+                  yield* update(unmark, 1);
+                  updated = true;
+                }
+                // The Contribution write response can contain the old state even after a successful update.
+                const after = yield* scope.hashes();
+                if (
+                  mark.some((token) => after[token] !== 2) ||
+                  unmark.some((token) => after[token] === 2)
+                ) {
+                  return yield* failure(
+                    "setFilesViewed",
+                    "Azure DevOps Server did not confirm the requested viewed-file state.",
+                  );
+                }
+              }).pipe(
+                Effect.mapError((cause) => {
+                  if (
+                    !updated &&
+                    isServerError(cause.cause) &&
+                    (cause.cause.outcome === "not-sent" || cause.cause.outcome === "rejected")
+                  )
+                    return cause;
+                  return new PullRequestProviderError({
+                    provider: KIND,
+                    operation: "setFilesViewed",
+                    reason: cause.reason,
+                    detail:
+                      "The native viewed-file update could not be fully confirmed. Some marks may have changed; refresh the PR before retrying. No requests were replayed.",
+                    cause,
+                  });
+                }),
+              );
+            }),
+          ),
     runAction: (input) =>
       Effect.gen(function* () {
         const { context, raw } = yield* readPr(input);

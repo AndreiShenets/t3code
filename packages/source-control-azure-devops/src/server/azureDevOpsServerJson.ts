@@ -46,6 +46,7 @@ export const PullRequest = Schema.Struct({
     id: Schema.String,
     name: Schema.String,
     webUrl: Schema.optional(Schema.String),
+    project: Schema.optional(Schema.Struct({ id: Schema.String })),
   }),
 });
 
