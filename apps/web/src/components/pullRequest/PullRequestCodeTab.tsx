@@ -37,7 +37,7 @@ import {
 } from "react";
 
 import { useLocalStorage } from "~/hooks/useLocalStorage";
-import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
+import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
 import { areAllDiffFilesCollapsed } from "~/lib/diffCollapse";
 import { pullRequestFindingKey, type PullRequestFinding } from "./pullRequestDetail.logic";
@@ -106,6 +106,7 @@ import {
 } from "./pullRequestDiff.logic";
 import type { PullRequestViewStateStore } from "./pullRequestViewState";
 import { PullRequestDiffStat, PullRequestMetaLine } from "./pullRequestPresentation";
+import { PullRequestDiffUnavailableState } from "./PullRequestDiffUnavailableState";
 import { usePullRequestFilesViewed } from "./usePullRequestFilesViewed";
 import {
   nextPendingReviewCommentId,
@@ -291,7 +292,6 @@ function PullRequestCodeTab({
   const effectiveFoldOverride =
     foldOverride ?? (settings.diffFilesCollapsed ? "folded" : "expanded");
   const diffLayout = settings.diffLayout;
-  const updateClientSettings = useUpdateClientSettings();
   const [wordWrap, setWordWrap] = useState(savedCode?.wordWrap ?? settings.wordWrap);
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(
     savedCode?.ignoreWhitespace ?? settings.diffIgnoreWhitespace,
@@ -1365,7 +1365,12 @@ function PullRequestCodeTab({
 
   if (diffQuery.error && loadedSlices.length === 0) {
     return withToolbar(
-      <p className="px-4 py-5 text-sm text-muted-foreground">{diffQuery.error}</p>,
+      <PullRequestDiffUnavailableState
+        error={diffQuery.error}
+        provider={detail.provider}
+        url={detail.url}
+        onRetry={() => diffQuery.refresh()}
+      />,
     );
   }
 
