@@ -4,11 +4,12 @@ import type {
   FileDiffMetadata,
   SelectedLineRange,
 } from "@pierre/diffs";
-import { FileDiff } from "@pierre/diffs/react";
+import { FileDiff, type FileDiffOptions } from "@pierre/diffs/react";
 import type { PullRequestReviewGuideExcerpt, PullRequestReviewPosition } from "@t3tools/contracts";
 import { ArrowUpRightIcon } from "lucide-react";
-import { useState } from "react";
+import { useContext, useState } from "react";
 
+import { useCodeDisplay } from "~/hooks/useCodeDisplay";
 import { useTheme } from "~/hooks/useTheme";
 import {
   getRenderablePatch,
@@ -38,7 +39,7 @@ import {
   rowsToPatch,
 } from "@t3tools/client-runtime/review-guide-tour";
 import { GuideNoteMarker } from "./GuideNotes";
-import { GuideProse } from "./GuideProse";
+import { GuideProse, GuideProseContext } from "./GuideProse";
 import { guideDiffSnapshot } from "./useGuideDiffFiles";
 
 const EXCERPT_UNSAFE_CSS = `${DIFF_VIEW_UNSAFE_CSS}
@@ -208,6 +209,8 @@ function ExcerptDiff({
   onOpenFile: (path: string) => void;
 }) {
   const { resolvedTheme } = useTheme();
+  const workspace = useContext(GuideProseContext);
+  const { onPostRender: onCodePostRender } = useCodeDisplay(workspace, [excerpt.path]);
   const loadExcerptFiles = excerptLoader(excerpt, slice.rows, loadDiffFiles);
 
   const annotations = (() => {
@@ -279,7 +282,7 @@ function ExcerptDiff({
     if (comment !== null) onAskAgent(comment, request);
   };
 
-  const options = {
+  const options: FileDiffOptions<ExcerptAnnotation, undefined> = {
     diffStyle: "unified" as const,
     lineDiffType: "none" as const,
     overflow: "scroll" as const,
@@ -287,6 +290,7 @@ function ExcerptDiff({
     themeType: resolvedTheme,
     preferredHighlighter: PREFERRED_HIGHLIGHTER,
     unsafeCSS: EXCERPT_UNSAFE_CSS,
+    onPostRender: (container, _instance, phase) => onCodePostRender(container, excerpt.path, phase),
     enableGutterUtility: interactive,
     enableLineSelection: interactive,
     onGutterUtilityClick: beginComment,
