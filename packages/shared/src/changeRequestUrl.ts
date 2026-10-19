@@ -3,8 +3,8 @@ import { canonicalRepositoryKey } from "./sourceControl.ts";
 
 /**
  * The two strings are what `pullRequestHostOf` and the project's `repositoryIdentity` produce
- * from a git remote — lower case, no port, the full path below the host — because links are
- * matched against those. Anything else matches nothing.
+ * from a git remote — lower case, the full path below the host. Self-hosted installations
+ * also carry their HTTP authority so different ports never name the same repository.
  */
 export interface ChangeRequestLink {
   readonly host: string;
@@ -27,6 +27,17 @@ export function parseChangeRequestUrl(targetUrl: string): ChangeRequestLink | nu
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
   const host = url.hostname.toLowerCase();
+
+  // This recognizes a route, not a trusted server or a destination for credentials.
+  if (!isHostOf(host, "dev.azure.com") && !host.endsWith(".visualstudio.com")) {
+    const azureServer = /^\/((?:[^/]+\/)+_git\/[^/]+)\/pullrequest\/(\d+)(?:\/|$)/iu.exec(
+      url.pathname,
+    );
+    if (azureServer) {
+      const link = claim(host, azureServer);
+      return link === null ? null : { ...link, authority: url.host.toLowerCase() };
+    }
+  }
 
   if (host === "git.cafe" || host === "staging.git.cafe") {
     const match = /^\/([^/]+\/[^/]+)\/pulls\/(\d+)(?:\/|$)/u.exec(url.pathname);
@@ -95,6 +106,18 @@ export function changeRequestUrlFor(
       return `https://${host}/${repository}/pull-requests/${number}`;
     case "azure-devops":
       return `https://${canonicalRepositoryKey(`${host}/${repository}`.toLowerCase())}/pullrequest/${number}`;
+    case "azure-devops-custom-server": {
+      try {
+        const remote = new URL(remoteUrl ?? "");
+        if (
+          (remote.protocol === "http:" || remote.protocol === "https:") &&
+          (remote.host.toLowerCase() === host.toLowerCase() ||
+            remote.hostname.toLowerCase() === host.toLowerCase())
+        )
+          return `${remote.origin}/${repository}/pullrequest/${number}`;
+      } catch {}
+      return `https://${host}/${repository}/pullrequest/${number}`;
+    }
     default:
       return null;
   }

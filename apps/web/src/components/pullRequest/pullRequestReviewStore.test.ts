@@ -13,7 +13,7 @@ function comment(id: string, body = id): PendingReviewComment {
 
 describe("pull request review drafts", () => {
   beforeEach(() => {
-    usePullRequestReviewStore.setState({ drafts: {}, summaries: {} });
+    usePullRequestReviewStore.setState({ drafts: {}, summaries: {}, uncertain: {} });
   });
 
   it("removes only the line comments included in a submitted snapshot", () => {
@@ -28,6 +28,30 @@ describe("pull request review drafts", () => {
     expect(usePullRequestReviewStore.getState().drafts["review-a"]).toEqual([
       comment("added-in-flight"),
     ]);
+  });
+
+  it("retains unacknowledged and in-flight drafts after partial submission until explicit acknowledgement", () => {
+    const store = usePullRequestReviewStore.getState();
+    const first = { ...comment("first"), headSha: "rendered-head", baseSha: "rendered-base" };
+    const second = comment("second");
+    store.addComment("a", first);
+    store.addComment("a", second);
+    store.setSummary("a", "summary");
+    const snapshot = usePullRequestReviewStore.getState().drafts.a!;
+    store.addComment("a", comment("new"));
+    store.setSummary("a", "new summary");
+    store.applySubmission("a", snapshot, "summary", {
+      status: "partial",
+      postedCommentIndexes: [0],
+      summaryPosted: true,
+      outcomeUnknown: true,
+      message: "Vote failed",
+    });
+    expect(usePullRequestReviewStore.getState().drafts.a).toEqual([second, comment("new")]);
+    expect(usePullRequestReviewStore.getState().summaries.a).toBe("new summary");
+    expect(usePullRequestReviewStore.getState().uncertain.a).toBe(true);
+    store.acknowledge("a");
+    expect(usePullRequestReviewStore.getState().uncertain.a).toBe(false);
   });
 
   it("keeps summary bodies isolated by review key", () => {
