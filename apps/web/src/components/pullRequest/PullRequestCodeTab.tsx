@@ -1479,7 +1479,7 @@ function PullRequestCodeTab({
                 environmentId,
                 cwd: detail.workspaceRoot,
                 snapshot: { reference, commit: commit ?? detail.headSha ?? null },
-                mutationId: String(refreshToken),
+                mutationId: `${refreshToken}:${backgroundRefreshToken}`,
               }}
               className="@container h-full overflow-auto [scrollbar-gutter:stable]"
               containerRef={scrollerRef}
