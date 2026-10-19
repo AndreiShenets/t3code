@@ -1905,10 +1905,11 @@ export const preflightMacDesktopBuild = Effect.fn("preflightMacDesktopBuild")(fu
 });
 
 function windowsVswherePrerequisiteScript(arch: typeof BuildArch.Type): string {
+  // VS can register a versioned toolset instead of the rolling VC.Tools component.
   const toolComponents =
     arch === "arm64"
-      ? ["Microsoft.VisualStudio.Component.VC.Tools.ARM64"]
-      : ["Microsoft.VisualStudio.Component.VC.Tools.x86.x64"];
+      ? ["Microsoft.VisualStudio.Component.VC.*.ARM64"]
+      : ["Microsoft.VisualStudio.Component.VC.*.x86.x64"];
   const spectreArch = arch === "arm64" ? "arm64" : "x64";
   return [
     "$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\\Installer\\vswhere.exe'",
