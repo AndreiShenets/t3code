@@ -42,6 +42,7 @@ import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Config from "effect/Config";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -866,6 +867,16 @@ const resolveGitCommitHash = Effect.fn("resolveGitCommitHash")(function* (repoRo
   return hash.toLowerCase();
 });
 
+export function customBuildMetadataFromBranch(branch: string, builtAt: string) {
+  const match = /^custom_builds\/(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})$/.exec(branch.trim());
+  return match
+    ? {
+        t3codeCustomBuildStamp: match.slice(1).join(""),
+        t3codeCustomBuildTimestamp: builtAt,
+      }
+    : undefined;
+}
+
 const resolvePythonForNodeGyp = Effect.fn("resolvePythonForNodeGyp")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -946,6 +957,8 @@ interface StagePackageJson {
   readonly version: string;
   readonly buildVersion: string;
   readonly t3codeCommitHash: string;
+  readonly t3codeCustomBuildStamp?: string;
+  readonly t3codeCustomBuildTimestamp?: string;
   readonly t3codeWebAuthn?: MacWebAuthnEntitlements;
   readonly private: true;
   readonly packageManager: string;
@@ -1896,10 +1909,11 @@ export const preflightMacDesktopBuild = Effect.fn("preflightMacDesktopBuild")(fu
 });
 
 function windowsVswherePrerequisiteScript(arch: typeof BuildArch.Type): string {
+  // VS can register a versioned toolset instead of the rolling VC.Tools component.
   const toolComponents =
     arch === "arm64"
-      ? ["Microsoft.VisualStudio.Component.VC.Tools.ARM64"]
-      : ["Microsoft.VisualStudio.Component.VC.Tools.x86.x64"];
+      ? ["Microsoft.VisualStudio.Component.VC.*.ARM64"]
+      : ["Microsoft.VisualStudio.Component.VC.*.x86.x64"];
   const spectreArch = arch === "arm64" ? "arm64" : "x64";
   return [
     "$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\\Installer\\vswhere.exe'",
@@ -2690,6 +2704,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     | undefined,
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
+  customBuild = false,
 ) {
   const buildConfig: Record<string, unknown> = {
     appId: DESKTOP_APP_ID,
@@ -2727,7 +2742,15 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   // against, so writing update manifests then crashes on a null config.
   buildConfig.publish = null;
   if (!isDesktopPreviewVersion(version)) {
-    const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
+    const publishConfig = customBuild
+      ? {
+          provider: "github",
+          owner: "pingdotgg",
+          repo: "t3code",
+          releaseType: "prerelease",
+          channel: "nightly",
+        }
+      : yield* resolveGitHubPublishConfig(updateChannel);
     if (publishConfig) {
       buildConfig.publish = [publishConfig];
     } else if (mockUpdates) {
@@ -3512,6 +3535,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const appVersion = options.version ?? serverPackageJson.version;
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
+  const branch = yield* spawnAndCollectOutput(
+    ChildProcess.make("git", ["branch", "--show-current"], { cwd: repoRoot }),
+  ).pipe(Effect.orElseSucceed(() => ({ stdout: "" })));
+  const customBuildMetadata = customBuildMetadataFromBranch(
+    branch.stdout,
+    DateTime.formatIso(yield* DateTime.now),
+  );
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
     prefix: `t3code-desktop-${options.platform}-stage-`,
@@ -3742,6 +3772,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
+    ...customBuildMetadata,
     // Read by apps/desktop/src/preview/Passkeys.ts; must match the signed entitlements.
     ...(macWebAuthn ? { t3codeWebAuthn: macWebAuthn } : {}),
     private: true,
@@ -3767,6 +3798,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         : undefined,
       bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
       options.arch,
+      customBuildMetadata !== undefined,
     ),
     dependencies: stageDependencies,
     devDependencies: {
