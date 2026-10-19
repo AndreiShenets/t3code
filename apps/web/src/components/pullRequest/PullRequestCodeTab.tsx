@@ -72,6 +72,7 @@ import { DiffFileTree } from "../diffs/DiffFileTree";
 import { DiffFileHeaderActions } from "../diffs/DiffFileHeaderActions";
 import { diffHeaderTogglePath } from "../diffs/diffHeaderInteraction";
 import { useCodeViewFileReveal } from "../diffs/useCodeViewFileReveal";
+import { useDiffSearchShortcut } from "../diffs/useDiffSearchShortcut";
 import { diffFileTreeEntries } from "../diffs/diffFileTree.logic";
 import { StyledDiffCodeView } from "../diffs/StyledDiffCodeView";
 import { Button } from "../ui/button";
@@ -309,6 +310,7 @@ function PullRequestCodeTab({
   const [viewer, setViewer] = useState<CodeViewHandle<ReviewAnnotationGroup, undefined> | null>(
     null,
   );
+  useDiffSearchShortcut(viewer);
 
   const referenceKey = pullRequestReviewKey(reference);
   const commit = selectedCommitOid;
