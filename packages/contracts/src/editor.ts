@@ -1,7 +1,12 @@
 import * as Schema from "effect/Schema";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
-export const EditorLaunchStyle = Schema.Literals(["direct-path", "goto", "line-column"]);
+export const EditorLaunchStyle = Schema.Literals([
+  "direct-path",
+  "goto",
+  "line-column",
+  "visual-studio",
+]);
 export type EditorLaunchStyle = typeof EditorLaunchStyle.Type;
 
 type EditorDefinition = {
@@ -145,6 +150,12 @@ export const EDITORS = [
     commands: ["webstorm"],
     launchStyle: "line-column",
     jetbrainsProductCode: "WS",
+  },
+  {
+    id: "visual-studio",
+    label: "Visual Studio",
+    commands: ["devenv.exe"],
+    launchStyle: "visual-studio",
   },
   { id: "file-manager", label: "File Manager", commands: null, launchStyle: "direct-path" },
 ] as const satisfies ReadonlyArray<EditorDefinition>;
