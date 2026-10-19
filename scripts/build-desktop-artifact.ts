@@ -25,11 +25,7 @@ import gnomeCaptureBundle from "../apps/desktop/gnome-extension/bundle.json" wit
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
 import { applyWebBrandAssets } from "./apply-web-brand-assets.ts";
-import {
-  BRAND_ASSET_PATHS,
-  resolveWebAssetBrandForChannel,
-  type WebAssetBrand,
-} from "./lib/brand-assets.ts";
+import { BRAND_ASSET_PATHS, type WebAssetBrand } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import {
   findInlinedExternalPackages,
@@ -2645,23 +2641,15 @@ export function isDesktopPreviewVersion(version: string): boolean {
   return /-pr\./.test(version) || /-preview\.\d{8}\.\d+$/.test(version);
 }
 
-export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
-  return resolveWebAssetBrandForChannel(resolveDesktopUpdateChannel(version));
+export function resolveDesktopWebAssetBrand(_version: string): WebAssetBrand {
+  return "nightly";
 }
 
-export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
-  if (resolveDesktopUpdateChannel(version) === "nightly") {
-    return {
-      macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
-      linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
-      windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
-    };
-  }
-
+export function resolveDesktopBuildIconAssets(_version: string): DesktopBuildIconAssets {
   return {
-    macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
-    linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
-    windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
+    macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
+    linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
+    windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
   };
 }
 
@@ -2682,10 +2670,8 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
   return `${trimmed.slice(0, versionSeparator)}/${trimmed.slice(versionSeparator + 1)}`;
 }
 
-export function resolveDesktopProductName(version: string): string {
-  return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "T3 Code (Nightly)"
-    : (desktopPackageJson.productName ?? "T3 Code");
+export function resolveDesktopProductName(_version: string): string {
+  return "T3 Code (Nightly)";
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -2814,7 +2800,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       // DMG window backgrounds by volume name, so reusing a generic name can
       // make a newly built background look unchanged during testing.
       title: `${resolveDesktopProductName(version)} ${version} Installer`,
-      background: `dmg/dmg-background-${updateChannel}.png`,
+      background: "dmg/dmg-background-nightly.png",
       window: {
         width: 640,
         // The DMG backend derives bounds from the image, including Finder's
@@ -3660,11 +3646,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     }
   }
   if (options.platform === "mac" && options.target === "dmg") {
-    yield* stageDesktopDmgBackground(
-      stageResourcesDir,
-      resolveDesktopUpdateChannel(appVersion),
-      options.verbose,
-    );
+    yield* stageDesktopDmgBackground(stageResourcesDir, "nightly", options.verbose);
   }
   if (options.platform !== "win") {
     yield* fs.copy(distDirs.serverDist, path.join(stageAppDir, "apps/server/dist"));
