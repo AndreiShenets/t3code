@@ -28,6 +28,8 @@ export interface MakeDesktopEnvironmentInput {
   readonly isPackaged: boolean;
   readonly resourcesPath: string;
   readonly runningUnderArm64Translation: boolean;
+  readonly customBuildStamp?: string;
+  readonly customBuildTimestamp?: string;
 }
 
 export class DesktopEnvironment extends Context.Service<
@@ -40,6 +42,8 @@ export class DesktopEnvironment extends Context.Service<
     readonly isPackaged: boolean;
     readonly isDevelopment: boolean;
     readonly appVersion: string;
+    readonly customBuildStamp: string | null;
+    readonly customBuildTimestamp: string | null;
     readonly appPath: string;
     readonly resourcesPath: string;
     readonly homeDirectory: string;
@@ -192,6 +196,8 @@ const make = Effect.fn("desktop.environment.make")(function* (
     isPackaged: input.isPackaged,
     isDevelopment,
     appVersion: input.appVersion,
+    customBuildStamp: input.customBuildStamp ?? null,
+    customBuildTimestamp: input.customBuildTimestamp ?? null,
     appPath: input.appPath,
     resourcesPath,
     homeDirectory,
@@ -234,7 +240,10 @@ const make = Effect.fn("desktop.environment.make")(function* (
     linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",
     linuxApplicationsDir,
     appImagePath: config.appImagePath,
-    defaultDesktopSettings: DesktopAppSettings.resolveDefaultDesktopSettings(input.appVersion),
+    defaultDesktopSettings: {
+      ...DesktopAppSettings.resolveDefaultDesktopSettings(input.appVersion),
+      ...(input.customBuildStamp ? { updateChannel: "nightly" as const } : {}),
+    },
     runtimeInfo: resolveDesktopRuntimeInfo({
       platform: input.platform,
       processArch: input.processArch,
