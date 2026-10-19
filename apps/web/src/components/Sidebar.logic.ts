@@ -1,5 +1,4 @@
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import * as React from "react";
 import {
@@ -1140,7 +1139,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (backgroundWorkHoldsCompletion(thread.pendingBackgroundTasks ?? [])) {
+  if ((thread.pendingBackgroundTasks?.length ?? 0) > 0) {
     return {
       label: "Waiting",
       colorClass: "text-sidebar-muted-foreground",
