@@ -261,6 +261,57 @@ function cursorSource(summary: { readonly sources: readonly UsageSource[] }) {
 }
 
 describe("UsageService", () => {
+  it.live("accepts hourly Today windows longer than 24 hours on a fall-back day", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      yield* Effect.promise(async () => {
+        await NodeFSP.writeFile(
+          transcript,
+          [
+            "2026-11-01T03:59:59Z",
+            "2026-11-01T04:00:00Z",
+            "2026-11-01T05:15:00Z",
+            "2026-11-01T06:15:00Z",
+            "2026-11-02T04:15:00Z",
+            "2026-11-02T04:30:00Z",
+          ]
+            .map((instant, index) => claudeLine(index, 5).replace("2026-08-01T10:00:00Z", instant))
+            .join(""),
+        );
+        const lastWrite = Date.parse("2026-11-02T04:30:00Z") / 1000;
+        await NodeFSP.utimes(transcript, lastWrite, lastWrite);
+      });
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(layerService({ prefix: "usage-service-today-dst-test", home, settings })),
+      );
+      const input: UsageSummaryInput = {
+        timeZone: "America/New_York",
+        sinceDay: UsageDay.make("2026-11-01"),
+        untilDay: UsageDay.make("2026-11-01"),
+        resolution: "hour",
+        sinceTime: "2026-11-01T04:00:00.000Z",
+        untilTime: "2026-11-02T04:30:00.000Z",
+      };
+      const summary = yield* service.readSummary(input);
+
+      assert.deepStrictEqual(
+        summary.buckets.map((bucket) => bucket.hourStart),
+        [
+          "2026-11-01T04:00:00.000Z",
+          "2026-11-01T05:00:00.000Z",
+          "2026-11-01T06:00:00.000Z",
+          "2026-11-02T04:00:00.000Z",
+        ],
+      );
+      assert.strictEqual(totalOutputTokens(summary), 20);
+
+      const invalid = yield* service
+        .readSummary({ ...input, untilTime: "2026-11-02T06:00:00.000Z" })
+        .pipe(Effect.flip);
+      assert.strictEqual(invalid.reason, "invalidWindow");
+    }).pipe(Effect.scoped),
+  );
+
   it.live(
     "reads Pi per-model usage and auxiliary costs once across forks and repeated entries",
     () =>
