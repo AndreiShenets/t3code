@@ -96,6 +96,13 @@ export function usePullRequestDiff(params: PullRequestDiffParams) {
     refresh,
     parsed,
     patch,
+    snapshotForPath: (path: string) => {
+      const page = pages.find((page) => {
+        const parsed = parseCache.get(page.result);
+        return parsed?.kind === "files" && parsed.files.some((file) => file.path === path);
+      });
+      return page?.result;
+    },
     nextCursor,
     canLoadMore,
     loadMore,

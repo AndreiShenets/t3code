@@ -1,6 +1,7 @@
 import { useAtomCommand } from "~/state/use-atom-command";
 import type {
   EnvironmentId,
+  PullRequestCapabilities,
   PullRequestActor,
   PullRequestComment,
   PullRequestDetailView,
@@ -51,6 +52,7 @@ import {
 import { PullRequestGlyph } from "./pullRequestIcons";
 
 interface ReactionSurface {
+  readonly capabilities: PullRequestCapabilities;
   readonly canReact: boolean;
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef | null;
@@ -243,6 +245,7 @@ function ConversationCard({
               className="ml-auto justify-end"
               reactions={event.reactions}
               canReact={reactions.canReact}
+              capabilities={reactions.capabilities}
               subjectId={event.id}
               environmentId={reactions.environmentId}
               reference={reactions.reference}
@@ -504,6 +507,7 @@ function ReviewVerdictEvent({
             className="ml-auto justify-end"
             reactions={event.reactions}
             canReact={reactions.canReact}
+            capabilities={reactions.capabilities}
             subjectId={event.id}
             environmentId={reactions.environmentId}
             reference={reactions.reference}
@@ -547,6 +551,7 @@ export function PullRequestTimelineTab({
   const events = buildPullRequestTimeline(detail);
   const newestCommitAt = newestPullRequestCommitAt(detail.commits);
   const reactions: ReactionSurface = {
+    capabilities: detail.capabilities,
     canReact: detail.capabilities.reactions === true,
     environmentId,
     threadRef,
