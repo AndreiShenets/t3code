@@ -447,13 +447,9 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
   };
 
   const [mcpRequest, setMcpRequest] = useState<McpManagementRequest | null>(null);
-  const mcpTarget = useMemo(
-    () =>
-      props.projectCwd
-        ? { instanceId: currentModelSelection.instanceId, cwd: props.projectCwd }
-        : null,
-    [currentModelSelection.instanceId, props.projectCwd],
-  );
+  const mcpTarget = props.projectCwd
+    ? { instanceId: currentModelSelection.instanceId, cwd: props.projectCwd }
+    : null;
   const composerMenu = useComposerCommandMenu({
     draftMessage: draftMessage,
     ownerKey: composerDraftKey,
