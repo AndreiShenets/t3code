@@ -101,6 +101,13 @@ import { ComposerCommandPopover } from "./ComposerCommandPopover";
 import { ComposerPopoverAnchor } from "./ComposerPopoverAnchor";
 import { ComposerQueuedEditAttachments } from "./ComposerQueuedEdit";
 import { useComposerCommandMenu } from "./use-composer-command-menu";
+import { ComposerMcpSheet } from "./ComposerMcpSheet";
+import {
+  MCP_COMMAND_USAGE,
+  parseMcpCommand,
+  supportsMcpManagement,
+  type McpManagementRequest,
+} from "@t3tools/client-runtime/mcpCommands";
 import {
   ComposerDictationCancelAction,
   ComposerDictationDraftContent,
@@ -439,6 +446,10 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     return report !== null;
   };
 
+  const [mcpRequest, setMcpRequest] = useState<McpManagementRequest | null>(null);
+  const mcpTarget = props.projectCwd
+    ? { instanceId: currentModelSelection.instanceId, cwd: props.projectCwd }
+    : null;
   const composerMenu = useComposerCommandMenu({
     draftMessage: draftMessage,
     ownerKey: composerDraftKey,
@@ -462,6 +473,14 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     offersUsageLimits: usageLimitsOffered,
     onUsageLimits:
       usageLimitsOffered && draftAttachments.length === 0 ? openUsageLimits : undefined,
+    onMcp: mcpTarget
+      ? () =>
+          setMcpRequest({
+            environmentId: props.environmentId,
+            target: mcpTarget,
+            command: { action: "list" },
+          })
+      : undefined,
   });
   const voiceInput = useVoiceInputController({
     ownerKey: composerDraftKey,
@@ -549,6 +568,20 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
   };
   const handleSend = async (followUp?: ActiveTurnComposerAction) => {
     if (voiceInput.blocksSubmission || pendingPastedTextAttachmentCountRef.current > 0) return;
+    const mcp = parseMcpCommand(draftMessage);
+    if (mcp !== null) {
+      if (!supportsMcpManagement(selectedProviderStatus) || !mcpTarget) {
+        Dialog.alert("MCP unavailable", "MCP management requires OpenCode V2 and a workspace.");
+      } else if (mcp.action === "invalid") {
+        Dialog.alert("MCP command", MCP_COMMAND_USAGE);
+      } else if (draftAttachments.length > 0) {
+        Dialog.alert("MCP command", "Remove attachments before running an MCP command.");
+      } else {
+        setMcpRequest({ environmentId: props.environmentId, target: mcpTarget, command: mcp });
+        onChangeDraftMessage("");
+      }
+      return;
+    }
     if (usageLimitsOffered && isUsageLimitsCommand(draftMessage) && draftAttachments.length === 0) {
       if (openUsageLimits()) onChangeDraftMessage("");
       return;
@@ -724,6 +757,13 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
           </Pressable>
         ) : null}
 
+        {mcpRequest ? (
+          <ComposerMcpSheet
+            key={JSON.stringify([mcpRequest.environmentId, mcpRequest.target])}
+            {...mcpRequest}
+            onClose={() => setMcpRequest(null)}
+          />
+        ) : null}
         <ComposerSurface
           style={
             isExpanded

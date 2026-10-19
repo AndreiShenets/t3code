@@ -9,6 +9,7 @@ import { vi } from "vite-plus/test";
 import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
+  AuthProvidersManageScope,
   AuthSourceControlWriteScope,
   ThreadId,
   EnvironmentId,
@@ -59,6 +60,34 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect("requires the destination provider-management grant to toggle MCP servers", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const mcp = createCommandPermissions(runtime, WS_METHODS.providerMcpSetEnabled);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(mcp.permissionAtom(env))).toBe(false);
+        expect((yield* mcp.authorize(registry, env).pipe(Effect.flip)).requiredPermission).toBe(
+          AuthProvidersManageScope,
+        );
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthProvidersManageScope],
+            permissions: [AuthProvidersManageScope],
+          }),
+        );
+        expect(registry.get(mcp.permissionAtom(env))).toBe(true);
+        yield* mcp.authorize(registry, env);
+        registry.set(sessions(other), AsyncResult.success(grant(false)));
+        expect(registry.get(mcp.permissionAtom(other))).toBe(false);
+        expect((yield* mcp.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
+          "EnvironmentAuthorizationError",
+        );
+      }),
+    ),
+  );
   it.effect("requires the destination settings grant to run storage cleanup", () =>
     Effect.scoped(
       Effect.gen(function* () {
