@@ -4,6 +4,7 @@ import {
   SourceControlProviderKind,
   ThreadId,
   type PullRequestDetailView,
+  type PullRequestDiffResult,
   type ScopedThreadRef,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
@@ -11,7 +12,9 @@ import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import { AppAtomRegistryProvider, appAtomRegistry } from "~/rpc/atomRegistry";
 
 import "~/index.css";
 
@@ -19,6 +22,12 @@ const { newThread, prepareThread, refresh } = vi.hoisted(() => ({
   newThread: vi.fn(),
   prepareThread: vi.fn(),
   refresh: vi.fn(),
+}));
+const codeTest = vi.hoisted(() => ({
+  realViewer: false,
+  turnRefresh: 0,
+  detail: null as PullRequestDetailView | null,
+  pages: new Map<string, Atom.Writable<AsyncResult.AsyncResult<PullRequestDiffResult>>>(),
 }));
 
 vi.mock(import("~/state/session"), async (original) => ({
@@ -52,11 +61,14 @@ vi.mock(import("~/state/pullRequests"), async (original) => {
   const cannotWriteGuides = Atom.make(false);
   return {
     ...actual,
+    usePullRequestTurnRefresh: () => codeTest.turnRefresh,
     pullRequestEnvironment: {
       ...actual.pullRequestEnvironment,
       detail: (() => "detail") as never,
       activity: (() => "activity") as never,
       reviewGuide: (() => "review-guide") as never,
+      diff: (({ input }) =>
+        codeTest.pages.get(input.cursor ?? "first")) as typeof actual.pullRequestEnvironment.diff,
       generateReviewGuide: {
         ...actual.pullRequestEnvironment.generateReviewGuide,
         permissionAtom: () => cannotWriteGuides,
@@ -64,18 +76,26 @@ vi.mock(import("~/state/pullRequests"), async (original) => {
     },
   };
 });
-vi.mock(import("~/state/query"), async (original) => ({
-  ...(await original()),
-  useEnvironmentQuery: ((query: unknown) => ({
-    data: query === "detail" ? detail : null,
-    dataUpdatedAt: 0,
-    failure: null,
-    isPending: false,
-    isSuccess: true,
-    error: null,
-    refresh,
-  })) as never,
-}));
+vi.mock(import("~/state/query"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    useEnvironmentQuery: ((query: unknown) => {
+      if ([...codeTest.pages.values()].some((atom) => atom === query)) {
+        return actual.useEnvironmentQuery(query as never);
+      }
+      return {
+        data: query === "detail" ? (codeTest.detail ?? detail) : null,
+        dataUpdatedAt: 0,
+        failure: null,
+        isPending: false,
+        isSuccess: true,
+        error: null,
+        refresh,
+      };
+    }) as never,
+  };
+});
 vi.mock(import("~/state/usePullRequestStack"), async (original) => ({
   ...(await original()),
   usePullRequestStack: (() => ({
@@ -113,12 +133,24 @@ vi.mock(import("./PullRequestSummaryTab"), async (original) => ({
     </div>
   )) as never,
 }));
-vi.mock(import("./PullRequestCodeTab"), async (original) => ({
-  ...(await original()),
-  default: (({
-    onAddToAgentSelection,
-    scrollerRef,
-  }: ComponentProps<typeof import("./PullRequestCodeTab").default>) => (
+vi.mock(import("./PullRequestCodeTab"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    default: ((props: ComponentProps<typeof actual.default>) =>
+      codeTest.realViewer ? (
+        <actual.default {...props} />
+      ) : (
+        <CodeTabStandIn {...props} />
+      )) as typeof actual.default,
+  };
+});
+
+function CodeTabStandIn({
+  onAddToAgentSelection,
+  scrollerRef,
+}: ComponentProps<typeof import("./PullRequestCodeTab").default>) {
+  return (
     <div ref={scrollerRef} data-testid="code-scroller" className="h-full overflow-y-auto">
       <button
         type="button"
@@ -143,11 +175,13 @@ vi.mock(import("./PullRequestCodeTab"), async (original) => ({
       </button>
       <div className="h-[3000px]" />
     </div>
-  )) as never,
-}));
+  );
+}
 
 import { PullRequestDetailPanel } from "./PullRequestDetailPanel";
 import { pullRequestPanelContext } from "./pullRequestDetail.logic";
+import { createPullRequestViewState } from "./pullRequestViewState";
+import { pullRequestReviewKey } from "./pullRequestReviewStore";
 
 const detail: PullRequestDetailView = {
   provider: SourceControlProviderKind.make("github"),
@@ -218,14 +252,9 @@ const shortcutContext = () => ({
 
 const roots: Root[] = [];
 
-function render(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = {}) {
-  const container = document.createElement("div");
-  container.className = "flex h-[700px] w-[900px]";
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  return act(async () =>
-    root.render(
+function panel(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = {}) {
+  return (
+    <AppAtomRegistryProvider>
       <PullRequestDetailPanel
         environmentId={threadRef.environmentId}
         reference={detail}
@@ -233,12 +262,25 @@ function render(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = 
         shortcutsEnabled={false}
         getShortcutContext={shortcutContext}
         {...props}
-      />,
-    ),
+      />
+    </AppAtomRegistryProvider>
   );
 }
 
+function render(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = {}) {
+  const container = document.createElement("div");
+  container.className = "flex h-[700px] w-[900px]";
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  return act(async () => root.render(panel(props)));
+}
+
 beforeEach(() => {
+  codeTest.realViewer = false;
+  codeTest.turnRefresh = 0;
+  codeTest.detail = null;
+  codeTest.pages.clear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   useComposerDraftStore.setState({ draftsByThreadKey: {} });
   newThread
@@ -248,6 +290,192 @@ beforeEach(() => {
     _tag: "Success",
     value: { branch: "feature", worktreePath: "/workspace/pr" },
   });
+});
+
+const codePatch = (path: string, increment = 1) => `diff --git a/${path} b/${path}
+--- a/${path}
++++ b/${path}
+@@ -1,150 +1,150 @@
+${Array.from({ length: 150 }, (_, index) => `-const old${index} = ${index};`).join("\n")}
+${Array.from({ length: 150 }, (_, index) => `+const next${index} = ${index + increment};`).join("\n")}
+`;
+
+it.each([
+  ["first.ts", "folded"],
+  ["second.ts", "folded"],
+  ["first.ts", "expanded"],
+  ["second.ts", "expanded"],
+] as const)(
+  "preserves file folds, focus and position when a turn refresh changes %s (%s by default)",
+  async (changedPath, foldOverride) => {
+    codeTest.realViewer = true;
+    const result = {
+      patch: codePatch("first.ts") + codePatch("second.ts"),
+      truncated: false,
+      nextCursor: null,
+      omittedFileStats: [],
+    } satisfies PullRequestDiffResult;
+    const atom = Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(
+      AsyncResult.success(result),
+    );
+    codeTest.pages.set("first", atom);
+    const viewState = createPullRequestViewState();
+    viewState.setState({
+      tab: "code",
+      condensedByTab: { code: true },
+      code: {
+        scopeKey: `${threadRef.environmentId}:${pullRequestReviewKey(detail)}`,
+        slices: [{ ...result, cursor: null }],
+        toggledFiles: new Set(),
+        foldOverride,
+        visibleCommitCount: 10,
+        wordWrap: false,
+        ignoreWhitespace: false,
+      },
+    });
+    await render({ viewState });
+    const toggle =
+      foldOverride === "folded"
+        ? page.getByRole("button", { name: "Expand diff", exact: true }).nth(1)
+        : page.getByRole("button", { name: "Collapse diff", exact: true }).first();
+    await expect.element(toggle).toBeVisible();
+    await act(async () => {
+      (toggle.element() as HTMLButtonElement).click();
+    });
+    const collapse = page.getByRole("button", { name: "Collapse diff", exact: true });
+    await expect.element(collapse).toBeVisible();
+    const focused = collapse.element() as HTMLButtonElement;
+    const viewer = document.querySelector<HTMLElement>(".diff-render-surface")!;
+    await act(async () => {
+      await document.fonts.ready;
+      viewer.scrollTop = 400;
+      focused.focus({ preventScroll: true });
+      await new Promise(requestAnimationFrame);
+    });
+    const top = viewer.scrollTop;
+    expect(top).toBeGreaterThan(0);
+    expect((focused.getRootNode() as ShadowRoot).activeElement).toBe(focused);
+
+    await act(async () => {
+      appAtomRegistry.set(atom, AsyncResult.waiting(AsyncResult.success(result)));
+      codeTest.turnRefresh++;
+      roots.at(-1)!.render(panel({ viewState }));
+    });
+    const refreshed = {
+      ...result,
+      patch:
+        codePatch("first.ts", changedPath === "first.ts" ? 2 : 1) +
+        codePatch("second.ts", changedPath === "second.ts" ? 2 : 1),
+    };
+    await act(async () => {
+      appAtomRegistry.set(atom, AsyncResult.success(refreshed));
+      codeTest.detail = { ...detail, updatedAt: "2026-09-02T00:00:00Z" };
+      roots.at(-1)!.render(panel({ viewState }));
+    });
+    await expect.poll(() => viewState.getState().code?.slices[0]?.patch).toBe(refreshed.patch);
+    await expect.element(collapse).toBeVisible();
+    expect(collapse.element()).toBe(focused);
+    expect((focused.getRootNode() as ShadowRoot).activeElement).toBe(focused);
+    expect(document.querySelector(".diff-render-surface")).toBe(viewer);
+    expect(viewer.scrollTop).toBe(top);
+    if (changedPath === "second.ts") {
+      await act(async () => {
+        viewer.scrollTop = viewer.scrollHeight;
+      });
+      await expect
+        .element(page.getByText("const next149 = 151;", { exact: true }))
+        .toBeInTheDocument();
+    }
+    await act(async () => {
+      viewer.scrollTop = 0;
+    });
+    await expect
+      .element(page.getByRole("button", { name: "Expand diff", exact: true }))
+      .toBeVisible();
+  },
+);
+
+it("keeps a multi-page code review in place during background reads and after returning", async () => {
+  codeTest.realViewer = true;
+  const first = {
+    patch: codePatch("first.ts"),
+    truncated: false,
+    nextCursor: "second",
+    omittedFileStats: [],
+  } satisfies PullRequestDiffResult;
+  const second = {
+    patch: codePatch("second.ts"),
+    truncated: false,
+    nextCursor: null,
+    omittedFileStats: [],
+  } satisfies PullRequestDiffResult;
+  const firstAtom = Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(
+    AsyncResult.success(first),
+  );
+  const secondAtom = Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(
+    AsyncResult.success(second),
+  );
+  codeTest.pages.set("first", firstAtom);
+  codeTest.pages.set("second", secondAtom);
+  const viewState = createPullRequestViewState();
+  viewState.setState({
+    tab: "code",
+    condensedByTab: { code: true },
+    scrollByTab: { code: { top: 9000, left: 0 } },
+    code: {
+      scopeKey: `${threadRef.environmentId}:${pullRequestReviewKey(detail)}`,
+      slices: [
+        { ...first, cursor: null },
+        { ...second, cursor: "second" },
+      ],
+      toggledFiles: new Set(),
+      foldOverride: "expanded",
+      visibleCommitCount: 10,
+      wordWrap: false,
+      ignoreWhitespace: false,
+    },
+  });
+  await render({ viewState });
+  const viewer = () => document.querySelector<HTMLElement>(".diff-render-surface")!;
+  await expect.poll(() => viewer()?.scrollTop ?? 0, { timeout: 10_000 }).toBeGreaterThan(6000);
+  const node = viewer();
+  await act(async () => {
+    await document.fonts.ready;
+    await new Promise(requestAnimationFrame);
+  });
+  const top = node.scrollTop;
+  await expect.element(page.getByText("second.ts", { exact: true })).toBeVisible();
+
+  await act(async () => {
+    appAtomRegistry.set(firstAtom, AsyncResult.waiting(AsyncResult.success(first)));
+    codeTest.turnRefresh++;
+    roots.at(-1)!.render(panel({ viewState }));
+  });
+  expect(viewer()).toBe(node);
+  expect(node.scrollTop).toBe(top);
+  await expect
+    .element(page.getByText("Loading pull request diff...", { exact: true }))
+    .not.toBeInTheDocument();
+
+  await act(async () => {
+    appAtomRegistry.set(firstAtom, AsyncResult.success(first));
+    appAtomRegistry.set(secondAtom, AsyncResult.success(second));
+  });
+  expect(viewer()).toBe(node);
+  expect(node.scrollTop).toBe(top);
+  await act(async () => {
+    appAtomRegistry.set(firstAtom, AsyncResult.waiting(AsyncResult.success(first)));
+    codeTest.detail = { ...detail, updatedAt: "2026-09-02T00:00:00Z" };
+    roots.at(-1)!.render(panel({ viewState }));
+  });
+  expect(viewer()).toBe(node);
+  expect(node.scrollTop).toBe(top);
+  await expect.element(page.getByText("2 files", { exact: true })).toBeVisible();
+  await act(async () => roots.pop()!.unmount());
+
+  await render({ viewState });
+  await expect.poll(() => viewer()?.scrollTop).toBe(top);
+  await expect.element(page.getByText("second.ts", { exact: true })).toBeVisible();
 });
 afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());
@@ -385,4 +613,33 @@ it("folds the title only for the active tab's own scroller", async () => {
   await vi.waitFor(() => expect(titleFold()).toBe(false));
   await tab("Code").click();
   await vi.waitFor(() => expect(titleFold()).toBe(true));
+});
+
+it("returns to the selected subtab after the panel is unmounted", async () => {
+  const viewState = createPullRequestViewState();
+  await render({ viewState });
+  await tab("Code").click();
+  await expect.element(page.getByTestId("code-scroller")).toBeVisible();
+  await act(async () => roots.pop()!.unmount());
+
+  await render({ viewState });
+  await expect.element(page.getByTestId("code-scroller")).toBeVisible();
+  await expect.element(page.getByTestId("summary-scroller")).not.toBeInTheDocument();
+});
+
+it("restores the summary's scroll and folded title together", async () => {
+  const viewState = createPullRequestViewState();
+  await render({ viewState });
+  const summary = page.getByTestId("summary-scroller").element();
+  await act(async () => {
+    summary.scrollTop = 700;
+    summary.dispatchEvent(new Event("scroll"));
+  });
+  const top = summary.scrollTop;
+  await act(async () => roots.pop()!.unmount());
+
+  await render({ viewState });
+  expect(page.getByTestId("summary-scroller").element().scrollTop).toBe(top);
+  const title = page.getByRole("heading", { level: 1, name: "Test pull request" });
+  expect(title.element().closest("[inert]")).not.toBeNull();
 });

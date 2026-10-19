@@ -1,5 +1,5 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
-import type { PullRequestDiffSide } from "@t3tools/contracts";
+import type { PullRequestDiffSide, PullRequestOmittedFileStat } from "@t3tools/contracts";
 
 /**
  * A thread naming a file is not the same as a thread the diff can show: its line may have moved
@@ -48,4 +48,42 @@ export function toggleFileDiffFoldForViewed(
   if (next.has(fileKey)) next.delete(fileKey);
   else next.add(fileKey);
   return next;
+}
+
+export interface DiffSlice {
+  readonly headSha?: string | undefined;
+  readonly baseSha?: string | undefined;
+  readonly cursor: string | null;
+  readonly patch: string;
+  readonly truncated: boolean;
+  readonly nextCursor: string | null;
+  readonly omittedFileStats: ReadonlyArray<PullRequestOmittedFileStat>;
+}
+
+// Cursors address one snapshot: only unchanged pages can vouch for the pages after them.
+export function reconcileDiffSlices(slices: ReadonlyArray<DiffSlice>, answer: DiffSlice) {
+  const index = slices.findIndex((slice) => slice.cursor === answer.cursor);
+  if (index === -1) return { cursor: answer.cursor, slices: [...slices, answer] };
+  const existing = slices[index];
+  if (
+    existing !== undefined &&
+    existing.patch === answer.patch &&
+    existing.headSha === answer.headSha &&
+    existing.baseSha === answer.baseSha &&
+    existing.truncated === answer.truncated &&
+    existing.nextCursor === answer.nextCursor &&
+    existing.omittedFileStats.length === answer.omittedFileStats.length &&
+    existing.omittedFileStats.every((file, index) => {
+      const refreshed = answer.omittedFileStats[index];
+      return (
+        refreshed !== undefined &&
+        refreshed.path === file.path &&
+        refreshed.additions === file.additions &&
+        refreshed.deletions === file.deletions
+      );
+    })
+  ) {
+    return { cursor: slices[index + 1]?.cursor ?? answer.cursor, slices };
+  }
+  return { cursor: answer.cursor, slices: [...slices.slice(0, index), answer] };
 }
