@@ -203,10 +203,11 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "c", command: "usage.cost", when: "usagePageOpen" },
   { key: "t", command: "usage.tokens", when: "usagePageOpen" },
   { key: "l", command: "usage.limits", when: "usagePageOpen" },
-  { key: "mod+shift+1", command: "usage.period.day", when: "usagePageOpen" },
-  { key: "mod+shift+2", command: "usage.period.week", when: "usagePageOpen" },
-  { key: "mod+shift+3", command: "usage.period.month", when: "usagePageOpen" },
-  { key: "mod+shift+4", command: "usage.period.quarter", when: "usagePageOpen" },
+  { key: "mod+shift+1", command: "usage.period.today", when: "usagePageOpen" },
+  { key: "mod+shift+2", command: "usage.period.day", when: "usagePageOpen" },
+  { key: "mod+shift+3", command: "usage.period.week", when: "usagePageOpen" },
+  { key: "mod+shift+4", command: "usage.period.month", when: "usagePageOpen" },
+  { key: "mod+shift+5", command: "usage.period.quarter", when: "usagePageOpen" },
 ];
 
 function normalizeKeyToken(token: string): string {
