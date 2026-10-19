@@ -252,6 +252,7 @@ function PullRequestCodeTab({
   onAddToAgentSelection,
   onRefresh,
   refreshToken = 0,
+  backgroundRefreshToken = 0,
   revealRequest = null,
 }: {
   scrollerRef: (node: HTMLDivElement | null) => void;
@@ -266,6 +267,7 @@ function PullRequestCodeTab({
   onAddToAgentSelection?: (input: PullRequestAgentSelectionInput) => void;
   onRefresh: () => void;
   refreshToken?: number;
+  backgroundRefreshToken?: number;
   revealRequest?: { readonly path: string; readonly nonce: number } | null;
 }) {
   const { resolvedTheme } = useTheme();
@@ -1431,7 +1433,7 @@ function PullRequestCodeTab({
                 environmentId,
                 cwd: detail.workspaceRoot,
                 snapshot: { reference, commit: commit ?? detail.headSha ?? null },
-                mutationId: String(refreshToken),
+                mutationId: `${refreshToken}:${backgroundRefreshToken}`,
               }}
               className="@container h-full overflow-auto [scrollbar-gutter:stable]"
               containerRef={scrollerRef}
