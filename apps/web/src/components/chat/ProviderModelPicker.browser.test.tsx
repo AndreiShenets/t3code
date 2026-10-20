@@ -233,7 +233,7 @@ describe("ProviderModelPicker", () => {
   });
 
   it.each(["sm", "xs"] as const)(
-    "keeps both label lines inside the %s trigger without growing the control",
+    "centers the smaller provider subtitle inside the %s trigger without growing the control",
     async (size) => {
       vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
       const entry = providerEntry("opencode", "opencode");
@@ -250,7 +250,7 @@ describe("ProviderModelPicker", () => {
               new Map([
                 [
                   entry.instanceId,
-                  [{ slug: "openai/model", name: "Selected model", subProvider: "OpenAI" }],
+                  [{ slug: "openai/model", name: "GPT-6.1 Sol", subProvider: "GitHub Copilot" }],
                 ],
               ])
             }
@@ -260,9 +260,11 @@ describe("ProviderModelPicker", () => {
         ),
       );
 
-      const trigger = page.getByRole("button", { name: "Selected model (OpenCode · OpenAI)" });
-      const model = trigger.getByText("Selected model", { exact: true });
-      const provider = trigger.getByText("OpenCode · OpenAI", { exact: true });
+      const trigger = page.getByRole("button", {
+        name: "GPT-6.1 Sol (OpenCode · GitHub Copilot)",
+      });
+      const model = trigger.getByText("GPT-6.1 Sol", { exact: true });
+      const provider = trigger.getByText("OpenCode · GitHub Copilot", { exact: true });
       await expect.element(model).toBeVisible();
       await expect.element(provider).toBeVisible();
       const triggerBounds = trigger.element().getBoundingClientRect();
@@ -272,6 +274,22 @@ describe("ProviderModelPicker", () => {
       expect(modelBounds.top).toBeGreaterThanOrEqual(triggerBounds.top);
       expect(providerBounds.top).toBeGreaterThanOrEqual(modelBounds.bottom);
       expect(providerBounds.bottom).toBeLessThanOrEqual(triggerBounds.bottom);
+      expect(Number.parseFloat(getComputedStyle(provider.element()).fontSize)).toBeLessThanOrEqual(
+        8,
+      );
+      const modelText = document.createRange();
+      modelText.selectNodeContents(model.element());
+      const providerText = document.createRange();
+      providerText.selectNodeContents(provider.element());
+      const modelTextBounds = modelText.getBoundingClientRect();
+      const providerTextBounds = providerText.getBoundingClientRect();
+      expect(
+        Math.abs(
+          modelTextBounds.left +
+            modelTextBounds.width / 2 -
+            (providerTextBounds.left + providerTextBounds.width / 2),
+        ),
+      ).toBeLessThan(1);
     },
   );
 

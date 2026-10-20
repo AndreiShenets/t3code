@@ -274,7 +274,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 <span
                   className={cn(
                     "min-w-0 flex-1 overflow-hidden truncate",
-                    providerLabel && "flex flex-col py-0! text-left [text-box:normal]!",
+                    providerLabel && "flex flex-col py-0! text-center [text-box:normal]!",
                   )}
                   data-chat-provider-model-picker-label="true"
                 />
@@ -284,7 +284,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 {props.triggerLabel ?? multipleLabel ?? triggerTitle}
               </span>
               {providerLabel ? (
-                <span className="w-full truncate pb-px text-3xs font-normal leading-none text-muted-foreground">
+                <span className="w-full truncate pb-px text-4xs font-normal leading-none text-muted-foreground">
                   {providerLabel}
                 </span>
               ) : null}
