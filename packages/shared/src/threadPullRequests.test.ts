@@ -62,6 +62,44 @@ function link(
 }
 
 describe("threadPullRequestKeysEqual", () => {
+  it("separates custom Azure ports and recovers legacy links from their URLs", () => {
+    const old = link(1, {
+      host: "code.example",
+      repository: "collection/project/_git/repo",
+      url: "http://code.example:8080/collection/project/_git/repo/pullrequest/1",
+    });
+    expect(legacyThreadPullRequestKey(old)).toEqual({
+      host: "code.example:8080",
+      repository: old.repository,
+      number: 1,
+    });
+    expect(threadPullRequestKeysEqual(old, { ...old, host: "code.example:8080" })).toBe(true);
+    expect(
+      threadPullRequestKeysEqual(old, {
+        ...old,
+        url: "http://code.example:8081/collection/project/_git/repo/pullrequest/1",
+      }),
+    ).toBe(false);
+    const identity = {
+      provider: "azure-devops-custom-server",
+      canonicalKey: "code.example:8080/collection/project/_git/repo",
+      name: "repo",
+      locator: {
+        source: "git-remote" as const,
+        remoteName: "origin",
+        remoteUrl: "http://code.example:8080/collection/project/_git/repo",
+      },
+    };
+    expect(legacyLinkedPullRequestOf([old], ProjectId.make("project"), identity)?.repository).toBe(
+      "repo",
+    );
+    expect(
+      legacyLinkedPullRequestOf([old], ProjectId.make("project"), {
+        ...identity,
+        canonicalKey: identity.canonicalKey.replace(":8080", ":8081"),
+      }),
+    ).toBeNull();
+  });
   it("recovers Forgejo ports from old stored URLs and keeps separate servers distinct", () => {
     const old = link(1, {
       host: "forge.example",
