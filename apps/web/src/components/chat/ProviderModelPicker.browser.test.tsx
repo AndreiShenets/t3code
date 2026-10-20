@@ -213,29 +213,25 @@ describe("ProviderModelPicker", () => {
   it.each(["sm", "xs"] as const)(
     "centers the smaller provider subtitle inside the %s trigger without growing the control",
     async (size) => {
-      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
       const entry = providerEntry("opencode", "opencode");
-      pickerRoot = createRoot(document.body.appendChild(document.createElement("div")));
-      await act(async () =>
-        pickerRoot!.render(
-          <ProviderModelPicker
-            environmentId={null}
-            activeInstanceId={entry.instanceId}
-            model="openai/model"
-            lockedProvider={null}
-            instanceEntries={[entry]}
-            modelOptionsByInstance={
-              new Map([
-                [
-                  entry.instanceId,
-                  [{ slug: "openai/model", name: "GPT-6.1 Sol", subProvider: "GitHub Copilot" }],
-                ],
-              ])
-            }
-            size={size}
-            onInstanceModelChange={() => {}}
-          />,
-        ),
+      await using _screen = await renderUi(
+        <ProviderModelPicker
+          environmentId={null}
+          activeInstanceId={entry.instanceId}
+          model="openai/model"
+          lockedProvider={null}
+          instanceEntries={[entry]}
+          modelOptionsByInstance={
+            new Map([
+              [
+                entry.instanceId,
+                [{ slug: "openai/model", name: "GPT-6.1 Sol", subProvider: "GitHub Copilot" }],
+              ],
+            ])
+          }
+          size={size}
+          onInstanceModelChange={() => {}}
+        />,
       );
 
       const trigger = page.getByRole("button", {

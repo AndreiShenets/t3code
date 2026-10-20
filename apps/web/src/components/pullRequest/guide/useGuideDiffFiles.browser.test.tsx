@@ -8,9 +8,9 @@ import {
   type PullRequestReviewGuide,
 } from "@t3tools/contracts";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
-import { act, type ComponentProps } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { ComponentProps } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { act, render } from "../../../../test/render";
 
 import type { GuideStop } from "./GuideStop";
 
@@ -79,9 +79,6 @@ const guide: PullRequestReviewGuide = {
     questions: [],
   })),
 };
-let registry: AtomRegistry.AtomRegistry;
-let renderer: Root | undefined;
-let mount: HTMLDivElement;
 
 function page(path: string, text: string, nextCursor: string | null = null): PullRequestDiffResult {
   return {
@@ -99,44 +96,40 @@ function contents() {
   return [...stop().files].map(([path, file]) => [path, file.additionLines.join("").trim()]);
 }
 
-async function render(headSha: string) {
-  await act(() => {
-    const tree = (
-      <RegistryContext.Provider value={registry}>
-        <GuideTour
-          environmentId={environmentId}
-          reference={reference}
-          guide={guide}
-          headSha={headSha}
-          banner={null}
-          active={false}
-          commenting={null}
-          onAsk={null}
-          onFinish={null}
-          onOpenFile={() => {}}
-        />
-      </RegistryContext.Provider>
-    );
-    renderer ??= createRoot(mount);
-    renderer.render(tree);
-  });
+function tree(registry: AtomRegistry.AtomRegistry, headSha: string) {
+  return (
+    <RegistryContext.Provider value={registry}>
+      <GuideTour
+        environmentId={environmentId}
+        reference={reference}
+        guide={guide}
+        headSha={headSha}
+        banner={null}
+        active={false}
+        commenting={null}
+        onAsk={null}
+        onFinish={null}
+        onOpenFile={() => {}}
+      />
+    </RegistryContext.Provider>
+  );
 }
 
-async function loadA() {
-  await render("head-A");
+async function loadA(registry: AtomRegistry.AtomRegistry) {
+  await using stack = new AsyncDisposableStack();
+  const screen = stack.use(await render(tree(registry, "head-A")));
   await act(() => state.reads[0]!.resolve(page("a.ts", "A first", "next")));
   await act(() => state.reads[1]!.resolve(page("b.ts", "A second")));
   expect(contents()).toEqual([
     ["a.ts", "A first"],
     ["b.ts", "A second"],
   ]);
+  const resources = stack.move();
+  return { ...screen, [Symbol.asyncDispose]: () => resources[Symbol.asyncDispose]() };
 }
 
-beforeEach(() => {
-  mount = document.createElement("div");
-  document.body.append(mount);
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  registry = AtomRegistry.make();
+function setup() {
+  const registry = AtomRegistry.make();
   state.reads = [];
   state.renderStop.mockReset().mockReturnValue(null);
   state.readContents
@@ -149,22 +142,17 @@ beforeEach(() => {
       position: 1,
       seen: new Set([0]),
     }));
-});
-
-afterEach(async () => {
-  await act(() => renderer?.unmount());
-  mount.remove();
-  renderer = undefined;
-  registry.dispose();
-  vi.unstubAllGlobals();
-});
+  return { registry, [Symbol.dispose]: () => registry.dispose() };
+}
 
 describe("guide whole-PR diff revisions", () => {
   it("revalidates reused page cursors for head B while the guide and progress remain at A", async () => {
-    await loadA();
+    using fixture = setup();
+    const { registry } = fixture;
+    await using screen = await loadA(registry);
     const expandedA = await stop().loadDiffFiles(stop().files.get("a.ts")!);
 
-    await render("head-B");
+    await screen.rerender(tree(registry, "head-B"));
     expect(state.reads).toHaveLength(3);
     expect(contents()).toEqual([]);
     expect(stop().diffLoading).toBe(true);
@@ -198,10 +186,11 @@ describe("guide whole-PR diff revisions", () => {
   });
 
   it("revalidates shared pages when reopening the guide at a newer head", async () => {
-    await loadA();
-    await act(() => renderer?.unmount());
-    renderer = undefined;
-    await render("head-B");
+    using fixture = setup();
+    const { registry } = fixture;
+    await using screen = await loadA(registry);
+    await screen.rerender(null);
+    await screen.rerender(tree(registry, "head-B"));
     expect(contents()).toEqual([]);
     expect(state.reads).toHaveLength(3);
     await act(() => state.reads[2]!.resolve(page("b.ts", "B reopened")));
@@ -209,12 +198,14 @@ describe("guide whole-PR diff revisions", () => {
   });
 
   it("does not absorb retained head A data when the refresh for B fails", async () => {
-    await loadA();
-    await render("head-B");
+    using fixture = setup();
+    const { registry } = fixture;
+    await using screen = await loadA(registry);
+    await screen.rerender(tree(registry, "head-B"));
     await act(() => state.reads[2]!.reject(new Error("offline")));
     expect(contents()).toEqual([]);
     expect(stop().diffLoading).toBe(false);
-    expect(mount.textContent).toContain("offline");
+    expect(screen.container.textContent).toContain("offline");
 
     await act(() =>
       registry.refresh(pullRequestEnvironment.diff({ environmentId, input: reference })),
@@ -225,9 +216,11 @@ describe("guide whole-PR diff revisions", () => {
   });
 
   it("ignores a late response for B after the current head changes again", async () => {
-    await loadA();
-    await render("head-B");
-    await render("head-C");
+    using fixture = setup();
+    const { registry } = fixture;
+    await using screen = await loadA(registry);
+    await screen.rerender(tree(registry, "head-B"));
+    await screen.rerender(tree(registry, "head-C"));
     expect(state.reads).toHaveLength(4);
     await act(() => state.reads[2]!.resolve(page("a.ts", "obsolete B")));
     expect(contents()).toEqual([]);

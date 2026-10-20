@@ -2,9 +2,9 @@ import { CodeView } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { userEvent } from "vite-plus/test/browser";
-import { act, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
+import { useState } from "react";
+import { expect, it, vi } from "vite-plus/test";
+import { render, type Screen } from "../../../test/render";
 import { useDiffSearchShortcut } from "./useDiffSearchShortcut";
 import { useChatShortcuts } from "../chat/useChatShortcuts";
 import { isPreviewFocused } from "~/lib/previewFocus";
@@ -17,13 +17,7 @@ const patch = `diff --git a/src/example.ts b/src/example.ts
 +const after = 2;
 `;
 
-let viewer: CodeView | undefined;
-let container: HTMLDivElement | undefined;
-let scope: HTMLDivElement;
-let panel: HTMLDivElement;
-let root: Root;
-
-function Shortcuts() {
+function Shortcuts({ viewer }: { viewer: CodeView }) {
   useDiffSearchShortcut({ getInstance: () => viewer });
   return null;
 }
@@ -52,39 +46,31 @@ function ChatShortcuts() {
   return findOpen ? <div data-chat-find-open /> : null;
 }
 
-async function mountChatFirst() {
+async function mountChatFirst(screen: Screen, panel: HTMLDivElement, viewer: CodeView) {
   panel.setAttribute("data-preview-panel-mode", "inline");
-  await act(async () => root.render(<ChatShortcuts />));
-  await act(async () =>
-    root.render(
-      <>
-        <ChatShortcuts />
-        <Shortcuts />
-      </>,
-    ),
+  await screen.rerender(<ChatShortcuts />);
+  await screen.rerender(
+    <>
+      <ChatShortcuts />
+      <Shortcuts viewer={viewer} />
+    </>,
   );
 }
 
-afterEach(async () => {
-  await act(async () => root.unmount());
-  viewer?.cleanUp();
-  panel.remove();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-beforeEach(async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32");
-  panel = document.createElement("div");
+async function setup() {
+  await using stack = new AsyncDisposableStack();
+  stack.use(vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32"));
+  const panel = document.createElement("div");
   document.body.append(panel);
-  scope = document.createElement("div");
+  stack.defer(() => panel.remove());
+  const scope = document.createElement("div");
   scope.setAttribute("data-diff-search-scope", "");
   panel.append(scope);
-  container = document.createElement("div");
+  const container = document.createElement("div");
   container.style.cssText = "width: 640px; height: 400px; overflow: auto";
   scope.append(container);
-  viewer = new CodeView();
+  const viewer = new CodeView();
+  stack.defer(() => viewer.cleanUp());
   viewer.setItems(
     parsePatchFiles(patch)[0]!.files.map((fileDiff) => ({
       type: "diff",
@@ -96,11 +82,22 @@ beforeEach(async () => {
   viewer.setup(container);
   const host = document.createElement("div");
   scope.append(host);
-  root = createRoot(host);
-  await act(async () => root.render(<Shortcuts />));
-});
+  const screen = stack.use(await render(<Shortcuts viewer={viewer} />, { container: host }));
+  const resources = stack.move();
+  return {
+    viewer,
+    container,
+    scope,
+    panel,
+    screen,
+    mountChatFirst: () => mountChatFirst(screen, panel, viewer),
+    [Symbol.asyncDispose]: () => resources[Symbol.asyncDispose](),
+  };
+}
 
 it("opens find in a standalone review before clicking a collapsed file", async () => {
+  await using fixture = await setup();
+  const { container, viewer } = fixture;
   await userEvent.keyboard("{Control>}f{/Control}");
 
   const search = container!.querySelector("[data-diffs-search]")?.shadowRoot;
@@ -116,7 +113,9 @@ it("opens find in a standalone review before clicking a collapsed file", async (
 });
 
 it("opens find with Command+F on macOS", async () => {
-  vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+  await using fixture = await setup();
+  const { container } = fixture;
+  using _platform = vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
   await userEvent.keyboard("{Meta>}f{/Meta}");
   expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
 });
@@ -124,6 +123,8 @@ it("opens find with Command+F on macOS", async () => {
 it.each(["inline toolbar", "sheet toolbar", "Changes tab"])(
   "opens diff find from the %s with chat shortcuts registered first",
   async (entryPoint) => {
+    await using fixture = await setup();
+    const { container, viewer, panel, scope, mountChatFirst } = fixture;
     await mountChatFirst();
     if (entryPoint === "sheet toolbar") panel.setAttribute("role", "dialog");
     const button = document.createElement("button");
@@ -139,6 +140,8 @@ it.each(["inline toolbar", "sheet toolbar", "Changes tab"])(
 );
 
 it("keeps chat find when the chat composer is focused", async () => {
+  await using fixture = await setup();
+  const { container, panel, mountChatFirst } = fixture;
   await mountChatFirst();
   const composer = document.createElement("textarea");
   document.body.append(composer);
@@ -153,12 +156,16 @@ it("keeps chat find when the chat composer is focused", async () => {
 });
 
 it("does not claim page find just because a diff is visible beside chat", async () => {
+  await using fixture = await setup();
+  const { container, panel } = fixture;
   panel.setAttribute("data-preview-panel-mode", "inline");
   await userEvent.keyboard("{Control>}f{/Control}");
   expect(container!.querySelector("[data-diffs-search]")).toBeNull();
 });
 
 it("keeps the viewer's own find and Escape behavior", async () => {
+  await using fixture = await setup();
+  const { container, mountChatFirst } = fixture;
   await mountChatFirst();
   await userEvent.click(container!, { position: { x: 320, y: 200 } });
   await userEvent.keyboard("{Control>}f{/Control}");
@@ -170,6 +177,8 @@ it("keeps the viewer's own find and Escape behavior", async () => {
 it.each(["background", "collapsed header"])(
   "opens review find after clicking the %s outside a preview panel",
   async (target) => {
+    await using fixture = await setup();
+    const { container, viewer, panel, mountChatFirst } = fixture;
     await mountChatFirst();
     panel.removeAttribute("data-preview-panel-mode");
     if (target === "collapsed header") {
@@ -184,7 +193,7 @@ it.each(["background", "collapsed header"])(
     } else {
       await userEvent.click(container!, { position: { x: 320, y: 200 } });
     }
-    await act(async () => userEvent.keyboard("{Control>}f{/Control}"));
+    await userEvent.keyboard("{Control>}f{/Control}");
     expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
     expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
     expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
@@ -194,6 +203,8 @@ it.each(["background", "collapsed header"])(
 it.each(["inline", "standalone", "sheet"])(
   "opens review find after clicking non-focusable %s chrome beside collapsed files",
   async (mode) => {
+    await using fixture = await setup();
+    const { container, viewer, panel, scope, mountChatFirst } = fixture;
     await mountChatFirst();
     if (mode === "standalone") panel.removeAttribute("data-preview-panel-mode");
     if (mode === "sheet") panel.setAttribute("role", "dialog");
@@ -205,14 +216,14 @@ it.each(["inline", "standalone", "sheet"])(
     try {
       await userEvent.click(composer);
       await userEvent.click(chrome);
-      await act(async () => userEvent.keyboard("{Control>}f{/Control}"));
+      await userEvent.keyboard("{Control>}f{/Control}");
       expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
       expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
       expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
 
       await userEvent.keyboard("{Escape}");
       await userEvent.click(composer);
-      await act(async () => userEvent.keyboard("{Control>}f{/Control}"));
+      await userEvent.keyboard("{Control>}f{/Control}");
       expect(container!.querySelector("[data-diffs-search]")).toBeNull();
       expect(panel.querySelector("[data-chat-find-open]")).not.toBeNull();
     } finally {
@@ -222,6 +233,8 @@ it.each(["inline", "standalone", "sheet"])(
 );
 
 it.each(["hidden", "invisible"])("ignores a %s review tab", async (visibility) => {
+  await using fixture = await setup();
+  const { container, scope } = fixture;
   if (visibility === "hidden") scope.style.display = "none";
   else scope.style.visibility = "hidden";
   await userEvent.keyboard("{Control>}f{/Control}");
@@ -229,6 +242,8 @@ it.each(["hidden", "invisible"])("ignores a %s review tab", async (visibility) =
 });
 
 it("does not take find from a comment input", async () => {
+  await using fixture = await setup();
+  const { container, scope } = fixture;
   const input = document.createElement("textarea");
   scope.prepend(input);
   await userEvent.click(input);
@@ -237,6 +252,8 @@ it("does not take find from a comment input", async () => {
 });
 
 it("does not take find from a separate dialog inside the panel", async () => {
+  await using fixture = await setup();
+  const { container, scope } = fixture;
   const dialog = document.createElement("div");
   dialog.setAttribute("role", "dialog");
   const button = document.createElement("button");
@@ -249,6 +266,8 @@ it("does not take find from a separate dialog inside the panel", async () => {
 });
 
 it("does not take find from another pane", async () => {
+  await using fixture = await setup();
+  const { container } = fixture;
   const button = document.createElement("button");
   button.textContent = "Other pane";
   document.body.append(button);
@@ -262,12 +281,16 @@ it("does not take find from another pane", async () => {
 });
 
 it("leaves project-wide search alone", async () => {
+  await using fixture = await setup();
+  const { container } = fixture;
   await userEvent.keyboard("{Control>}{Shift>}f{/Shift}{/Control}");
   expect(container!.querySelector("[data-diffs-search]")).toBeNull();
 });
 
 it("removes the shortcut listener on unmount", async () => {
-  await act(async () => root.render(null));
+  await using fixture = await setup();
+  const { container, screen } = fixture;
+  await screen.unmount();
   await userEvent.keyboard("{Control>}f{/Control}");
   expect(container!.querySelector("[data-diffs-search]")).toBeNull();
 });

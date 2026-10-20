@@ -9,9 +9,9 @@ import {
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
-import { act, useLayoutEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { useLayoutEffect } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { act, render } from "../../test/render";
 
 type FileResult = AsyncResult.AsyncResult<ProjectReadFileResult, Error>;
 type SnapshotResult = AsyncResult.AsyncResult<PullRequestDiffFileContentsResult, Error>;
@@ -95,8 +95,6 @@ import { useCodeDisplay, type CodeDisplayWorkspace } from "./useCodeDisplay";
 
 const environmentId = EnvironmentId.make("remote");
 const workspace = { environmentId, cwd: "/repo" };
-let renderer: Root | undefined;
-let mount: HTMLDivElement;
 
 function putConfig(
   target: CodeDisplayWorkspace,
@@ -138,23 +136,17 @@ function Surface({
   return null;
 }
 
-async function render(target: CodeDisplayWorkspace | null, paths: string[], element: HTMLElement) {
-  await act(() => {
-    const children = (
-      <RegistryContext.Provider value={state.registry!}>
-        <Surface target={target} paths={paths} element={element} />
-      </RegistryContext.Provider>
-    );
-    renderer ??= createRoot(mount);
-    renderer.render(children);
-  });
+function surface(target: CodeDisplayWorkspace | null, paths: string[], element: HTMLElement) {
+  return (
+    <RegistryContext.Provider value={state.registry!}>
+      <Surface target={target} paths={paths} element={element} />
+    </RegistryContext.Provider>
+  );
 }
 
-beforeEach(() => {
-  mount = document.createElement("div");
-  document.body.append(mount);
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  state.registry = AtomRegistry.make();
+function setup() {
+  const registry = AtomRegistry.make();
+  state.registry = registry;
   state.responses.clear();
   state.reads = [];
   state.snapshots.clear();
@@ -162,7 +154,8 @@ beforeEach(() => {
   state.canReadFiles = true;
   state.showWhitespace = false;
   state.displayRenders = 0;
-});
+  return { [Symbol.dispose]: () => registry.dispose() };
+}
 
 describe("pull request code display", () => {
   const target = {
@@ -194,12 +187,14 @@ describe("pull request code display", () => {
   }
 
   it("reads the reviewed snapshot, shares ancestor reads, and never leaves the repository", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     putConfig(workspace, ".editorconfig", "[*]\ntab_width = 2");
     putConfigAtRevision(target, ".editorconfig", "[*]\ntab_width = 4");
     putConfigAtRevision(target, "src/.editorconfig", "[*.ts]\ntab_width = 8");
     state.canReadFiles = false;
     const element = container();
-    await render(target, ["src/app.ts", "src/other.ts"], element);
+    await screen.rerender(surface(target, ["src/app.ts", "src/other.ts"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("8");
     expect(state.reads).toEqual([]);
     expect(state.snapshotReads.map(({ input }) => input.newPath)).toEqual([
@@ -215,12 +210,14 @@ describe("pull request code display", () => {
         oldPath: input.newPath,
       });
     }
-    await render(target, ["README.md"], element);
+    await screen.rerender(surface(target, ["README.md"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("4");
     expect(state.snapshotReads).toHaveLength(2);
   });
 
   it("isolates revisions, hosts, pull requests and environments", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     const sources = [
       target,
       { ...target, snapshot: { ...target.snapshot, commit: "older-commit" } },
@@ -240,16 +237,18 @@ describe("pull request code display", () => {
     const element = container();
     for (const [index, source] of sources.entries()) {
       putConfigAtRevision(source, ".editorconfig", `[*]\ntab_width = ${index + 3}`);
-      await render(source, ["app.ts"], element);
+      await screen.rerender(surface(source, ["app.ts"], element));
       expect(element.style.getPropertyValue("--diffs-tab-size")).toBe(String(index + 3));
     }
     expect(state.snapshotReads).toHaveLength(sources.length);
-    await render(target, ["app.ts"], element);
+    await screen.rerender(surface(target, ["app.ts"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("3");
     expect(state.snapshotReads).toHaveLength(sources.length);
   });
 
   it("reuses snapshots across navigation and remounts until explicitly refreshed", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     const first = { ...target, mutationId: "details:refresh-1" };
     const second = { ...first, snapshot: { ...first.snapshot, commit: "another-commit" } };
     putConfigAtRevision(first, ".editorconfig", "[*]\ntab_width = 4");
@@ -260,31 +259,32 @@ describe("pull request code display", () => {
       [second, "8"],
       [first, "4"],
     ] as const) {
-      await render(source, ["app.ts"], element);
+      await screen.rerender(surface(source, ["app.ts"], element));
       expect(element.style.getPropertyValue("--diffs-tab-size")).toBe(width);
     }
     expect(state.snapshotReads).toHaveLength(2);
-    await act(() => renderer?.unmount());
-    renderer = undefined;
-    await render(first, ["app.ts"], element);
+    await screen.rerender(null);
+    await screen.rerender(surface(first, ["app.ts"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("4");
     expect(state.snapshotReads).toHaveLength(2);
 
     putConfigAtRevision(first, ".editorconfig", "[*]\ntab_width = 6");
-    await render({ ...first, mutationId: "details:refresh-2" }, ["app.ts"], element);
+    await screen.rerender(
+      surface({ ...first, mutationId: "details:refresh-2" }, ["app.ts"], element),
+    );
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("6");
     expect(state.snapshotReads).toHaveLength(3);
   });
 
   it("uses defaults when a snapshot is unavailable instead of the local configuration", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     putConfig(workspace, ".editorconfig", "[*]\ntab_width = 8");
     const element = container();
-    await render(target, ["app.ts"], element);
+    await screen.rerender(surface(target, ["app.ts"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("2");
-    await render(
-      { ...target, snapshot: { ...target.snapshot, commit: null } },
-      ["app.ts"],
-      element,
+    await screen.rerender(
+      surface({ ...target, snapshot: { ...target.snapshot, commit: null } }, ["app.ts"], element),
     );
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("2");
     expect(state.snapshotReads).toHaveLength(1);
@@ -292,29 +292,25 @@ describe("pull request code display", () => {
   });
 
   it("refreshes failed snapshot reads through the existing view refresh signal", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     const element = container();
-    await render(target, ["app.ts"], element);
+    await screen.rerender(surface(target, ["app.ts"], element));
     putConfigAtRevision(target, ".editorconfig", "[*]\nindent_size = 6");
-    await render({ ...target, mutationId: "refresh" }, ["app.ts"], element);
+    await screen.rerender(surface({ ...target, mutationId: "refresh" }, ["app.ts"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("6");
     expect(state.snapshotReads).toHaveLength(2);
     expect(state.reads).toEqual([]);
   });
 });
 
-afterEach(async () => {
-  mount.remove();
-  await act(() => renderer?.unmount());
-  renderer = undefined;
-  state.registry?.dispose();
-  vi.unstubAllGlobals();
-});
-
 describe("workspace code display", () => {
   it("does not rerender code when refreshed configuration resolves to the same widths", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     putConfig(workspace, ".editorconfig", "root = true\n[*]\ntab_width = 4");
     const element = container();
-    await render(workspace, ["app.ts"], element);
+    await screen.rerender(surface(workspace, ["app.ts"], element));
     expect(state.displayRenders).toBe(1);
     const query = projectEnvironment.readFile({
       environmentId,
@@ -332,21 +328,25 @@ describe("workspace code display", () => {
   });
 
   it("shares configuration reads across files and stops at root=true", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     putConfig(workspace, ".editorconfig", "root = true\n[*]\ntab_width = 4\n[*.md]\ntab_width = 6");
     const element = container();
-    await render(workspace, ["src/app.ts", "src/other.ts", "README.md"], element);
+    await screen.rerender(surface(workspace, ["src/app.ts", "src/other.ts", "README.md"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("4");
     expect(state.reads).toEqual([
       JSON.stringify([environmentId, "/repo", "src/.editorconfig"]),
       JSON.stringify([environmentId, "/repo", ".editorconfig"]),
     ]);
 
-    await render(workspace, ["README.md"], element);
+    await screen.rerender(surface(workspace, ["README.md"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("6");
     expect(state.reads).toHaveLength(2);
   });
 
   it("isolates identical paths across environments and worktrees", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     const otherEnvironment = { ...workspace, environmentId: EnvironmentId.make("local") };
     const otherWorktree = { ...workspace, cwd: "/repo-feature" };
     putConfig(workspace, ".editorconfig", "root = true\n[*]\ntab_width = 4");
@@ -358,16 +358,18 @@ describe("workspace code display", () => {
       [otherEnvironment, "6"],
       [otherWorktree, "8"],
     ] as const) {
-      await render(target, ["app.ts"], element);
+      await screen.rerender(surface(target, ["app.ts"], element));
       expect(element.style.getPropertyValue("--diffs-tab-size")).toBe(width);
     }
   });
 
   it("does not read past a pending config that may define root=true", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     const key = JSON.stringify([environmentId, "/repo", ".editorconfig"]);
     state.responses.set(key, AsyncResult.initial());
     const element = container();
-    await render(workspace, ["app.ts"], element);
+    await screen.rerender(surface(workspace, ["app.ts"], element));
     expect(state.reads).toEqual([key]);
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("2");
 
@@ -385,42 +387,52 @@ describe("workspace code display", () => {
   });
 
   it("refreshes after workspace mutations and toggles markers without changing copied text", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     putConfig(workspace, ".editorconfig", "root = true\n[*]\ntab_width = 4");
     const element = container();
     const original = element.shadowRoot!.textContent;
-    await render(workspace, ["app.ts"], element);
+    await screen.rerender(surface(workspace, ["app.ts"], element));
     expect(element.shadowRoot!.querySelector("[data-code-whitespace]")).toBeNull();
 
     putConfig(workspace, ".editorconfig", "root = true\n[*]\ntab_width = 8");
     state.showWhitespace = true;
-    await render({ ...workspace, mutationId: "agent-write" }, ["app.ts"], element);
+    await screen.rerender(
+      surface({ ...workspace, mutationId: "agent-write" }, ["app.ts"], element),
+    );
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("8");
     expect(element.shadowRoot!.querySelector('[data-code-whitespace="tab"]')).not.toBeNull();
     expect(element.shadowRoot!.textContent).toBe(original);
 
     state.showWhitespace = false;
-    await render({ ...workspace, mutationId: "agent-write" }, ["app.ts"], element);
+    await screen.rerender(
+      surface({ ...workspace, mutationId: "agent-write" }, ["app.ts"], element),
+    );
     expect(element.shadowRoot!.querySelector("[data-code-whitespace]")).toBeNull();
     expect(element.shadowRoot!.textContent).toBe(original);
     expect(state.reads).toHaveLength(2);
   });
 
   it("falls back for absent, unreadable, or truncated configurations", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     putConfig(workspace, ".editorconfig", "root = true\n[*]\ntab_width = 8", true);
     state.responses.set(
       JSON.stringify([environmentId, "/repo", "/.editorconfig"]),
       AsyncResult.failure(Cause.fail(new Error("Denied"))),
     );
     const element = container();
-    await render(workspace, ["app.ts"], element);
+    await screen.rerender(surface(workspace, ["app.ts"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("2");
   });
 
   it("drops a deleted configuration even when the query retains its previous success", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     putConfig(workspace, ".editorconfig", "root = true\n[*]\ntab_width = 8");
     putConfig(workspace, "/.editorconfig", "root = true\n[*]\nindent_size = 4");
     const element = container();
-    await render(workspace, ["app.ts"], element);
+    await screen.rerender(surface(workspace, ["app.ts"], element));
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("8");
     const key = JSON.stringify([environmentId, "/repo", ".editorconfig"]);
     state.responses.set(
@@ -429,17 +441,21 @@ describe("workspace code display", () => {
         previous: Option.some(state.responses.get(key)!),
       }),
     );
-    await render({ ...workspace, mutationId: "delete-config" }, ["app.ts"], element);
+    await screen.rerender(
+      surface({ ...workspace, mutationId: "delete-config" }, ["app.ts"], element),
+    );
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("4");
   });
 
   it("makes no file requests for denied access or captured attachments", async () => {
+    using _state = setup();
+    await using screen = await render(null);
     const element = container();
     state.canReadFiles = false;
-    await render(workspace, ["app.ts"], element);
+    await screen.rerender(surface(workspace, ["app.ts"], element));
     state.canReadFiles = true;
     state.showWhitespace = true;
-    await render(null, ["attachment.ts"], element);
+    await screen.rerender(surface(null, ["attachment.ts"], element));
     expect(state.reads).toEqual([]);
     expect(element.style.getPropertyValue("--diffs-tab-size")).toBe("2");
     expect(element.shadowRoot!.querySelector('[data-code-whitespace="tab"]')).not.toBeNull();

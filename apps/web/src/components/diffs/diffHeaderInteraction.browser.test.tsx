@@ -1,25 +1,17 @@
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { createPortal } from "react-dom";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { act, render } from "../../../test/render";
 
 import { TooltipProvider } from "../ui/tooltip";
 import { DiffFileHeaderActions } from "./DiffFileHeaderActions";
 import { diffHeaderTogglePath } from "./diffHeaderInteraction";
 
 describe("diff file header interactions across the shadow boundary", () => {
-  let container: HTMLDivElement;
-  let shadow: ShadowRoot;
-  let root: Root;
-  const toggle = vi.fn();
-  const open = vi.fn();
-
-  beforeEach(async () => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    toggle.mockClear();
-    open.mockClear();
-    container = document.createElement("div");
-    document.body.append(container);
-    shadow = container.attachShadow({ mode: "open" });
+  async function setup() {
+    const toggle = vi.fn();
+    const open = vi.fn();
+    const container = document.createElement("div");
+    const shadow = container.attachShadow({ mode: "open" });
     container.addEventListener(
       "click",
       (event) => {
@@ -28,9 +20,8 @@ describe("diff file header interactions across the shadow boundary", () => {
       },
       true,
     );
-    root = createRoot(shadow);
-    await act(async () =>
-      root.render(
+    const screen = await render(
+      createPortal(
         <TooltipProvider>
           <div data-diffs-header>
             <button aria-label="Collapse diff" onClick={() => toggle("src/new.ts")}>
@@ -51,24 +42,22 @@ describe("diff file header interactions across the shadow boundary", () => {
           </div>
           <div data-body>Code</div>
         </TooltipProvider>,
+        shadow,
       ),
+      { container },
     );
-  });
 
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    container.remove();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
-  async function click(selector: string) {
-    const target = shadow.querySelector<HTMLElement>(selector);
-    expect(target).not.toBeNull();
-    await act(async () => target!.click());
+    const click = async (selector: string) => {
+      const target = shadow.querySelector<HTMLElement>(selector);
+      expect(target).not.toBeNull();
+      await act(async () => target!.click());
+    };
+    return { ...screen, shadow, toggle, open, click };
   }
 
   it("leaves both names inert, including their nested text", async () => {
+    await using screen = await setup();
+    const { click, toggle, open } = screen;
     await click("[data-title] span");
     await click("[data-prev-name] span");
     expect(toggle).not.toHaveBeenCalled();
@@ -76,6 +65,8 @@ describe("diff file header interactions across the shadow boundary", () => {
   });
 
   it("toggles the header outside the name and toggles the chevron only once", async () => {
+    await using screen = await setup();
+    const { click, toggle } = screen;
     await click("[data-stat]");
     expect(toggle.mock.calls).toEqual([["src/new.ts"]]);
     await click('[aria-label="Collapse diff"]');
@@ -83,13 +74,17 @@ describe("diff file header interactions across the shadow boundary", () => {
   });
 
   it("opens the file without collapsing its diff", async () => {
+    await using screen = await setup();
+    const { click, toggle, open } = screen;
     await click('[aria-label="Open file"]');
     expect(open).toHaveBeenCalledExactlyOnceWith("src/new.ts");
     expect(toggle).not.toHaveBeenCalled();
   });
 
   it("copies the path without opening or collapsing the file", async () => {
-    const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    await using screen = await setup();
+    const { click, toggle, open } = screen;
+    using write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     await click('[aria-label="Copy file path"]');
     expect(write).toHaveBeenCalledExactlyOnceWith("src/new.ts");
     expect(toggle).not.toHaveBeenCalled();
@@ -97,6 +92,8 @@ describe("diff file header interactions across the shadow boundary", () => {
   });
 
   it("leaves viewed toggles and the code body alone", async () => {
+    await using screen = await setup();
+    const { click, toggle, open, shadow } = screen;
     await click("[data-viewed-toggle] input");
     await click("[data-body]");
     expect(shadow.querySelector<HTMLInputElement>("input")?.checked).toBe(true);
