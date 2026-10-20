@@ -14,6 +14,9 @@ const bridge = vi.hoisted(() => ({
   setSnapShotShortcutSuppressed: vi.fn(),
 }));
 const toast = vi.hoisted(() => vi.fn());
+vi.mock(import("../../hooks/useCodeDisplay"), () => ({
+  useCodeDisplay: () => ({ onPostRender: vi.fn(), tabSizes: new Map(), showWhitespace: false }),
+}));
 vi.mock(import("../../lib/desktopSnapShot"), async (original) => ({
   ...(await original()),
   getDesktopSnapShotBridge: () => bridge as never,
