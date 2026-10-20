@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as DesktopConfig from "../app/DesktopConfig.ts";
@@ -40,13 +41,14 @@ const DesktopSettingsPatch = Schema.Struct({
 const decodeDesktopSettingsPatch = Schema.decodeEffect(Schema.fromJsonString(DesktopSettingsPatch));
 const encodeDesktopSettingsPatch = Schema.encodeEffect(Schema.fromJsonString(DesktopSettingsPatch));
 
-function layerEnvironment(baseDir: string, appVersion = "0.0.17") {
+function layerEnvironment(baseDir: string, appVersion = "0.0.17", customBuildStamp?: string) {
   return DesktopEnvironment.layer({
     dirname: "/repo/apps/desktop/src",
     homeDirectory: baseDir,
     platform: "darwin",
     processArch: "x64",
     appVersion,
+    ...(customBuildStamp ? { customBuildStamp } : {}),
     appPath: "/repo",
     isPackaged: true,
     resourcesPath: "/missing/resources",
@@ -64,7 +66,7 @@ const withSettings = <A, E, R>(
     E,
     R | DesktopAppSettings.DesktopAppSettings | DesktopEnvironment.DesktopEnvironment
   >,
-  options?: { readonly appVersion?: string },
+  options?: { readonly appVersion?: string; readonly customBuildStamp?: string },
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -74,7 +76,9 @@ const withSettings = <A, E, R>(
     return yield* effect.pipe(
       Effect.provide(
         DesktopAppSettings.layer.pipe(
-          Layer.provideMerge(layerEnvironment(baseDir, options?.appVersion)),
+          Layer.provideMerge(
+            layerEnvironment(baseDir, options?.appVersion, options?.customBuildStamp),
+          ),
           Layer.provideMerge(NodeServices.layer),
         ),
       ),
@@ -118,6 +122,27 @@ describe("DesktopSettings", () => {
         assert.deepEqual(yield* settings.get, DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS);
       }),
     ),
+  );
+
+  it.effect(
+    "keeps custom builds on nightly by default and honors an explicit stable selection",
+    () =>
+      withSettings(
+        Effect.gen(function* () {
+          const settings = yield* DesktopAppSettings.DesktopAppSettings;
+          assert.equal((yield* settings.load).updateChannel, "nightly");
+          yield* writeSettingsPatch({
+            updateChannel: "latest",
+            updateChannelConfiguredByUser: false,
+          });
+          assert.equal((yield* settings.load).updateChannel, "nightly");
+          yield* settings.setUpdateChannel("latest");
+          assert.equal((yield* settings.load).updateChannel, "latest");
+          yield* settings.setUpdateChannel("nightly");
+          assert.equal((yield* settings.load).updateChannel, "nightly");
+        }),
+        { appVersion: "0.1.1", customBuildStamp: "202610171539" },
+      ),
   );
 
   it("defaults packaged nightly builds to the nightly update channel", () => {
@@ -376,7 +401,8 @@ describe("DesktopSettings", () => {
           const dotfiles = yield* fileSystem.makeTempDirectoryScoped({
             prefix: "t3-desktop-settings-dotfiles-",
           });
-          const linkedSettingsPath = `${dotfiles}/desktop-settings.json`;
+          const path = yield* Path.Path;
+          const linkedSettingsPath = path.join(dotfiles, "desktop-settings.json");
           yield* fileSystem.writeFileString(linkedSettingsPath, "{}\n");
           yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
           yield* fileSystem.symlink(linkedSettingsPath, environment.desktopSettingsPath);

@@ -34,6 +34,7 @@ import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as IpcChannels from "../ipc/channels.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import { normalizeDesktopUpdateReleaseNotes } from "./releaseNotes.ts";
+import { isNightlyNotNewerThanCustomBuild } from "./customBuildRelease.ts";
 import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
 import {
   createInitialDesktopUpdateState,
@@ -68,6 +69,7 @@ const UpdateInfo = Schema.Struct({
   // fail the decode and block the update state transition. The shape is
   // validated defensively in normalizeDesktopUpdateReleaseNotes.
   releaseNotes: Schema.optional(Schema.Unknown),
+  releaseDate: Schema.optional(Schema.Unknown),
   files: Schema.optional(Schema.Unknown),
 });
 
@@ -504,15 +506,21 @@ export const make = Effect.gen(function* () {
   ) {
     yield* Effect.annotateCurrentSpan({ channel });
     const allowsPrerelease = channel === "nightly";
+    // A custom build's stable base sorts above same-base nightlies in semver.
+    // Request the target's notes rather than filtering them against that base.
+    const fullChangelog =
+      allowsPrerelease &&
+      (!environment.customBuildStamp ||
+        resolveDefaultDesktopUpdateChannel(environment.appVersion) === "nightly");
     yield* electronUpdater.setChannel(channel);
     yield* electronUpdater.setAllowPrerelease(allowsPrerelease);
     yield* electronUpdater.setAllowDowngrade(allowsPrerelease);
-    yield* electronUpdater.setFullChangelog(allowsPrerelease);
+    yield* electronUpdater.setFullChangelog(fullChangelog);
     yield* logUpdaterInfo("using update channel", {
       channel,
       allowPrerelease: allowsPrerelease,
       allowDowngrade: allowsPrerelease,
-      fullChangelog: allowsPrerelease,
+      fullChangelog,
     });
   });
 
@@ -899,6 +907,30 @@ export const make = Effect.gen(function* () {
     );
   }).pipe(Effect.withSpan("desktop.updates.startPollers"));
 
+  const ignoreCoveredNightly = Effect.fn("desktop.updates.ignoreCoveredNightly")(function* (
+    info: typeof UpdateInfo.Type,
+  ) {
+    if (
+      !environment.customBuildStamp ||
+      !isNightlyNotNewerThanCustomBuild(
+        info.version,
+        info.releaseDate,
+        environment.customBuildTimestamp,
+      )
+    ) {
+      return false;
+    }
+    const state = yield* Ref.get(updateStateRef);
+    const checkedAt = yield* currentIsoTimestamp;
+    yield* setState(reduceDesktopUpdateStateOnNoUpdate(state, checkedAt));
+    yield* Ref.set(lastLoggedDownloadMilestoneRef, -1);
+    yield* logUpdaterInfo("ignoring nightly not newer than installed custom build", {
+      version: info.version,
+      customBuildTimestamp: environment.customBuildTimestamp,
+    });
+    return true;
+  });
+
   const cachedDownloadSha512 = Effect.gen(function* () {
     const pendingDirectory = yield* electronUpdater.pendingDownloadDirectory;
     if (Option.isNone(pendingDirectory)) return Option.none<string>();
@@ -943,6 +975,7 @@ export const make = Effect.gen(function* () {
     yield* decodeUpdateInfo(raw).pipe(
       Effect.flatMap(
         Effect.fn("desktop.updates.applyUpdateAvailable")(function* (info) {
+          if (yield* ignoreCoveredNightly(info)) return;
           const state = yield* Ref.get(updateStateRef);
           if (resolveDefaultDesktopUpdateChannel(info.version) !== state.channel) {
             yield* logUpdaterInfo("ignoring update that does not match selected channel", {
@@ -1083,6 +1116,7 @@ export const make = Effect.gen(function* () {
     yield* decodeUpdateInfo(raw).pipe(
       Effect.flatMap(
         Effect.fn("desktop.updates.applyUpdateDownloaded")(function* (info) {
+          if (yield* ignoreCoveredNightly(info)) return;
           const state = yield* Ref.get(updateStateRef);
           yield* setState(reduceDesktopUpdateStateOnDownloadComplete(state, info.version));
           yield* logUpdaterInfo("update downloaded", { version: info.version });

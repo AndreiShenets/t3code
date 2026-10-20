@@ -88,6 +88,16 @@ const localEnvironmentBootstraps = createPreloadSnapshot(
 let localEnvironmentEnabled: boolean | undefined;
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  customBuildUpdate: (action) =>
+    ipcRenderer.invoke(IpcChannels.CUSTOM_BUILD_ACTION_CHANNEL, action),
+  onCustomBuildState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: unknown) => {
+      if (typeof state !== "object" || state === null) return;
+      listener(state as Parameters<typeof listener>[0]);
+    };
+    ipcRenderer.on(IpcChannels.CUSTOM_BUILD_STATE_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(IpcChannels.CUSTOM_BUILD_STATE_CHANNEL, handler);
+  },
   getAppBranding: () => {
     const result = ipcRenderer.sendSync(IpcChannels.GET_APP_BRANDING_CHANNEL);
     if (typeof result !== "object" || result === null) {

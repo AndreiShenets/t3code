@@ -1,3 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off - Mock filesystem paths must use the host's separators.
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { DesktopUpdateState } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -40,8 +43,11 @@ export interface UpdatesHarnessOptions {
   readonly backendInstances?: ReadonlyArray<DesktopBackendPool.DesktopBackendInstance>;
   readonly env?: Record<string, string | undefined>;
   readonly platform?: NodeJS.Platform;
+  readonly appVersion?: string;
   readonly packageType?: string | undefined;
   readonly installRecord?: string | undefined;
+  readonly customBuildStamp?: string;
+  readonly customBuildTimestamp?: string;
 }
 
 const PENDING_DOWNLOAD_DIRECTORY = "/cache/t3code-updater/pending";
@@ -175,11 +181,13 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
     homeDirectory: `/tmp/t3-desktop-updates-home-${process.pid}`,
     platform: options.platform ?? "darwin",
     processArch: "x64",
-    appVersion: "1.2.3",
+    appVersion: options.appVersion ?? "1.2.3",
     appPath: "/repo",
     isPackaged: true,
     resourcesPath: "/missing/resources",
     runningUnderArm64Translation: options.runningUnderArm64Translation ?? false,
+    ...(options.customBuildStamp ? { customBuildStamp: options.customBuildStamp } : {}),
+    ...(options.customBuildTimestamp ? { customBuildTimestamp: options.customBuildTimestamp } : {}),
   }).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -242,7 +250,8 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
         ? (installRecords.get(path) ?? previousInstallRecord)
         : undefined;
       if (installRecord !== undefined) return Effect.succeed(installRecord);
-      return path === "/missing/resources/package-type" && options.packageType !== undefined
+      return path === NodePath.join("/missing/resources", "package-type") &&
+        options.packageType !== undefined
         ? Effect.succeed(options.packageType)
         : path === `${PENDING_DOWNLOAD_DIRECTORY}/update-info.json` &&
             options.cachedDownloadSha512 !== undefined
