@@ -358,6 +358,20 @@ describe("ClientSettings default diff file state", () => {
   });
 });
 
+describe("ClientSettings whitespace characters", () => {
+  it("keeps whitespace characters hidden when existing settings omit the preference", () => {
+    expect(decodeClientSettings({}).showWhitespace).toBe(false);
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("showWhitespace");
+  });
+
+  it.each([true, false])("preserves a saved preference of %s", (showWhitespace) => {
+    const preference = { showWhitespace };
+    const stored = encodeClientSettings(decodeClientSettings(preference));
+    expect(decodeClientSettings(stored)).toMatchObject(preference);
+    expect(decodeClientSettingsPatch(preference)).toEqual(preference);
+  });
+});
+
 describe("ClientSettings diff colors", () => {
   it("keeps red and green for existing settings without a saved palette", () => {
     expect(decodeClientSettings({}).diffColorScheme).toBe("red-green");
