@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { DEFAULT_SERVER_SETTINGS, ProviderInstanceId } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -303,7 +304,7 @@ describe("readOpenCodeUsage", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("never follows symlinks in the legacy OpenCode store", () =>
+  it.effect.skipIf(!symlinksSupported)("never follows symlinks in the legacy OpenCode store", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -404,11 +405,11 @@ describe("openCodeUsageReader", () => {
       const instanceRoot = path.join(home, "instance");
       const dataHome = path.join(home, "xdg");
       const xdgRoot = path.join(dataHome, "opencode");
-      const alias = path.join(home, "default-alias");
+      const alias = symlinksSupported ? path.join(home, "default-alias") : defaultRoot;
       for (const root of [defaultRoot, instanceRoot, xdgRoot]) {
         yield* fileSystem.makeDirectory(root, { recursive: true });
       }
-      yield* fileSystem.symlink(defaultRoot, alias);
+      if (symlinksSupported) yield* fileSystem.symlink(defaultRoot, alias);
       const instances = [
         { id: "opencode", environment: {}, configured: false },
         {
