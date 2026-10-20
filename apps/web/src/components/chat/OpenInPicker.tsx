@@ -41,6 +41,7 @@ import {
   TraeIcon,
   VisualStudioCode,
   VisualStudioCodeInsiders,
+  VisualStudioIcon,
   VSCodium,
   Zed,
 } from "../Icons";
@@ -181,6 +182,11 @@ export const resolveOpenInOptions = (
     {
       Icon: WebStormIcon,
       value: "webstorm",
+      kind: "brand",
+    },
+    {
+      Icon: VisualStudioIcon,
+      value: "visual-studio",
       kind: "brand",
     },
     {
