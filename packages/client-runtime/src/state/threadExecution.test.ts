@@ -56,6 +56,36 @@ function run(id: string, ordinal: number, status: OrchestrationV2RunStatus) {
 }
 
 describe("thread execution presentation", () => {
+  it("shows a completed turn as waiting while its command runs, then returns to completed", () => {
+    const completed = run("background-shell", 1, "completed");
+    const command = {
+      id: TurnItemId.make("background-command"),
+      threadId: v2Projection.thread.id,
+      runId: completed.id,
+      nodeId: null,
+      providerThreadId: null,
+      providerTurnId: null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal: 1,
+      type: "command_execution" as const,
+      status: "running" as const,
+      title: "Run tests",
+      input: "npm test",
+      startedAt: now,
+      completedAt: null,
+      updatedAt: now,
+    };
+    const projection = { ...v2Projection, runs: [completed], turnItems: [command] };
+    expect(deriveThreadRuntime(projection)).toMatchObject({ status: "idle", activeRunId: null });
+    expect(deriveThreadRuntime({ ...projection, turnItems: [] })).toMatchObject({
+      status: "completed",
+    });
+    expect(
+      deriveThreadRuntime({ ...projection, runs: [completed, run("wake", 2, "running")] }),
+    ).toMatchObject({ status: "running", activeRunId: RunId.make("wake") });
+  });
+
   it("derives the current root failure without inheriting errors from children or previous runs", () => {
     const failed = { ...run("limited", 1, "failed"), rootNodeId: NodeId.make("root") };
     const item = {
@@ -601,22 +631,22 @@ describe("presentPendingBackgroundWork", () => {
     expect(presentPendingBackgroundWork([])).toBeNull();
   });
 
-  it("says only commands are running, not waited on", () => {
+  it("shows waiting while background commands are still running", () => {
     expect(
       presentPendingBackgroundWork([
         { taskId: "dev", kind: "command", description: "Start the shared dev server" },
       ]),
-    ).toMatchObject({ title: "Running: Start the shared dev server", waiting: false });
+    ).toMatchObject({ title: "Waiting on command Start the shared dev server", waiting: true });
     expect(presentPendingBackgroundWork([{ taskId: "a", kind: "command" }])).toMatchObject({
-      title: "Running a command",
-      waiting: false,
+      title: "Waiting on a command",
+      waiting: true,
     });
     expect(
       presentPendingBackgroundWork([
         { taskId: "a", kind: "command", description: "vp run dev" },
         { taskId: "b", kind: "command", description: "tailscale serve" },
       ]),
-    ).toMatchObject({ title: "Running 2 commands", waiting: false });
+    ).toMatchObject({ title: "Waiting on 2 commands", waiting: true });
     expect(
       presentPendingBackgroundWork([
         { taskId: "a", kind: "command", description: "vp run dev" },
