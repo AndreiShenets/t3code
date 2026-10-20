@@ -8,7 +8,10 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
@@ -62,7 +65,7 @@ import {
 } from "react";
 
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
-import { useRightPanelStore } from "~/rightPanelStore";
+import { type PullRequestDetailTab, useRightPanelStore } from "~/rightPanelStore";
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
@@ -74,6 +77,7 @@ import {
 } from "~/keybindings";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { usePullRequestDefaultMergeMethodResolver } from "./usePullRequestActions";
+import { OFF_HEAD_PULL_REQUEST_CHECKOUT_TOAST } from "./pullRequestCheckoutToast";
 import { changeRequestRepositoryUrl, gitHubPullRequestBrowserUrl } from "~/lib/openPullRequestLink";
 import { usePreparePullRequestThreadAction } from "~/lib/sourceControlActions";
 import { cn } from "~/lib/utils";
@@ -155,6 +159,7 @@ import {
   pullRequestFindingKey,
   pullRequestHandoffLabels,
   PULL_REQUEST_MERGE_METHOD_LABELS,
+  checkoutFailureDescription,
   readableFailure,
   readPullRequestDetailSnapshot,
   resolvePullRequestReferenceHost,
@@ -191,11 +196,7 @@ import { PullRequestGuideTab } from "./PullRequestGuideTab";
 import { guideRunKey, useGuideRunStore } from "./guide/guideRunStore";
 import { useReviewGuideWriter } from "./guide/useReviewGuideWriter";
 import { useInlineActionConfirm } from "./useInlineActionConfirm";
-import {
-  savePullRequestScroll,
-  type PullRequestDetailTab,
-  type PullRequestViewStateStore,
-} from "./pullRequestViewState";
+import { savePullRequestScroll, type PullRequestViewStateStore } from "./pullRequestViewState";
 
 type DetailTab = PullRequestDetailTab;
 
@@ -238,7 +239,7 @@ const ACTION_FAILURE_HINTS: Record<PullRequestAction, string> = {
 const UPDATE_BRANCH_REBASE_FAILURE_HINT =
   "The host refused it. A rebase stops at the first commit that does not apply cleanly; updating with a merge commit may still work.";
 
-const TABS: ReadonlyArray<{ value: DetailTab; label: string }> = [
+const TABS: ReadonlyArray<{ value: PullRequestDetailTab; label: string }> = [
   { value: "summary", label: "Summary" },
   { value: "guide", label: "Guide" },
   { value: "timeline", label: "Timeline" },
@@ -534,7 +535,15 @@ function usePullRequestDetail(
           author: activity?.author ?? coreDetail.author,
           reviewers: activity?.reviewers ?? coreDetail.reviewers,
           comments: activity?.comments ?? [],
-          commentCount: activity?.commentCount ?? 0,
+          commentCount: Math.max(
+            activity?.commentCount ?? 0,
+            new Set([
+              ...(activity?.comments.map((comment) => comment.id) ?? []),
+              ...(activity?.reviewThreads.flatMap((thread) =>
+                thread.comments.map((comment) => comment.id),
+              ) ?? []),
+            ]).size,
+          ),
           commentsTruncated: activity?.commentsTruncated ?? false,
           reviewThreads: activity?.reviewThreads ?? [],
           commits: activity?.commits ?? [],
@@ -589,6 +598,8 @@ export function PullRequestDetailPanel({
   onSelectPullRequest,
   onGuideShown,
   viewState,
+  initialTab = "summary",
+  onTabChange,
 }: {
   environmentId: EnvironmentId;
   shortcutsEnabled: boolean;
@@ -605,6 +616,8 @@ export function PullRequestDetailPanel({
   onBack?: (() => void) | undefined;
   onGuideShown?: (() => void) | undefined;
   viewState?: PullRequestViewStateStore;
+  initialTab?: PullRequestDetailTab;
+  onTabChange?: ((tab: PullRequestDetailTab) => void) | undefined;
 }) {
   const environmentConfigs = useServerConfigs();
   const projects = useProjects();
@@ -638,7 +651,11 @@ export function PullRequestDetailPanel({
   const [threadPickerOpen, setThreadPickerOpen] = useState(false);
   const [openReviewRequest, setOpenReviewRequest] = useState(0);
   const savedView = viewState?.getState();
-  const [tab, setTab] = useState<DetailTab>(savedView?.tab ?? "summary");
+  const [tab, setTab] = useState<DetailTab>(savedView?.tab ?? initialTab);
+  const selectTab = (next: PullRequestDetailTab) => {
+    setTab(next);
+    onTabChange?.(next);
+  };
   const [timelineOrder, setTimelineOrder] = useState<"newest" | "oldest">(
     savedView?.timelineOrder ?? "newest",
   );
@@ -653,7 +670,7 @@ export function PullRequestDetailPanel({
   };
   const openCommit = (oid: string) => {
     selectCodeCommit(oid);
-    setTab("code");
+    selectTab("code");
   };
   const [codeRevealRequest, setCodeRevealRequest] = useState<{
     readonly path: string;
@@ -663,15 +680,17 @@ export function PullRequestDetailPanel({
     selectCodeCommit(null);
     setCodeRevealRequest((previous) => ({ path, nonce: (previous?.nonce ?? 0) + 1 }));
     void loadCodeTab();
-    setTab("code");
+    selectTab("code");
   };
   const guideOpenRequested = useGuideRunStore(
     (state) => state.openRequestKey === guideRunKey(environmentId, reference),
   );
   if (guideOpenRequested && tab !== "guide") setTab("guide");
   useEffect(() => {
-    if (guideOpenRequested) useGuideRunStore.getState().requestOpen(null);
-  }, [guideOpenRequested]);
+    if (!guideOpenRequested) return;
+    useGuideRunStore.getState().requestOpen(null);
+    onTabChange?.("guide");
+  }, [guideOpenRequested, onTabChange]);
   const tabScopeKey = `${environmentId}:${pullRequestKey}`;
   const [tabMountState, setTabMountState] = useState(() => ({
     key: tabScopeKey,
@@ -679,7 +698,7 @@ export function PullRequestDetailPanel({
   }));
   // A previously visited Code tab must not fetch diffs for every later PR while hidden.
   const mountedTabs =
-    tabMountState.key === tabScopeKey ? tabMountState.tabs : new Set<DetailTab>([tab]);
+    tabMountState.key === tabScopeKey ? tabMountState.tabs : new Set<PullRequestDetailTab>([tab]);
   if (tabMountState.key !== tabScopeKey) {
     setTabMountState({ key: tabScopeKey, tabs: new Set([tab]) });
   } else if (!tabMountState.tabs.has(tab)) {
@@ -690,7 +709,7 @@ export function PullRequestDetailPanel({
     savedView?.condensedByTab ?? {},
   );
   const condensed = condensedByTab[tab] ?? false;
-  const scrollerByTab = useRef<Partial<Record<DetailTab, HTMLDivElement | null>>>({});
+  const scrollerByTab = useRef<Partial<Record<PullRequestDetailTab, HTMLDivElement | null>>>({});
   // Fresh ref callbacks would detach and reattach every scroller on each render.
   const [scrollerRefs] = useState(() => ({
     summary: (node: HTMLDivElement | null) => {
@@ -718,10 +737,12 @@ export function PullRequestDetailPanel({
   }, [viewState, tab, timelineOrder, selectedCodeCommitOid, condensedByTab]);
   const foldRef = useRef<HTMLDivElement | null>(null);
   const condensedRowRef = useRef<HTMLDivElement | null>(null);
+  // Save the target before collapse: the browser may clamp scrollTop as the viewport grows,
+  // so applying a delta afterward would compensate twice.
   const compensationRef = useRef<{
-    tab: DetailTab;
+    tab: PullRequestDetailTab;
     scroller: HTMLDivElement;
-    delta: number;
+    target: number;
   } | null>(null);
   useLayoutEffect(() => {
     const compensation = compensationRef.current;
@@ -733,10 +754,7 @@ export function PullRequestDetailPanel({
       scrollerByTab.current[tab] !== compensation.scroller
     )
       return;
-    compensation.scroller.scrollTop = Math.max(
-      0,
-      compensation.scroller.scrollTop + compensation.delta,
-    );
+    compensation.scroller.scrollTop = Math.max(0, compensation.target);
     savePullRequestScroll(viewState, tab, compensation.scroller);
   }, [condensed, tab, viewState]);
   const lastSelectedMergeMethod = useUiStateStore((state) => state.pullRequestMergeMethod);
@@ -1068,7 +1086,7 @@ export function PullRequestDetailPanel({
   });
   const writeGuide = () => {
     void guideWriter.write();
-    if (guideWriter.data?.guide == null) setTab("guide");
+    if (guideWriter.data?.guide == null) selectTab("guide");
   };
 
   const writeTaskToComposer = (target: ScopedThreadRef | DraftId, task: ThreadTask) => {
@@ -1241,12 +1259,12 @@ export function PullRequestDetailPanel({
     });
     if (prepared._tag === "Failure") {
       setHandoff(null);
-      const detailMessage =
-        prepareThread.error instanceof Error ? prepareThread.error.message : null;
       toastManager.update(toastId, {
         type: "error",
         title: "Could not prepare the pull request checkout",
-        ...(detailMessage ? { description: detailMessage } : {}),
+        description: checkoutFailureDescription(
+          isAtomCommandInterrupted(prepared) ? undefined : squashAtomCommandFailure(prepared),
+        ),
       });
       return;
     }
@@ -1271,12 +1289,6 @@ export function PullRequestDetailPanel({
       return;
     }
     setHandoff(null);
-    const staleCheckoutToast = {
-      type: "warning",
-      title: "Checked out, but not on the latest commits",
-      description:
-        "The checkout could not be moved onto the pull request's latest commits, so the code there is older than the pull request. Uncommitted work or local commits keep it where it is.",
-    } as const;
     if (task === null) {
       toastManager.update(
         toastId,
@@ -1289,7 +1301,7 @@ export function PullRequestDetailPanel({
                   ? "This repository is on the pull request's branch, with a thread open on it."
                   : "The pull request is in its own worktree, with a thread open on it.",
             }
-          : staleCheckoutToast,
+          : OFF_HEAD_PULL_REQUEST_CHECKOUT_TOAST,
       );
       return;
     }
@@ -1302,7 +1314,7 @@ export function PullRequestDetailPanel({
             title: "Checkout ready",
             description: "The task is in the composer — read it over, then send.",
           }
-        : staleCheckoutToast,
+        : OFF_HEAD_PULL_REQUEST_CHECKOUT_TOAST,
     );
   };
 
@@ -1464,6 +1476,7 @@ export function PullRequestDetailPanel({
       (item.value !== "code" || detail === null || detail.capabilities.diff) &&
       (item.value !== "guide" || reviewGuidesEnabled),
   );
+  // Keep unavailable-tab fallbacks out of the saved selection.
   if (!visibleTabs.some((item) => item.value === tab)) setTab("summary");
   const can = (action: PullRequestAction) =>
     detail?.capabilities.actions.includes(action) === true &&
@@ -2505,6 +2518,7 @@ export function PullRequestDetailPanel({
                           setTitleScope({ pullRequestKey, text: event.target.value })
                         }
                         onKeyDown={(event) => {
+                          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                           if (event.key === "Enter") {
                             event.preventDefault();
                             void saveTitle(titleDraft);
@@ -2629,7 +2643,7 @@ export function PullRequestDetailPanel({
           <PullRequestDetailTabBar
             tabs={visibleTabs}
             value={tab}
-            onValueChange={setTab}
+            onValueChange={selectTab}
             onTabIntent={(item) => {
               if (item === "code") void loadCodeTab();
             }}
@@ -2796,7 +2810,7 @@ export function PullRequestDetailPanel({
             if (top < 4 && foldHeight > 0) next = false;
           } else if (foldHeight > 0 && top > foldHeight + 32) {
             const chromeDelta = foldHeight - (condensedRowRef.current?.scrollHeight ?? 0);
-            compensationRef.current = { tab, scroller, delta: -chromeDelta };
+            compensationRef.current = { tab, scroller, target: top - chromeDelta };
             next = true;
           }
           if (next !== previous) setCondensedByTab({ ...condensedByTab, [tab]: next });
