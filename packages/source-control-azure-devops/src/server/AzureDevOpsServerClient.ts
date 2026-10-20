@@ -35,12 +35,12 @@ export class AzureDevOpsServerError extends Schema.TaggedError<AzureDevOpsServer
 ) {
   get detail(): string {
     if (this.operation === "settings")
-      return "Enter a full HTTPS collection URL and select Automatic or PAT authentication in Source Control settings.";
+      return "Enter a full HTTPS collection URL in Source Control settings. Add a PAT, or leave it empty to use Windows credentials.";
     switch (this.reason) {
       case "missing-tool":
         return "System curl is unavailable.";
       case "unauthenticated":
-        return "Integrated authentication is unavailable or rejected. Save a scoped Azure DevOps Server PAT in Settings.";
+        return "Authentication failed. Check the saved PAT, or leave it empty to use Windows credentials. A PAT is required on macOS/Linux.";
       case "rate-limited":
         return "Azure DevOps Server rate limit exceeded.";
       case "not-found":
@@ -179,7 +179,6 @@ export const make = Effect.gen(function* () {
     });
     return {
       base,
-      authentication: decoded.authentication ?? "auto",
       pat: decoded.personalAccessToken ?? "",
     };
   });
@@ -366,7 +365,7 @@ export const make = Effect.gen(function* () {
             }),
           );
       let integrated = false;
-      if (settings.authentication === "auto" && platform === "win32") {
+      if (!settings.pat && platform === "win32") {
         if (integratedSupport === undefined) {
           const version = yield* run(["-q", "--version"]);
           integratedSupport =
@@ -470,16 +469,13 @@ export const make = Effect.gen(function* () {
           });
         return response;
       });
-      let auth: "integrated" | "pat" = integrated ? "integrated" : "pat";
+      const auth: "integrated" | "pat" = integrated ? "integrated" : "pat";
       if (mutation && integrated) {
         const probeUrl = `${settings.base.origin}${settings.base.pathname}/_apis/connectionData?api-version=7.0-preview.1`;
         const probe = yield* send(probeUrl, "GET", auth);
-        if (probe.status === 401 && settings.pat) auth = "pat";
-        else yield* check(probe, false);
+        yield* check(probe, false);
       }
-      let response = yield* send(url.href, method, auth, input.body);
-      if (!mutation && auth === "integrated" && response.status === 401 && settings.pat)
-        response = yield* send(url.href, method, "pat", input.body);
+      const response = yield* send(url.href, method, auth, input.body);
       yield* check(response, mutation);
       if (!response.body.trim()) return undefined;
       return yield* decodeJson(response.body).pipe(

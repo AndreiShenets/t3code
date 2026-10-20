@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { makeProviderSettingsSchema, ProviderDriverKind, TrimmedString } from "@t3tools/contracts";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import * as Schema from "effect/Schema";
 
 import { providerClients } from "./providerDriverMeta";
@@ -9,6 +10,11 @@ import {
 } from "./ProviderSettingsForm";
 
 describe("ProviderSettingsForm helpers", () => {
+  it("offers only a collection and optional PAT, with no authentication selector", () => {
+    const definition = sourceControlClients.find("azure-devops-custom-server")!;
+    const fields = deriveProviderSettingsFields({ settingsSchema: definition.settings! });
+    expect(fields.map((field) => field.key)).toEqual(["collectionUrl", "personalAccessToken"]);
+  });
   it("derives visible provider config fields from the client definition schema", () => {
     const codex = providerClients.get(ProviderDriverKind.make("codex"));
 

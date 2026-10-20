@@ -115,11 +115,11 @@ export function resolveChangeRequestPresentation(
     case "azure-devops-custom-server":
       return {
         icon: "azure-devops",
-        providerName: "JDWeb Server (custom)",
+        providerName: "Azure DevOps Custom",
         shortName: "PR",
         longName: "pull request",
         pluralLongName: "pull requests",
-        providerLongName: "JDWeb Server (custom) pull request",
+        providerLongName: "Azure DevOps Custom pull request",
         urlExample: "https://server.example/collection/project/_git/repo/pullrequest/42",
       };
     case "bitbucket":
@@ -236,7 +236,7 @@ export function detectSourceControlProviderFromRemoteUrl(
       ) {
         return {
           kind: SourceControlProviderKind.make("azure-devops-custom-server"),
-          name: "JDWeb Server (custom)",
+          name: "Azure DevOps Custom",
           baseUrl: url.origin,
         };
       }

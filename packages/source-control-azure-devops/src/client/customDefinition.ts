@@ -12,16 +12,17 @@ import { definition as cloudDefinition } from "./definition.ts";
 export const settings = makeProviderSettingsSchema({
   collectionUrl: TrimmedString.pipe(
     Schema.withDecodingDefault(Effect.succeed("")),
-    Schema.annotateKey({ title: "Collection URL" }),
-  ),
-  authentication: Schema.Literals(["auto", "pat"]).pipe(
-    Schema.withDecodingDefault(Effect.succeed("auto")),
-    Schema.annotateKey({ title: "Authentication" }),
+    Schema.annotateKey({
+      title: "Collection URL",
+      description: "Full HTTPS collection URL, including any installation path and port.",
+    }),
   ),
   personalAccessToken: TrimmedString.pipe(
     Schema.withDecodingDefault(Effect.succeed("")),
     Schema.annotateKey({
       title: "Personal access token",
+      description:
+        "When provided, this token is always used instead of Windows credentials. Leave empty to use Windows sign-in. Required on macOS/Linux.",
       settingsSecret: true,
       providerSettingsForm: { control: "password" },
     }),
@@ -52,8 +53,8 @@ function isCustomUrl(input: string): boolean {
 export const definition = defineSourceControlClient({
   ...cloudDefinition,
   kind: KIND,
-  label: "JDWeb Server (custom)",
-  pickerLabel: "JDWeb Server (custom)",
+  label: "Azure DevOps Custom",
+  pickerLabel: "Azure DevOps Custom",
   settings,
   publishDescription: "Repository publishing is not supported",
   publishHost: (signedInHost: string | null) => signedInHost ?? "your server",

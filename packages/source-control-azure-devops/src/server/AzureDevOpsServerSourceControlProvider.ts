@@ -160,7 +160,7 @@ export const make = Effect.gen(function* () {
       return contextFor({
         cwd: identity.rootPath,
         context: {
-          provider: { kind, name: "JDWeb Server (custom)", baseUrl: "" },
+          provider: { kind, name: "Azure DevOps Custom", baseUrl: "" },
           remoteName: identity.locator.remoteName,
           remoteUrl: identity.locator.remoteUrl,
         },
@@ -324,7 +324,7 @@ export const makeDiscovery = Effect.gen(function* () {
   const spec: SourceControlManagedCliDiscoverySpec = {
     type: "managed-cli",
     kind,
-    label: "JDWeb Server (custom)",
+    label: "Azure DevOps Custom",
     installHint: "Configure the collection URL and authentication in Settings → Source Control.",
     probe: Effect.fn("AzureDevOpsServerSourceControlProvider.probe")(
       function* (cwd) {
@@ -333,7 +333,7 @@ export const makeDiscovery = Effect.gen(function* () {
         if (typeof raw !== "string" || !raw)
           return {
             kind,
-            label: "JDWeb Server (custom)",
+            label: "Azure DevOps Custom",
             executable: "curl",
             status: "available" as const,
             version: Option.none(),
@@ -358,7 +358,7 @@ export const makeDiscovery = Effect.gen(function* () {
         });
         return {
           kind,
-          label: "JDWeb Server (custom)",
+          label: "Azure DevOps Custom",
           executable: "curl",
           status:
             result._tag === "Failure" && result.failure.reason === "missing-tool"
@@ -382,7 +382,7 @@ export const makeDiscovery = Effect.gen(function* () {
         effect.pipe(
           Effect.orElseSucceed(() => ({
             kind,
-            label: "JDWeb Server (custom)",
+            label: "Azure DevOps Custom",
             executable: "curl",
             status: "available" as const,
             version: Option.none(),
@@ -402,7 +402,7 @@ export const makeDiscovery = Effect.gen(function* () {
         .pipe(
           Effect.map((resolved) => ({
             kind,
-            name: "JDWeb Server (custom)",
+            name: "Azure DevOps Custom",
             baseUrl: resolved.collectionUrl,
           })),
           Effect.orElseSucceed(() => null),

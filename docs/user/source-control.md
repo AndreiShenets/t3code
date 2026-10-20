@@ -101,14 +101,15 @@ az extension add --name azure-devops
 az login
 ```
 
-### JDWeb Server (custom)
+### Azure DevOps Custom
 
-For Azure DevOps Server 2022 (REST API 7.0), open **Settings → Source Control → JDWeb Server (custom)**
-and enter the full collection URL, including any installation path and port. On Windows,
-**Automatic** uses the account running the T3 server through system curl, with a saved PAT as
-fallback when Windows authentication is unavailable or rejected. Choose **PAT** to always use
-the saved token; macOS and Linux need a PAT. Credentials stay on the server and apply only to
-the configured collection. Git clone, fetch and push use Git's own authentication separately.
+For Azure DevOps Server 2022 (REST API 7.0), open **Settings → Source Control → Azure DevOps Custom**
+and enter the full collection URL, including any installation path and port. A saved PAT is
+always used when provided; an invalid PAT reports an error rather than trying another account.
+With no PAT, Windows uses the account running the T3 server through system curl. macOS and Linux
+require a PAT. The availability indicator turns on when authentication succeeds; it is not an
+enable switch. Credentials stay on the server and apply only to the configured collection.
+Git clone, fetch and push use Git's own authentication separately.
 
 This integration supports comments, inline discussions, replies, editing your comments, and
 resolving/reopening threads. Reactions are comment likes (👍) only. **Request changes** casts
@@ -256,8 +257,8 @@ Tick a file off in the **Code** tab once you have read it and it collapses; the 
 running count. A tick belongs to the pull request rather than to a commit, so scoping the tab to a
 single commit keeps them. A file pushed to after you cleared it comes back marked **Changed**.
 
-GitHub and **JDWeb Server (custom)** synchronize viewed marks with their host websites in both
-directions. For JDWeb, the marks belong to the Windows or PAT account running the integration;
+GitHub and **Azure DevOps Custom** synchronize viewed marks with their host websites in both
+directions. For Azure DevOps Custom, the marks belong to the Windows or PAT account running the integration;
 use the same Azure account on the website. Earlier T3-only marks are not uploaded to Azure.
 If native tracking cannot be read or updated, T3 reports the failure rather than silently keeping
 a separate local mark.
