@@ -253,7 +253,7 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
       return path === NodePath.join("/missing/resources", "package-type") &&
         options.packageType !== undefined
         ? Effect.succeed(options.packageType)
-        : path === `${PENDING_DOWNLOAD_DIRECTORY}/update-info.json` &&
+        : path === NodePath.join(PENDING_DOWNLOAD_DIRECTORY, "update-info.json") &&
             options.cachedDownloadSha512 !== undefined
           ? Effect.succeed(
               options.cachedDownloadInfo ??
@@ -273,7 +273,8 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
     },
     exists: (path) =>
       Effect.succeed(
-        options.cachedFileExists !== false && path === `${PENDING_DOWNLOAD_DIRECTORY}/update.zip`,
+        options.cachedFileExists !== false &&
+          path === NodePath.join(PENDING_DOWNLOAD_DIRECTORY, "update.zip"),
       ),
     makeDirectory: () => Effect.void,
     writeFileString: (path, data) =>
