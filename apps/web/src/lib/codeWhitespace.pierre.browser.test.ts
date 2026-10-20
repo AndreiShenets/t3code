@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import {
   File,
   FileDiff,
@@ -19,31 +18,8 @@ import {
 } from "./codeWhitespace";
 import { useEditorTabSize } from "../components/files/useEditorTabSize";
 
-// jsdom has no layout engine or constructable stylesheets. Keep Pierre's real
-// rendering/editing paths, stubbing only the missing browser facilities.
 beforeAll(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  CSSStyleSheet.prototype.replaceSync = () => undefined;
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
-  );
-  Range.prototype.getBoundingClientRect = () => new DOMRect();
-  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
-  vi.stubGlobal("matchMedia", () => ({
-    matches: false,
-    addEventListener() {},
-    removeEventListener() {},
-  }));
-  Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
-    configurable: true,
-    value: () => ({ measureText: (text: string) => ({ width: text.length * 8 }) }),
-  });
-  Element.prototype.scrollIntoView = () => undefined;
   await getSharedHighlighter({ themes: ["pierre-dark"], langs: ["typescript"] });
 });
 
