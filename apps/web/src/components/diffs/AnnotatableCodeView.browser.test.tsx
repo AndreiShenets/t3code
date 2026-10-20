@@ -85,6 +85,7 @@ function render(
       <StrictMode>
         <AnnotatableCodeView
           codeViewKey={codeViewKey}
+          workspace={null}
           files={files}
           pendingFiles={pendingFiles}
           sectionId="unstaged"
