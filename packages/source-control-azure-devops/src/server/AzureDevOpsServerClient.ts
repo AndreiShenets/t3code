@@ -66,6 +66,7 @@ export class AzureDevOpsServerClient extends Context.Service<
       readonly cwd: string;
       readonly repository?: string;
       readonly host?: string;
+      readonly remoteUrl?: string;
     }) => Effect.Effect<AzureDevOpsServerContext, AzureDevOpsServerError>;
     readonly request: (input: {
       readonly cwd: string;
@@ -103,6 +104,23 @@ function within(url: URL, base: URL): boolean {
     (url.pathname.toLowerCase() === base.pathname.toLowerCase() ||
       url.pathname.toLowerCase().startsWith(`${base.pathname.toLowerCase()}/`))
   );
+}
+
+function remoteToCollectionUrl(remoteUrl: string, base: URL): URL {
+  const trimmed = remoteUrl.trim();
+  const scp = /^[a-zA-Z0-9._-]+@([^:/]+):(.+)$/u.exec(trimmed);
+  const remote = new URL(scp ? `ssh://${scp[1]}/${scp[2]}` : trimmed);
+  if (remote.search || remote.hash) throw new Error("Invalid repository remote");
+  if (remote.protocol === "ssh:" && remote.hostname.toLowerCase() === base.hostname.toLowerCase()) {
+    // The configured collection owns the web origin; SSH's user and port do not.
+    const url = new URL(base.origin);
+    url.pathname = remote.pathname;
+    return url;
+  }
+  if (remote.protocol !== "https:") throw new Error("Invalid repository remote");
+  remote.username = "";
+  remote.password = "";
+  return remote;
 }
 
 function configQuote(value: string): string {
@@ -170,6 +188,7 @@ export const make = Effect.gen(function* () {
     readonly cwd: string;
     readonly repository?: string;
     readonly host?: string;
+    readonly remoteUrl?: string;
   }) {
     const { base } = yield* readSettings();
     return yield* Effect.gen(function* () {
@@ -195,18 +214,22 @@ export const make = Effect.gen(function* () {
             }),
         });
       } else {
-        const remotes = yield* yield* host.git.remotes(input.cwd);
-        const remote =
-          remotes.remotes.find((entry) => entry.name === "origin") ??
-          (remotes.remotes.length === 1 ? remotes.remotes[0] : undefined);
-        if (!remote)
-          return yield* new AzureDevOpsServerError({
-            operation: "resolve",
-            reason: "not-found",
-            outcome: "not-sent",
-          });
+        let remoteUrl = input.remoteUrl;
+        if (remoteUrl === undefined) {
+          const remotes = yield* yield* host.git.remotes(input.cwd);
+          const remote =
+            remotes.remotes.find((entry) => entry.name === "origin") ??
+            (remotes.remotes.length === 1 ? remotes.remotes[0] : undefined);
+          if (!remote)
+            return yield* new AzureDevOpsServerError({
+              operation: "resolve",
+              reason: "not-found",
+              outcome: "not-sent",
+            });
+          remoteUrl = remote.url;
+        }
         url = yield* Effect.try({
-          try: () => new URL(remote.url),
+          try: () => remoteToCollectionUrl(remoteUrl, base),
           catch: () =>
             new AzureDevOpsServerError({
               operation: "resolve",
@@ -214,9 +237,6 @@ export const make = Effect.gen(function* () {
               outcome: "not-sent",
             }),
         });
-        // User-qualified Git remotes do not select credentials for REST requests.
-        url.username = "";
-        url.password = "";
         if (selector) {
           url.pathname = url.pathname.replace(/[^/]+\/?$/, encodeURIComponent(selector));
         }
