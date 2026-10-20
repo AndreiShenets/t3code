@@ -577,7 +577,13 @@ const make = Effect.gen(function* () {
   const emitChange = (settings: ServerSettings) =>
     PubSub.publish(changesPubSub, settings).pipe(Effect.asVoid);
 
-  const readConfigExists = fs.exists(settingsPath).pipe(
+  // Windows access checks can succeed for a dangling symlink; stat follows its target.
+  const readConfigExists = fs.stat(settingsPath).pipe(
+    Effect.as(true),
+    Effect.catchIf(
+      (cause) => cause.reason._tag === "NotFound",
+      () => Effect.succeed(false),
+    ),
     Effect.mapError(
       (cause) =>
         new ServerSettingsError({
