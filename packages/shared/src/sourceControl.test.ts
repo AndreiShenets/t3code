@@ -17,7 +17,7 @@ describe("source control presentation", () => {
       ),
     ).toEqual({
       kind: "azure-devops-custom-server",
-      name: "JDWeb Server (custom)",
+      name: "Azure DevOps Custom",
       baseUrl: "https://code.example:8443",
     });
     expect(
@@ -33,10 +33,10 @@ describe("source control presentation", () => {
     expect(
       resolveChangeRequestPresentation({
         kind: SourceControlProviderKind.make("azure-devops-custom-server"),
-        name: "JDWeb Server (custom)",
+        name: "Azure DevOps Custom",
         baseUrl: "https://code.example:8443",
       }),
-    ).toEqual(expect.objectContaining({ providerName: "JDWeb Server (custom)", shortName: "PR" }));
+    ).toEqual(expect.objectContaining({ providerName: "Azure DevOps Custom", shortName: "PR" }));
   });
   it("uses merge request terminology for GitLab", () => {
     expect(getChangeRequestTerminologyForKind(SourceControlProviderKind.make("gitlab"))).toEqual({

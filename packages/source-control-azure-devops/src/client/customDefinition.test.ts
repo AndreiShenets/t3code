@@ -15,14 +15,25 @@ describe("Azure DevOps Server client", () => {
   it("defaults to automatic authentication without sharing cloud settings", () => {
     expect(readSourceControlHostSettings(settings, {})).toEqual({
       collectionUrl: "",
-      authentication: "auto",
       personalAccessToken: "",
     });
-    expect(definition.label).toBe("JDWeb Server (custom)");
+    expect(definition.label).toBe("Azure DevOps Custom");
     expect(secretSettingsFields(settings)).toEqual(["personalAccessToken"]);
     expect(definition.checkoutCommand()).toBeNull();
     expect(definition.checkoutCommandArgument()).toBeNull();
   });
+
+  it.each(["", "auto", "pat"])(
+    "ignores the retired authentication mode %s without dropping the collection",
+    (authentication) => {
+      expect(
+        readSourceControlHostSettings(settings, {
+          collectionUrl: "https://ado.example/Collection",
+          authentication,
+        }),
+      ).toEqual({ collectionUrl: "https://ado.example/Collection", personalAccessToken: "" });
+    },
+  );
 
   it("recognizes branded servers without claiming cloud URLs or trusting another collection", () => {
     const url = `${remoteUrl}/pullrequest/7`;

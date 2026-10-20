@@ -20,11 +20,12 @@ const failure = <A>(effect: Effect.Effect<A, Client.AzureDevOpsServerError>) =>
     }),
   );
 function fixture(
-  authentication: "auto" | "pat" = "pat",
+  legacyAuthentication: "auto" | "pat" = "pat",
   responses: ReadonlyArray<number> = [200],
   features = "SSPI SPNEGO SSL",
   platform: NodeJS.Platform = "win32",
   remoteUrl = `${base}/Project/_git/Repo`,
+  token = pat,
 ) {
   const calls: SourceControlHost.SourceControlProcessInput[] = [];
   let index = 0;
@@ -34,8 +35,8 @@ function fixture(
       sourceControlHosts: {
         "azure-devops-custom-server": {
           collectionUrl: base,
-          authentication,
-          personalAccessToken: pat,
+          authentication: legacyAuthentication,
+          personalAccessToken: token,
         },
       },
     },
@@ -90,7 +91,49 @@ function fixture(
   };
 }
 
-it.effect("falls back to saved PAT when system curl lacks integrated auth support", () =>
+it.effect(
+  "uses a configured PAT before Windows credentials without probing curl capabilities",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture("auto");
+      const client = yield* f.client;
+      yield* client.request({ cwd: "/repo", url });
+      assert.strictEqual(f.calls.length, 1);
+      assert.ok(!f.calls[0]!.args.includes("--negotiate"));
+      assert.ok(f.calls[0]!.stdin?.includes("Authorization: Basic"));
+    }),
+);
+
+it.effect("never falls back to Windows credentials when a configured PAT is rejected", () =>
+  Effect.gen(function* () {
+    for (const method of ["GET", "PATCH"] as const) {
+      const f = fixture("auto", [401, 200]);
+      const client = yield* f.client;
+      const error = yield* failure(client.request({ cwd: "/repo", url, method }));
+      assert.strictEqual(error.reason, "unauthenticated");
+      assert.include(error.detail, "Check the saved PAT");
+      assert.notInclude(error.detail, "Integrated authentication is unavailable or rejected");
+      assert.strictEqual(f.calls.length, 1);
+      assert.ok(!f.calls[0]!.args.includes("--negotiate"));
+    }
+  }),
+);
+
+it.effect(
+  "uses Windows credentials with no PAT even when a retired PAT-only setting is present",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture("pat", [200], "SSPI SPNEGO SSL", "win32", undefined, "");
+      const client = yield* f.client;
+      yield* client.request({ cwd: "/repo", url });
+      assert.strictEqual(f.calls.length, 2);
+      assert.ok(f.calls[1]!.args.includes("--negotiate"));
+      assert.ok(f.calls[1]!.args.includes(":"));
+      assert.ok(!f.calls[1]!.stdin?.includes("Authorization: Basic"));
+    }),
+);
+
+it.effect("uses a saved PAT when system curl lacks integrated auth support", () =>
   Effect.gen(function* () {
     const f = fixture("auto", [200], "SSL");
     const client = yield* f.client;
@@ -103,7 +146,7 @@ it.effect("falls back to saved PAT when system curl lacks integrated auth suppor
 
 it.effect("reuses system curl capabilities across file reads", () =>
   Effect.gen(function* () {
-    const f = fixture("auto");
+    const f = fixture("auto", [200], "SSPI SPNEGO SSL", "win32", undefined, "");
     const client = yield* f.client;
     yield* client.request({ cwd: "/repo", url });
     yield* client.request({ cwd: "/repo", url });
@@ -120,6 +163,18 @@ it.effect("uses PATH curl with a saved PAT outside Windows, without probing inte
       assert.strictEqual(f.calls.length, 1);
       assert.strictEqual(f.calls[0]!.command, "curl");
       assert.ok(f.calls[0]!.stdin?.includes("Authorization: Basic"));
+    }
+  }),
+);
+
+it.effect("requires a PAT outside Windows and when Windows curl lacks integrated auth", () =>
+  Effect.gen(function* () {
+    for (const platform of ["linux", "darwin", "win32"] as const) {
+      const f = fixture("auto", [200], "SSL", platform, undefined, "");
+      const client = yield* f.client;
+      const error = yield* failure(client.request({ cwd: "/repo", url }));
+      assert.strictEqual(error.reason, "unauthenticated");
+      assert.ok(f.calls.every((call) => call.args.includes("--version")));
     }
   }),
 );
@@ -332,7 +387,7 @@ it.effect("rejects SSH checkouts outside the configured host or collection", () 
 
 it.effect("pins mutation auth after read preflight and never retries a rejected mutation", () =>
   Effect.gen(function* () {
-    const f = fixture("auto", [401, 401]);
+    const f = fixture("auto", [200, 401], "SSPI SPNEGO SSL", "win32", undefined, "");
     const client = yield* f.client;
     const error = yield* failure(
       client.request({ cwd: "/repo", url, method: "POST", body: { title: "hi" } }),
@@ -344,7 +399,7 @@ it.effect("pins mutation auth after read preflight and never retries a rejected 
     assert.ok(!f.calls[1]!.args.includes("--max-redirs"));
     assert.ok(f.calls[1]!.args.includes("GET"));
     assert.ok(f.calls[2]!.args.includes("POST"));
-    assert.ok(!f.calls[2]!.args.includes("--negotiate"));
+    assert.ok(f.calls[2]!.args.includes("--negotiate"));
   }),
 );
 
@@ -367,14 +422,10 @@ it.effect("accepts collection case differences and removes Git user information"
   }),
 );
 
-it.effect("falls back only on read 401, not forbidden or network/server failure", () =>
+it.effect("never retries failed Windows-authenticated reads with another identity", () =>
   Effect.gen(function* () {
-    const fallback = fixture("auto", [401, 200]);
-    const client = yield* fallback.client;
-    yield* client.request({ cwd: "/repo", url });
-    assert.strictEqual(fallback.calls.length, 3);
-    for (const status of [403, 429, 500]) {
-      const f = fixture("auto", [status]);
+    for (const status of [401, 403, 429, 500]) {
+      const f = fixture("auto", [status], "SSPI SPNEGO SSL", "win32", undefined, "");
       const c = yield* f.client;
       const error = yield* failure(c.request({ cwd: "/repo", url }));
       assert.strictEqual(error.status, status);
