@@ -11,6 +11,35 @@ import {
 import { normalizeThreadPullRequestKey } from "./threadPullRequests.ts";
 
 describe("parseChangeRequestUrl", () => {
+  it("recognizes custom Azure routes with encoded collection paths and separate authorities", () => {
+    const url =
+      "http://code.example:8080/tfs/Default%20Collection/My%20Project/_git/Web/pullrequest/17?view=files";
+    expect(parseChangeRequestUrl(url)).toEqual({
+      host: "code.example",
+      authority: "code.example:8080",
+      repository: "tfs/default%20collection/my%20project/_git/web",
+      number: 17,
+    });
+    expect(siblingPullRequestUrl(url, 18)).toBe(
+      "http://code.example:8080/tfs/default%20collection/my%20project/_git/web/pullrequest/18",
+    );
+    for (const number of ["0", "-1", "9007199254740992", "17bad"]) {
+      expect(
+        parseChangeRequestUrl(
+          `http://code.example:8080/collection/project/_git/web/pullrequest/${number}`,
+        ),
+      ).toBeNull();
+    }
+    expect(
+      changeRequestUrlFor(
+        "azure-devops-custom-server",
+        "code.example:8080",
+        "tfs/collection/project/_git/web",
+        17,
+        "http://code.example:8080/tfs/collection/project/_git/web",
+      ),
+    ).toBe("http://code.example:8080/tfs/collection/project/_git/web/pullrequest/17");
+  });
   it("reads a GitHub pull request, lower-casing the repository", () => {
     expect(parseChangeRequestUrl("https://github.com/T3Tools/T3Code/pull/123")).toEqual({
       host: "github.com",

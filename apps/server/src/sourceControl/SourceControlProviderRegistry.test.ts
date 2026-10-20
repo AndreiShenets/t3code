@@ -28,6 +28,7 @@ import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as AzureDevOpsCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsCli";
 import * as AzureDevOpsPullRequestCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsPullRequestCli";
+import * as AzureDevOpsServerClient from "@t3tools/source-control-azure-devops/server/AzureDevOpsServerClient";
 import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
 import * as BitbucketPullRequestApi from "@t3tools/source-control-bitbucket/server/BitbucketPullRequestApi";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
@@ -131,6 +132,16 @@ function makeRegistry(input: {
         ),
         Layer.mock(AzureDevOpsCli.AzureDevOpsCli)({}),
         Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({}),
+        Layer.mock(AzureDevOpsServerClient.AzureDevOpsServerClient)({
+          resolve: () =>
+            Effect.fail(
+              new AzureDevOpsServerClient.AzureDevOpsServerError({
+                operation: "settings",
+                reason: "failed",
+                outcome: "not-sent",
+              }),
+            ),
+        }),
         Layer.mock(BitbucketApi.BitbucketApi)({}),
         Layer.mock(BitbucketPullRequestApi.BitbucketPullRequestApi)({}),
         input.settings

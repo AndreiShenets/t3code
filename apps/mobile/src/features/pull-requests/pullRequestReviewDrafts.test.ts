@@ -4,6 +4,7 @@ import {
   clearSubmittedReview,
   pullRequestReviewKey,
   ReviewDraftDocument,
+  reviewCommentsForSubmission,
   type ReviewDraft,
 } from "./pullRequestReviewDrafts";
 const decodeDocument = Schema.decodeUnknownSync(ReviewDraftDocument);
@@ -22,6 +23,16 @@ const draft: ReviewDraft = {
   comments: [comment],
 };
 describe("mobile review draft recovery", () => {
+  it("omits empty legacy snapshots without losing valid reviewed commits", () => {
+    const [empty, captured] = reviewCommentsForSubmission([
+      { ...comment, headSha: "", baseSha: " " },
+      { ...comment, baseSha: "base" },
+    ]);
+    expect(empty).not.toHaveProperty("headSha");
+    expect(empty).not.toHaveProperty("baseSha");
+    expect(empty).not.toHaveProperty("id");
+    expect(captured).toMatchObject({ headSha: "abc", baseSha: "base", body: comment.body });
+  });
   it("round trips renamed/deleted line anchors and a separate unsent PR comment", () => {
     const saved = JSON.stringify({ version: 1, drafts: { key: draft } });
     expect(decodeDocument(JSON.parse(saved)).drafts.key).toEqual(draft);
@@ -77,5 +88,23 @@ describe("mobile review draft recovery", () => {
       comments: [{ ...comment, position: { kind: "deleted" as const, oldLine: 12 } }],
     };
     expect(clearSubmittedReview(current, draft).comments).toEqual(current.comments);
+  });
+  it("keeps unconfirmed comments and summary and persists an unknown outcome", () => {
+    const second = { ...comment, id: "two", baseSha: "base" };
+    const submitted = { ...draft, comments: [comment, second] };
+    const partial = {
+      status: "partial" as const,
+      postedCommentIndexes: [0],
+      summaryPosted: false,
+      outcomeUnknown: true,
+      message: "Comment outcome unknown",
+    };
+    const remaining = clearSubmittedReview(submitted, submitted, partial);
+    expect(remaining.comments).toEqual([second]);
+    expect(remaining.summary).toBe(draft.summary);
+    expect(remaining.outcomeUnknown).toBe(true);
+    expect(decodeDocument({ version: 1, drafts: { key: remaining } }).drafts.key).toEqual(
+      remaining,
+    );
   });
 });
