@@ -68,6 +68,31 @@ function aggregate(
 }
 
 describe("UsageAggregator", () => {
+  it.each(["day", "hour"] as const)(
+    "separates upstream providers for the same model at %s resolution",
+    (resolution) => {
+      const result = aggregate(
+        [
+          record({ provider: "opencode", upstreamProvider: "openai" }),
+          record({ provider: "opencode", upstreamProvider: "github-copilot" }),
+          record({ provider: "opencode", upstreamProvider: "openai" }),
+          record({ provider: "opencode" }),
+        ],
+        "UTC",
+        resolution,
+      );
+      expect(result.buckets.map((bucket) => [bucket.upstreamProvider, bucket.records])).toEqual([
+        [undefined, 1],
+        ["github-copilot", 1],
+        ["openai", 2],
+      ]);
+      expect(result.buckets.every((bucket) => bucket.model === "claude-fable-5")).toBe(true);
+      expect(
+        result.buckets.find((bucket) => bucket.upstreamProvider === "openai")?.costUsd,
+      ).toBeCloseTo(0.00925);
+    },
+  );
+
   it("requires exact bounds for hourly aggregation", () => {
     expect(
       () =>
@@ -124,6 +149,28 @@ describe("UsageAggregator", () => {
 
     expect(utc.buckets[0]?.day).toBe("2026-08-07");
     expect(losAngeles.buckets[0]?.day).toBe("2026-08-06");
+  });
+
+  it.each([
+    ["America/Los_Angeles", "2026-08-11", "2026-08-11T07:00:00Z", "2026-08-12T07:00:00Z"],
+    ["Asia/Kathmandu", "2026-08-11", "2026-08-10T18:15:00Z", "2026-08-11T18:15:00Z"],
+    ["America/New_York", "2026-03-08", "2026-03-08T05:00:00Z", "2026-03-09T04:00:00Z"],
+    ["America/New_York", "2026-11-01", "2026-11-01T04:00:00Z", "2026-11-02T05:00:00Z"],
+  ])("filters a single calendar day from midnight in %s on %s", (timeZone, day, start, end) => {
+    const aggregator = new UsageAggregator({ timeZone, sinceDay: day, untilDay: day, rates });
+    for (const timestampMs of [
+      Date.parse(start) - 1,
+      Date.parse(start),
+      Date.parse(end) - 1,
+      Date.parse(end),
+    ]) {
+      aggregator.add(record({ timestampMs }));
+    }
+
+    const result = aggregator.finish();
+    expect(result.outOfWindow).toBe(2);
+    expect(result.buckets).toHaveLength(1);
+    expect(result.buckets[0]).toMatchObject({ day, records: 2, totals: { outputTokens: 100 } });
   });
 
   it("finds the day at a quarter-hour zone's midnight across interleaved buckets", () => {
