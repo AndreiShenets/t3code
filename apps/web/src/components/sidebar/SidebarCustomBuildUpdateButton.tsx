@@ -34,7 +34,7 @@ export function SidebarCustomBuildUpdateButton() {
                 {hasUpdate && (
                   <span
                     aria-hidden="true"
-                    className="absolute -top-1.5 -right-1.5 size-1.5 rounded-full bg-current ring-2 ring-sidebar-control-surface"
+                    className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-current ring-2 ring-sidebar-control-surface"
                   />
                 )}
               </div>
