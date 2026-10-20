@@ -1,5 +1,5 @@
 import * as NodeURL from "node:url";
-import * as NodePath from "node:path";
+import * as Path from "effect/Path";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -3859,6 +3859,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
   ])("$name", ({ external }) =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
+      const paths = yield* Path.Path;
       const attachmentsDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3 oc2 #images-",
       });
@@ -3942,9 +3943,9 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
           text: [
             index === 0 ? "What is in this image?" : "And this one?",
             `[Attached image "${attachment.name}" is saved at: ${path}]`,
-            `[Attached image "missing.png" is saved at: ${NodePath.join(attachmentsDir, `${missing.id}.png`)}]`,
-            `[Attached image "diagram.svg" is saved at: ${NodePath.join(attachmentsDir, `${unsupported.id}.svg`)}]`,
-            `[Attached file "requirements.pdf" is saved at: ${NodePath.join(attachmentsDir, `${document.id}.pdf`)}]`,
+            `[Attached image "missing.png" is saved at: ${paths.join(attachmentsDir, `${missing.id}.png`)}]`,
+            `[Attached image "diagram.svg" is saved at: ${paths.join(attachmentsDir, `${unsupported.id}.svg`)}]`,
+            `[Attached file "requirements.pdf" is saved at: ${paths.join(attachmentsDir, `${document.id}.pdf`)}]`,
           ].join("\n\n"),
         });
         if (external) {
