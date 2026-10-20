@@ -201,7 +201,7 @@ const directoryModels = (directory: string): ReadonlyArray<ProviderReplayEntry> 
 ];
 
 const bigPickle: ModelSelection = { instanceId, model: "opencode/big-pickle" };
-const policy = (runtimeMode: "full-access" | "approval-required" = "full-access") => ({
+const policy = (runtimeMode: "full-access" | "approval-required" | "auto" = "full-access") => ({
   runtimeMode,
   interactionMode: "default" as const,
   cwd: WORK,
@@ -228,7 +228,7 @@ const providerThread = (now: DateTime.Utc): OrchestrationV2ProviderThread => ({
 const turnInput = (
   thread: OrchestrationV2ProviderThread,
   modelSelection: ModelSelection = bigPickle,
-  runtimeMode: "full-access" | "approval-required" = "full-access",
+  runtimeMode: "full-access" | "approval-required" | "auto" = "full-access",
 ) => ({
   appThread: { title: TITLE } as OrchestrationV2AppThread,
   threadId,
@@ -3062,6 +3062,115 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         decision: "acceptForSession",
       });
       assert.equal((yield* Fiber.join(terminal))?.status, "completed");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect.each(["default", "plan"] as const)(
+    "creates Auto sessions without overriding native permissions in %s mode",
+    (interactionMode) =>
+      Effect.gen(function* () {
+        const planPaths = [{ action: "edit", resource: "/home/.opencode/plan/*", effect: "allow" }];
+        const permissions = [
+          ...(interactionMode === "plan"
+            ? [{ action: "edit", resource: "*", effect: "deny" }]
+            : []),
+          ...buildPaths,
+          ...(interactionMode === "plan" ? planPaths : []),
+          ...mcpRules,
+        ];
+        const runtime = yield* openCode2ReplayRuntime([
+          ...opening,
+          out("agent.list", "<any>"),
+          reply("agent.list", {
+            ...agentList,
+            data: [...agentList.data, { ...agentList.data[0], id: "plan", permissions: planPaths }],
+          }),
+          out("session.create", {
+            location: { directory: WORK },
+            model: { providerID: "opencode", id: "big-pickle" },
+            permissions,
+          }),
+          replyData("session.create", sessionInfo({ permissions })),
+        ]);
+        const created = yield* runtime.ensureThread({
+          threadId,
+          modelSelection: bigPickle,
+          runtimePolicy: { ...policy("auto"), interactionMode },
+        });
+        assert.equal(created.nativeThreadRef?.nativeId, SESSION);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "resumes Auto sessions without stale overrides and still forwards native approvals",
+    () =>
+      Effect.gen(function* () {
+        const permissions = [...buildPaths, ...mcpRules];
+        const runtime = yield* openCode2ReplayRuntimeWithInstructions([
+          ...opening,
+          out("session.get", { sessionID: SESSION }),
+          replyData("session.get", sessionInfo({ permissions: supervisedRules })),
+          ...noOpenRequests,
+          out("agent.list", "<any>"),
+          reply("agent.list", agentList),
+          out("session.update", { sessionID: SESSION, permissions }),
+          reply("session.update", null),
+          out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+          promptAccepted,
+          shellAskEvent,
+          out("permission.reply", {
+            sessionID: SESSION,
+            requestID: shellAsk.data.id,
+            decision: "once",
+          }),
+          reply("permission.reply", null),
+          event("session.execution.succeeded", { sessionID: SESSION }),
+        ]);
+        const thread = yield* runtime.resumeThread({
+          providerThread: providerThread(yield* DateTime.now),
+          threadId,
+          modelSelection: bigPickle,
+          runtimePolicy: policy("auto"),
+        });
+        const requested = yield* requestOf(runtime).pipe(Effect.forkScoped);
+        const terminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+        yield* runtime.startTurn(turnInput(thread, bigPickle, "auto"));
+        const request = yield* Fiber.join(requested);
+        assert.equal(request?.nativeRequestRef?.nativeId, shellAsk.data.id);
+        yield* runtime.respondToRuntimeRequest({ requestId: request!.id, decision: "accept" });
+        assert.equal((yield* Fiber.join(terminal))?.status, "completed");
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("removes supervised overrides in Auto and restores them when switching back", () =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed(
+        [
+          out("session.update", { sessionID: SESSION, permissions: [...buildPaths, ...mcpRules] }),
+          reply("session.update", null),
+          out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+          promptAccepted,
+          event("session.execution.succeeded", { sessionID: SESSION }),
+          out("session.update", { sessionID: SESSION, permissions: supervisedRules }),
+          reply("session.update", null),
+          out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+          promptAccepted,
+          event("session.execution.succeeded", { sessionID: SESSION }),
+        ],
+        { supervised: true },
+      );
+      const firstTerminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+      yield* runtime.startTurn(turnInput(thread, bigPickle, "auto"));
+      assert.equal((yield* Fiber.join(firstTerminal))?.status, "completed");
+      const secondTerminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+      yield* runtime.startTurn({
+        ...turnInput(thread, bigPickle, "approval-required"),
+        runId: RunId.make("run:opencode2-adapter:2"),
+        runOrdinal: 2,
+        providerTurnOrdinal: 2,
+        attemptId: RunAttemptId.make("attempt:opencode2-adapter:2"),
+      });
+      assert.equal((yield* Fiber.join(secondTerminal))?.status, "completed");
     }).pipe(Effect.scoped),
   );
 
