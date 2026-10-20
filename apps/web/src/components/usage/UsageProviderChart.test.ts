@@ -3,8 +3,50 @@ import { describe, expect, it } from "vite-plus/test";
 import { buildChart, buildPeriodColumns, chartScale, niceScale } from "./UsageProviderChart";
 import { enumerateDays, enumerateHourStarts, makeWindow } from "@t3tools/shared/usageFormat";
 import { providersWithUsage } from "./usageProviders";
+import { usageSeriesKey } from "@t3tools/shared/usageSeries";
 
 describe("single-period chart", () => {
+  it.each(["cost", "tokens"] as const)(
+    "draws separate upstream %s paths and tooltip values",
+    (metric) => {
+      const series = [
+        { provider: "opencode" as const, upstreamProvider: "openai" },
+        { provider: "opencode" as const, upstreamProvider: "github-copilot" },
+      ];
+      const day = "2026-10-20";
+      const byPeriod = new Map([
+        [
+          day,
+          {
+            day,
+            costUsd: 12,
+            totalTokens: 120,
+            byProvider: new Map([["opencode" as const, { costUsd: 12, totalTokens: 120 }]]),
+            bySeries: new Map([
+              [usageSeriesKey(series[0]!), { costUsd: 10, totalTokens: 100 }],
+              [usageSeriesKey(series[1]!), { costUsd: 2, totalTokens: 20 }],
+            ]),
+          },
+        ],
+      ]);
+      const chart = buildChart(
+        [day],
+        byPeriod,
+        metric,
+        ["opencode"],
+        new Set(["opencode"]),
+        series,
+      );
+      expect(chart.paths.map((path) => path.total)).toEqual(
+        metric === "cost" ? [10, 2] : [100, 20],
+      );
+      expect(chart.paths[0]?.line).not.toBe(chart.paths[1]?.line);
+      expect(chart.paths.every((path) => path.loading)).toBe(true);
+      expect(chart.columns[0]?.total).toBe(metric === "cost" ? 12 : 120);
+      expect(chart.columns[0]?.bands.map(usageSeriesKey)).toEqual(series.map(usageSeriesKey));
+    },
+  );
+
   it.each(["cost", "tokens"] as const)(
     "draws a single bucket's nonzero %s across the plot",
     (metric) => {

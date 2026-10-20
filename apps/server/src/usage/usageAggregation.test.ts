@@ -68,6 +68,31 @@ function aggregate(
 }
 
 describe("UsageAggregator", () => {
+  it.each(["day", "hour"] as const)(
+    "separates upstream providers for the same model at %s resolution",
+    (resolution) => {
+      const result = aggregate(
+        [
+          record({ provider: "opencode", upstreamProvider: "openai" }),
+          record({ provider: "opencode", upstreamProvider: "github-copilot" }),
+          record({ provider: "opencode", upstreamProvider: "openai" }),
+          record({ provider: "opencode" }),
+        ],
+        "UTC",
+        resolution,
+      );
+      expect(result.buckets.map((bucket) => [bucket.upstreamProvider, bucket.records])).toEqual([
+        [undefined, 1],
+        ["github-copilot", 1],
+        ["openai", 2],
+      ]);
+      expect(result.buckets.every((bucket) => bucket.model === "claude-fable-5")).toBe(true);
+      expect(
+        result.buckets.find((bucket) => bucket.upstreamProvider === "openai")?.costUsd,
+      ).toBeCloseTo(0.00925);
+    },
+  );
+
   it("requires exact bounds for hourly aggregation", () => {
     expect(
       () =>
