@@ -11,9 +11,8 @@ import {
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { act, type ComponentProps } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { ComponentProps } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
@@ -22,6 +21,7 @@ import { selectActiveRightPanelSurface, useRightPanelStore } from "~/rightPanelS
 import { RightPanelSurfaceContent } from "../chat/RightPanelSurfaceContent";
 
 import "~/index.css";
+import { act, render as renderUi } from "../../../test/render";
 
 const {
   newThread,
@@ -318,8 +318,6 @@ const shortcutContext = () => ({
   isDesktop: false,
 });
 
-const roots: Root[] = [];
-
 function panel(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = {}) {
   return (
     <AppAtomRegistryProvider>
@@ -335,22 +333,24 @@ function panel(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = {
   );
 }
 
-function render(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = {}) {
+function panelContainer() {
   const container = document.createElement("div");
   container.className = "flex h-[700px] w-[900px]";
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  return act(async () => root.render(panel(props)));
+  return container;
 }
 
-beforeEach(() => {
+function render(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = {}) {
+  return renderUi(panel(props), { container: panelContainer() });
+}
+
+// The mocked modules and stores are shared by the whole file, so every test starts by
+// resetting them.
+function setup() {
   codeTest.realViewer = false;
   codeTest.turnRefresh = 0;
   codeTest.detail = null;
   codeTest.pages.clear();
   activityDetail = null;
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   currentDetail = detail;
   useComposerDraftStore.setState({ draftsByThreadKey: {} });
   useRightPanelStore.setState({ byThreadKey: {} });
@@ -367,7 +367,7 @@ beforeEach(() => {
     value: { branch: "feature", worktreePath: "/workspace/pr" },
   });
   update.mockReset().mockResolvedValue({ _tag: "Success", value: undefined });
-});
+}
 
 const codePatch = (path: string, increment = 1) => `diff --git a/${path} b/${path}
 --- a/${path}
@@ -385,6 +385,7 @@ it.each([
 ] as const)(
   "preserves file folds, focus and position when a turn refresh changes %s (%s by default)",
   async (changedPath, foldOverride) => {
+    setup();
     codeTest.realViewer = true;
     const result = {
       patch: codePatch("first.ts") + codePatch("second.ts"),
@@ -410,7 +411,7 @@ it.each([
         ignoreWhitespace: false,
       },
     });
-    await render({ viewState });
+    await using screen = await render({ viewState });
     const toggle =
       foldOverride === "folded"
         ? page.getByRole("button", { name: "Expand diff", exact: true }).nth(1)
@@ -436,8 +437,8 @@ it.each([
     await act(async () => {
       appAtomRegistry.set(atom, AsyncResult.waiting(AsyncResult.success(result)));
       codeTest.turnRefresh++;
-      roots.at(-1)!.render(panel({ viewState }));
     });
+    await screen.rerender(panel({ viewState }));
     const refreshed = {
       ...result,
       patch:
@@ -447,8 +448,8 @@ it.each([
     await act(async () => {
       appAtomRegistry.set(atom, AsyncResult.success(refreshed));
       codeTest.detail = { ...detail, updatedAt: "2026-09-02T00:00:00Z" };
-      roots.at(-1)!.render(panel({ viewState }));
     });
+    await screen.rerender(panel({ viewState }));
     await expect.poll(() => viewState.getState().code?.slices[0]?.patch).toBe(refreshed.patch);
     await expect.element(collapse).toBeVisible();
     expect(collapse.element()).toBe(focused);
@@ -473,6 +474,7 @@ it.each([
 );
 
 it("keeps a multi-page code review in place during background reads and after returning", async () => {
+  setup();
   codeTest.realViewer = true;
   const first = {
     patch: codePatch("first.ts"),
@@ -512,7 +514,7 @@ it("keeps a multi-page code review in place during background reads and after re
       ignoreWhitespace: false,
     },
   });
-  await render({ viewState });
+  await using screen = await render({ viewState });
   const viewer = () => document.querySelector<HTMLElement>(".diff-render-surface")!;
   await expect.poll(() => viewer()?.scrollTop ?? 0, { timeout: 10_000 }).toBeGreaterThan(6000);
   const node = viewer();
@@ -526,8 +528,8 @@ it("keeps a multi-page code review in place during background reads and after re
   await act(async () => {
     appAtomRegistry.set(firstAtom, AsyncResult.waiting(AsyncResult.success(first)));
     codeTest.turnRefresh++;
-    roots.at(-1)!.render(panel({ viewState }));
   });
+  await screen.rerender(panel({ viewState }));
   expect(viewer()).toBe(node);
   expect(node.scrollTop).toBe(top);
   await expect
@@ -543,21 +545,16 @@ it("keeps a multi-page code review in place during background reads and after re
   await act(async () => {
     appAtomRegistry.set(firstAtom, AsyncResult.waiting(AsyncResult.success(first)));
     codeTest.detail = { ...detail, updatedAt: "2026-09-02T00:00:00Z" };
-    roots.at(-1)!.render(panel({ viewState }));
   });
+  await screen.rerender(panel({ viewState }));
   expect(viewer()).toBe(node);
   expect(node.scrollTop).toBe(top);
   await expect.element(page.getByText("2 files", { exact: true })).toBeVisible();
-  await act(async () => roots.pop()!.unmount());
+  await screen.rerender(null);
 
-  await render({ viewState });
+  await screen.rerender(panel({ viewState }));
   await expect.poll(() => viewer()?.scrollTop).toBe(top);
   await expect.element(page.getByText("second.ts", { exact: true })).toBeVisible();
-});
-afterEach(async () => {
-  for (const root of roots.splice(0)) await act(async () => root.unmount());
-  document.body.replaceChildren();
-  vi.unstubAllGlobals();
 });
 
 const surface = { projectId: detail.projectId, repository: detail.repository, number: 1 };
@@ -598,7 +595,8 @@ it.each([
   { isComposing: true, keyCode: 13 },
   { isComposing: false, keyCode: 229 },
 ])("does not save the PR title during IME composition (%j)", async ({ isComposing, keyCode }) => {
-  await render();
+  setup();
+  await using _screen = await render();
   await page.getByRole("button", { name: "Edit title" }).click();
   const titleInput = page.getByRole("textbox", { name: "Pull request title" });
   const title = "日本語のタイトル";
@@ -656,7 +654,8 @@ describe.each([
     render({ context, ...(target ? { composerDraftTarget: target, threadRef } : {}) });
 
   it(`${thread === stackThread ? "hides" : "offers"} the checkout`, async () => {
-    await renderPanel();
+    setup();
+    await using _screen = await renderPanel();
     await expect.element(page.getByText("Test pull request").first()).toBeVisible();
     expect(page.getByRole("button", { name: "Check out" }).elements()).toHaveLength(
       thread === stackThread ? 0 : 1,
@@ -671,6 +670,7 @@ describe.each([
     "Fix check",
     "Add to agent",
   ])("%s writes to the correct composer", async (action) => {
+    setup();
     // Cover both a host without inline comments and an account that cannot write them.
     currentDetail =
       thread === stackThread
@@ -683,7 +683,7 @@ describe.each([
           }
         : { ...detail, viewerPermissions: { ...detail.viewerPermissions, comment: true } };
     if (target) useComposerDraftStore.getState().setPrompt(target, "Keep my draft");
-    await renderPanel();
+    await using _screen = await renderPanel();
     await runAction(target ? action : action.replace("in this thread", "in a thread"));
     const draft = () => useComposerDraftStore.getState().getComposerDraft(target ?? newDraftId);
     await vi.waitFor(() => {
@@ -723,6 +723,7 @@ describe.each([
 });
 
 it("offers both selection actions and queues a permitted host review locally", async () => {
+  setup();
   currentDetail = {
     ...detail,
     capabilities: {
@@ -731,7 +732,7 @@ it("offers both selection actions and queues a permitted host review locally", a
     },
     viewerPermissions: { ...detail.viewerPermissions, comment: true },
   };
-  await render({ composerDraftTarget: draftId, threadRef });
+  await using _screen = await render({ composerDraftTarget: draftId, threadRef });
   await tab("Code").click();
   await page.getByRole("button", { name: "Expand all files", exact: true }).click();
   await selectFirstLine();
@@ -753,7 +754,8 @@ it("offers both selection actions and queues a permitted host review locally", a
 });
 
 it("cancels an agent-only selection and submits a fresh one with the keyboard without a host review", async () => {
-  await render({ composerDraftTarget: draftId, threadRef });
+  setup();
+  await using _screen = await render({ composerDraftTarget: draftId, threadRef });
   await tab("Code").click();
   await page.getByRole("button", { name: "Expand all files", exact: true }).click();
   await selectFirstLine();
@@ -779,7 +781,8 @@ it("cancels an agent-only selection and submits a fresh one with the keyboard wi
 });
 
 it("folds the title only for the active tab's own scroller", async () => {
-  await render();
+  setup();
+  await using _screen = await render();
   const title = page.getByRole("heading", { level: 1, name: "Test pull request" });
   await expect.element(title).toBeVisible();
   const titleFold = () => title.element().closest("[inert]") !== null;
@@ -824,96 +827,93 @@ it("folds the title only for the active tab's own scroller", async () => {
 });
 
 it("returns to the selected subtab after the panel is unmounted", async () => {
+  setup();
   const viewState = createPullRequestViewState();
-  await render({ viewState });
+  await using screen = await render({ viewState });
   await tab("Code").click();
   await expect.element(page.getByTestId("code-scroller")).toBeVisible();
-  await act(async () => roots.pop()!.unmount());
+  await screen.rerender(null);
 
-  await render({ viewState });
+  await screen.rerender(panel({ viewState }));
   await expect.element(page.getByTestId("code-scroller")).toBeVisible();
   await expect.element(page.getByTestId("summary-scroller")).not.toBeInTheDocument();
 });
 
 it("restores the summary's scroll and folded title together", async () => {
+  setup();
   const viewState = createPullRequestViewState();
-  await render({ viewState });
+  await using screen = await render({ viewState });
   const summary = page.getByTestId("summary-scroller").element();
   await act(async () => {
     summary.scrollTop = 700;
     summary.dispatchEvent(new Event("scroll"));
   });
   const top = summary.scrollTop;
-  await act(async () => roots.pop()!.unmount());
+  await screen.rerender(null);
 
-  await render({ viewState });
+  await screen.rerender(panel({ viewState }));
   expect(page.getByTestId("summary-scroller").element().scrollTop).toBe(top);
   const title = page.getByRole("heading", { level: 1, name: "Test pull request" });
   expect(title.element().closest("[inert]")).not.toBeNull();
 });
 
 it("restores the selected PR tab when switching threads and remounting the right panel", async () => {
+  setup();
   codeTest.realViewer = true;
   const otherThread = { ...threadRef, threadId: ThreadId.make("thread-2") };
   useRightPanelStore.getState().openPullRequest(threadRef, surface);
   useRightPanelStore.getState().openPullRequest(otherThread, surface);
   const codeTab = () => page.getByRole("button", { name: "Expand all files", exact: true });
-  const container = document.createElement("div");
-  container.className = "flex h-[700px] w-[900px]";
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const show = (ref: ScopedThreadRef) => {
+  const content = (ref: ScopedThreadRef) => {
     const selected = selectActiveRightPanelSurface(useRightPanelStore.getState().byThreadKey, ref);
-    return act(async () => {
-      root.render(
-        <RightPanelSurfaceContent
-          surface={selected}
-          activeSurfaceId={selected?.id ?? null}
-          threadRef={ref}
-          environmentId={ref.environmentId}
-          visible
-          composerDraftTarget={ref}
-          keybindings={[]}
-          configuredPreviewUrls={[]}
-          workspaceMutationId={null}
-          getShortcutContext={shortcutContext}
-          onSendAnnotation={() => {}}
-          onCloseSurface={() => {}}
-          terminal={{
-            launchContext: null,
-            focusRequestId: 0,
-            keybindings: [],
-            onAddTerminalContext: () => {},
-            onSplitTerminal: () => {},
-            onSplitTerminalVertical: () => {},
-            onNewTerminal: () => {},
-            onActiveTerminalChange: () => {},
-            onCloseTerminal: () => {},
-          }}
-          pullRequest={{
-            capabilityKnown: true,
-            supported: true,
-            projectId: detail.projectId,
-            pullRequests: [],
-            linkedPullRequest: null,
-            branchPullRequest: null,
-            onBack: undefined,
-          }}
-          files={{
-            projectName: null,
-            workspaceRoot: undefined,
-            availableEditors: [],
-            pendingSurfaceIds: new Set(),
-            onOpenFile: () => {},
-            onPendingChange: () => {},
-          }}
-        />,
-      );
-    });
+    return (
+      <RightPanelSurfaceContent
+        surface={selected}
+        activeSurfaceId={selected?.id ?? null}
+        threadRef={ref}
+        environmentId={ref.environmentId}
+        visible
+        composerDraftTarget={ref}
+        keybindings={[]}
+        configuredPreviewUrls={[]}
+        workspaceMutationId={null}
+        getShortcutContext={shortcutContext}
+        onSendAnnotation={() => {}}
+        onCloseSurface={() => {}}
+        terminal={{
+          launchContext: null,
+          focusRequestId: 0,
+          keybindings: [],
+          onAddTerminalContext: () => {},
+          onSplitTerminal: () => {},
+          onSplitTerminalVertical: () => {},
+          onNewTerminal: () => {},
+          onActiveTerminalChange: () => {},
+          onCloseTerminal: () => {},
+        }}
+        pullRequest={{
+          capabilityKnown: true,
+          supported: true,
+          projectId: detail.projectId,
+          pullRequests: [],
+          linkedPullRequest: null,
+          branchPullRequest: null,
+          onBack: undefined,
+        }}
+        files={{
+          projectName: null,
+          workspaceRoot: undefined,
+          availableEditors: [],
+          pendingSurfaceIds: new Set(),
+          onOpenFile: () => {},
+          onPendingChange: () => {},
+        }}
+      />
+    );
   };
+  await using screen = await renderUi(content(threadRef), { container: panelContainer() });
+  const show = (ref: ScopedThreadRef) => screen.rerender(content(ref));
 
-  await show(threadRef);
   await expect.element(page.getByTestId("summary-scroller")).toBeVisible();
   await tab("Code").click();
   await expect.element(codeTab()).toBeVisible();
@@ -931,7 +931,7 @@ it("restores the selected PR tab when switching threads and remounting the right
   await show(threadRef);
   await expect.element(codeTab()).toBeVisible();
 
-  await act(async () => root.render(null));
+  await screen.rerender(null);
   useRightPanelStore.getState().openPullRequest(threadRef, { ...surface, url: detail.url });
   await show(threadRef);
   await expect.element(codeTab()).toBeVisible();
@@ -942,7 +942,8 @@ it("restores the selected PR tab when switching threads and remounting the right
 });
 
 it("stays collapsed at the bottom after native scroll clamping and reopens at the top", async () => {
-  await render();
+  setup();
+  await using _screen = await render();
   const title = page.getByRole("heading", { level: 1, name: "Test pull request" });
   await expect.element(title).toBeVisible();
   const scroller = page.getByTestId("summary-scroller").element() as HTMLElement;
@@ -979,6 +980,7 @@ it("stays collapsed at the bottom after native scroll clamping and reopens at th
 });
 
 it("shows the current checkout recovery detail on the first failure and on retry", async () => {
+  setup();
   const first = new GitManagerError({
     cwd: "/workspace",
     operation: "preparePullRequestThread",
@@ -990,7 +992,7 @@ it("shows the current checkout recovery detail on the first failure and on retry
     command: "git worktree add",
     detail: "The worktree directory already exists. Choose another directory.",
   });
-  await render();
+  await using _screen = await render();
 
   for (const [index, error] of [first, second].entries()) {
     prepareThread.mockImplementationOnce(async () => {
@@ -1008,6 +1010,7 @@ it("shows the current checkout recovery detail on the first failure and on retry
 });
 
 it("keeps discussion counts and Timeline expansion in sync with activity refreshes", async () => {
+  setup();
   activityDetail = {
     ...detail,
     provider: SourceControlProviderKind.make("gitlab"),
@@ -1042,7 +1045,7 @@ it("keeps discussion counts and Timeline expansion in sync with activity refresh
       },
     ],
   };
-  await render({ reference: activityDetail });
+  await using _screen = await render({ reference: activityDetail });
   await expect.element(page.getByText("Discussion finding", { exact: true })).toBeVisible();
   await expect.element(page.getByText("Discussion reply", { exact: true })).toBeVisible();
   expect
