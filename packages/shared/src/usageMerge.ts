@@ -8,6 +8,7 @@ import {
   type UsageSummary,
   type UsageTokenTotals,
 } from "@t3tools/contracts";
+import { usageModelKey, usageSeriesKey } from "./usageSeries.ts";
 
 export interface EnvironmentUsage {
   readonly environmentId: EnvironmentId;
@@ -27,6 +28,7 @@ export interface ProviderTotals {
 
 export interface ModelTotals {
   readonly model: string;
+  readonly upstreamProvider?: string;
   readonly provider: UsageProviderKind;
   readonly costUsd: number;
   readonly totalTokens: number;
@@ -51,6 +53,7 @@ export interface DailyTotals {
   readonly costUsd: number;
   readonly totalTokens: number;
   readonly byProvider: ReadonlyMap<UsageProviderKind, { costUsd: number; totalTokens: number }>;
+  readonly bySeries?: ReadonlyMap<string, { costUsd: number; totalTokens: number }>;
 }
 
 export interface HourlyTotals {
@@ -59,6 +62,7 @@ export interface HourlyTotals {
   readonly costUsd: number;
   readonly totalTokens: number;
   readonly byProvider: ReadonlyMap<UsageProviderKind, { costUsd: number; totalTokens: number }>;
+  readonly bySeries?: ReadonlyMap<string, { costUsd: number; totalTokens: number }>;
 }
 
 export interface CostQuality {
@@ -137,7 +141,7 @@ function bucketsForSource(summary: UsageSummary, source: UsageSource): readonly 
 }
 
 function bucketKey(bucket: UsageBucket): string {
-  return JSON.stringify([bucket.day, bucket.hourStart ?? null, bucket.provider, bucket.model]);
+  return JSON.stringify([bucket.day, bucket.hourStart ?? null, usageModelKey(bucket)]);
 }
 
 function claimSources(environments: readonly EnvironmentUsage[]): {
@@ -359,6 +363,8 @@ export function mergeUsage(
     string,
     {
       provider: UsageProviderKind;
+      model: string;
+      upstreamProvider?: string;
       costUsd: number;
       totalTokens: number;
       tokens: UsageTokenTotals;
@@ -373,6 +379,7 @@ export function mergeUsage(
       costUsd: number;
       totalTokens: number;
       byProvider: Map<UsageProviderKind, { costUsd: number; totalTokens: number }>;
+      bySeries: Map<string, { costUsd: number; totalTokens: number }>;
     }
   >();
   const hourlyAccumulator = new Map<
@@ -383,6 +390,7 @@ export function mergeUsage(
       costUsd: number;
       totalTokens: number;
       byProvider: Map<UsageProviderKind, { costUsd: number; totalTokens: number }>;
+      bySeries: Map<string, { costUsd: number; totalTokens: number }>;
     }
   >();
   const contributingEnvironments: EnvironmentId[] = [];
@@ -443,9 +451,13 @@ export function mergeUsage(
       provider.records += bucket.records;
       providerAccumulator.set(bucket.provider, provider);
 
-      const modelKey = `${bucket.provider} ${bucket.model}`;
+      const modelKey = usageModelKey(bucket);
       const model = modelAccumulator.get(modelKey) ?? {
         provider: bucket.provider,
+        model: bucket.model,
+        ...(bucket.upstreamProvider === undefined
+          ? {}
+          : { upstreamProvider: bucket.upstreamProvider }),
         costUsd: 0,
         totalTokens: 0,
         tokens: {
@@ -479,6 +491,7 @@ export function mergeUsage(
         costUsd: 0,
         totalTokens: 0,
         byProvider: new Map<UsageProviderKind, { costUsd: number; totalTokens: number }>(),
+        bySeries: new Map<string, { costUsd: number; totalTokens: number }>(),
       };
       day.costUsd += bucket.costUsd;
       day.totalTokens += tokens;
@@ -486,6 +499,11 @@ export function mergeUsage(
       dayProvider.costUsd += bucket.costUsd;
       dayProvider.totalTokens += tokens;
       day.byProvider.set(bucket.provider, dayProvider);
+      const seriesKey = usageSeriesKey(bucket);
+      const daySeries = day.bySeries.get(seriesKey) ?? { costUsd: 0, totalTokens: 0 };
+      daySeries.costUsd += bucket.costUsd;
+      daySeries.totalTokens += tokens;
+      day.bySeries.set(seriesKey, daySeries);
       dailyAccumulator.set(bucket.day, day);
 
       if (bucket.hourStart !== undefined) {
@@ -495,6 +513,7 @@ export function mergeUsage(
           costUsd: 0,
           totalTokens: 0,
           byProvider: new Map<UsageProviderKind, { costUsd: number; totalTokens: number }>(),
+          bySeries: new Map<string, { costUsd: number; totalTokens: number }>(),
         };
         hour.costUsd += bucket.costUsd;
         hour.totalTokens += tokens;
@@ -505,6 +524,10 @@ export function mergeUsage(
         hourProvider.costUsd += bucket.costUsd;
         hourProvider.totalTokens += tokens;
         hour.byProvider.set(bucket.provider, hourProvider);
+        const hourSeries = hour.bySeries.get(seriesKey) ?? { costUsd: 0, totalTokens: 0 };
+        hourSeries.costUsd += bucket.costUsd;
+        hourSeries.totalTokens += tokens;
+        hour.bySeries.set(seriesKey, hourSeries);
         hourlyAccumulator.set(bucket.hourStart, hour);
       }
     }
@@ -525,8 +548,11 @@ export function mergeUsage(
     .sort((a, b) => b.costUsd - a.costUsd);
 
   const models: ModelTotals[] = [...modelAccumulator.entries()]
-    .map(([key, totals]) => ({
-      model: key.slice(key.indexOf(" ") + 1),
+    .map(([, totals]) => ({
+      model: totals.model,
+      ...(totals.upstreamProvider === undefined
+        ? {}
+        : { upstreamProvider: totals.upstreamProvider }),
       provider: totals.provider,
       costUsd: totals.costUsd,
       totalTokens: totals.totalTokens,
@@ -545,6 +571,7 @@ export function mergeUsage(
       costUsd: totals.costUsd,
       totalTokens: totals.totalTokens,
       byProvider: totals.byProvider,
+      bySeries: totals.bySeries,
     }))
     .sort((a, b) => a.day.localeCompare(b.day));
 

@@ -32,6 +32,13 @@ import {
   type HourlyTotals,
   type MergedUsage,
 } from "@t3tools/shared/usageMerge";
+import {
+  usageModelKey,
+  usageSeriesKey,
+  usageSeriesTotals,
+  usageSeriesValue,
+  type UsageSeries,
+} from "@t3tools/shared/usageSeries";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
@@ -102,7 +109,12 @@ import {
   type UsageMetric,
 } from "./usageShortcuts";
 import { useEscapeToGoBack } from "../../hooks/useNavigateBack";
-import { PROVIDER_ORDER, PROVIDER_PRESENTATION, providersWithUsage } from "./usageProviders";
+import {
+  PROVIDER_ORDER,
+  PROVIDER_PRESENTATION,
+  providersWithUsage,
+  usagePresentation,
+} from "./usageProviders";
 import {
   readUsagePagePreferences,
   saveUsagePagePreferences,
@@ -113,7 +125,7 @@ function isUsageMetric(value: string | null | undefined): value is UsageMetric {
   return METRIC_OPTIONS.some((option) => option.value === value);
 }
 
-function isUsageWindowDays(value: number): value is UsagePagePreferences["windowDays"] {
+function isUsageWindowDays(value: string | number): value is UsagePagePreferences["windowDays"] {
   return WINDOW_OPTIONS.some((option) => option.days === value);
 }
 
@@ -163,7 +175,7 @@ function UsageModelDialogHost({
   const model =
     selectedKey === null
       ? undefined
-      : models.find((candidate) => `${candidate.provider}:${candidate.model}` === selectedKey);
+      : models.find((candidate) => usageModelKey(candidate) === selectedKey);
   if (model === undefined) return null;
   return (
     <UsageModelDialog
@@ -193,11 +205,7 @@ export function UsagePage() {
   };
   const [windowSelection, setWindowSelection] = useState(() => ({
     days: preferences.windowDays,
-    window: makeWindow(
-      preferences.windowDays,
-      undefined,
-      preferences.windowDays === 1 ? "hour" : "day",
-    ),
+    window: makeWindow(preferences.windowDays),
   }));
   const metric = preferences.metric;
   const showingLimits = metric === "limits";
@@ -209,7 +217,6 @@ export function UsagePage() {
     useState<ReadonlySet<EnvironmentId> | null>(null);
   const hiddenProviders = new Set(preferences.hiddenProviders);
   const { days: windowDays, window } = windowSelection;
-  const isPast24Hours = windowDays === 1;
   const {
     merged: answeredUsage,
     environments,
@@ -241,12 +248,13 @@ export function UsagePage() {
     setPreferences(nextPreferences);
     saveUsagePagePreferences(nextPreferences);
   };
-  const selectWindow = (days: number) => {
+  const selectWindow = (value: string | number) => {
+    const days = value === "today" ? value : Number(value);
     if (!isUsageWindowDays(days)) return;
     updatePreferences({ windowDays: days });
     setWindowSelection({
       days,
-      window: makeWindow(days, undefined, days === 1 ? "hour" : "day"),
+      window: makeWindow(days),
     });
   };
   const selectMetric = (nextMetric: UsageMetric) => {
@@ -311,7 +319,7 @@ export function UsagePage() {
       });
       return;
     }
-    const nextWindow = makeWindow(windowDays, undefined, isPast24Hours ? "hour" : "day");
+    const nextWindow = makeWindow(windowDays);
     if (
       nextWindow.sinceDay !== window.sinceDay ||
       nextWindow.untilDay !== window.untilDay ||
@@ -418,7 +426,7 @@ export function UsagePage() {
           disabled={showingLimits}
           onValueChange={(next) => {
             const value = next[0];
-            if (value) selectWindow(Number(value));
+            if (value) selectWindow(value);
           }}
         >
           {WINDOW_OPTIONS.map((option) => (
@@ -466,7 +474,9 @@ export function UsagePage() {
         <Select
           value={String(windowDays)}
           disabled={showingLimits}
-          onValueChange={(value) => selectWindow(Number(value))}
+          onValueChange={(value) => {
+            if (value) selectWindow(value);
+          }}
         >
           <SelectTrigger
             aria-label="Usage period"
@@ -649,6 +659,11 @@ function UsageOverview({
   const chartLoadingProviders = new Set(
     activeProviders.filter((provider) => loadingProviders.has(provider)),
   );
+  const seriesTotals = usageSeriesTotals(merged);
+  const activeSeries = activeProviders.flatMap((provider) => {
+    const matching = seriesTotals.filter((series) => series.provider === provider);
+    return matching.length > 0 ? matching : [{ provider, costUsd: 0, totalTokens: 0 }];
+  });
   const sourceMessages = [
     ...new Set(
       selectedEnvironments.flatMap(
@@ -680,16 +695,24 @@ function UsageOverview({
   const cursorInsertAt =
     Math.max(activeProviders.indexOf("codex"), activeProviders.indexOf("claude")) + 1;
   const summaryRows: ReadonlyArray<
-    | { readonly kind: "usage"; readonly provider: UsageProviderKind }
+    | { readonly kind: "usage"; readonly series: UsageSeries }
     | { readonly kind: "enable"; readonly environment: EnvironmentUsageStatus }
   > = [
     ...activeProviders
       .slice(0, cursorInsertAt)
-      .map((provider) => ({ kind: "usage" as const, provider })),
+      .flatMap((provider) =>
+        activeSeries
+          .filter((series) => series.provider === provider)
+          .map((series) => ({ kind: "usage" as const, series })),
+      ),
     ...cursorAccessEnvironments.map((environment) => ({ kind: "enable" as const, environment })),
     ...activeProviders
       .slice(cursorInsertAt)
-      .map((provider) => ({ kind: "usage" as const, provider })),
+      .flatMap((provider) =>
+        activeSeries
+          .filter((series) => series.provider === provider)
+          .map((series) => ({ kind: "usage" as const, series })),
+      ),
   ];
 
   return (
@@ -754,38 +777,55 @@ function UsageOverview({
                 />
               );
             }
-            const provider = row.provider;
-            const totals = merged.providers.find((entry) => entry.provider === provider);
-            const share = metric === "cost" ? (totals?.costShare ?? 0) : (totals?.tokenShare ?? 0);
-            const providerSessions = totals?.sessions ?? 0;
+            const series = row.series;
+            const provider = series.provider;
+            const presentation = usagePresentation(series);
+            const totals = seriesTotals.find(
+              (entry) => usageSeriesKey(entry) === usageSeriesKey(series),
+            );
+            const share =
+              metric === "cost"
+                ? merged.costUsd === 0
+                  ? 0
+                  : (totals?.costUsd ?? 0) / merged.costUsd
+                : merged.totalTokens === 0
+                  ? 0
+                  : (totals?.totalTokens ?? 0) / merged.totalTokens;
+            const providerSessions =
+              merged.providers.find((entry) => entry.provider === provider)?.sessions ?? 0;
             const sessionLabel = `${formatCount(providerSessions)} ${
               providerSessions === 1 ? "session" : "sessions"
             }`;
             const providerLoading = loadingProviders.has(provider);
             const awaitingData = providerLoading && !providersWithData.has(provider);
             return (
-              <div key={provider} className="flex flex-col gap-1">
+              <div key={usageSeriesKey(series)} className="flex flex-col gap-1">
                 <div className="flex items-baseline justify-between gap-4">
                   <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
                     <span
                       aria-hidden
                       className="size-2 shrink-0 rounded-full"
                       style={{
-                        backgroundColor: PROVIDER_PRESENTATION[provider].color,
+                        backgroundColor: presentation.color,
                       }}
                     />
                     <ProviderMark provider={provider} className="size-4" />
                     <span className="flex min-w-0 items-baseline gap-1.5">
-                      <span className="truncate">{PROVIDER_PRESENTATION[provider].label}</span>
-                      <span
-                        className={cn(
-                          "shrink-0 whitespace-nowrap text-2xs text-muted-foreground tabular-nums",
-                          figureClass(providerLoading),
-                          awaitingData && "invisible",
-                        )}
-                      >
-                        {sessionLabel}
-                      </span>
+                      <span className="truncate">{presentation.label}</span>
+                      {!activeSeries.some(
+                        (entry) =>
+                          entry.provider === provider && entry.upstreamProvider !== undefined,
+                      ) ? (
+                        <span
+                          className={cn(
+                            "shrink-0 whitespace-nowrap text-2xs text-muted-foreground tabular-nums",
+                            figureClass(providerLoading),
+                            awaitingData && "invisible",
+                          )}
+                        >
+                          {sessionLabel}
+                        </span>
+                      ) : null}
                     </span>
                   </span>
                   <span
@@ -823,6 +863,7 @@ function UsageOverview({
           </h2>
           <UsageProviderChart
             providers={activeProviders}
+            series={activeSeries}
             loadingProviders={chartLoadingProviders}
             days={days}
             daily={merged.daily}
@@ -943,7 +984,7 @@ function UsageOverview({
                 </tr>
               ) : (
                 breakdownModels.map((model, index) => {
-                  const key = `${model.provider}:${model.model}`;
+                  const key = usageModelKey(model);
                   const value = metric === "tokens" ? model.totalTokens : model.costUsd;
                   const hasBar = value > 0 && breakdownPeak > 0;
                   const share = modelShare(model, metric === "tokens" ? "tokens" : "cost");
@@ -964,7 +1005,14 @@ function UsageOverview({
                           )}
                         >
                           <ProviderMark provider={model.provider} className="size-3.5" />
-                          {model.model}
+                          <span>
+                            {model.model}
+                            {model.upstreamProvider === undefined ? null : (
+                              <span className="block text-xs text-muted-foreground">
+                                {usagePresentation(model).label}
+                              </span>
+                            )}
+                          </span>
                         </button>
                         {hasBar ? (
                           <div aria-hidden className={cn("mt-1.5 h-0.5 max-w-48", rowFigures)}>
@@ -972,7 +1020,7 @@ function UsageOverview({
                               className="h-full rounded-full"
                               style={{
                                 width: `max(0.5rem, ${(value / breakdownPeak) * 100}%)`,
-                                backgroundColor: PROVIDER_PRESENTATION[model.provider].color,
+                                backgroundColor: usagePresentation(model).color,
                               }}
                             />
                           </div>
@@ -1011,9 +1059,9 @@ function UsageOverview({
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted-foreground">
                   <th className="py-2 font-normal">{shownHourly ? "Hour" : "Day"}</th>
-                  {activeProviders.map((provider) => (
-                    <th key={provider} className="py-2 pl-4 text-right font-normal">
-                      {PROVIDER_PRESENTATION[provider].label}
+                  {activeSeries.map((series) => (
+                    <th key={usageSeriesKey(series)} className="py-2 pl-4 text-right font-normal">
+                      {usagePresentation(series).label}
                     </th>
                   ))}
                   <th className="py-2 pl-4 text-right font-normal">Total</th>
@@ -1024,7 +1072,7 @@ function UsageOverview({
                 {breakdownPeriods.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={activeProviders.length + 3}
+                      colSpan={activeSeries.length + 3}
                       className="py-6 text-center text-muted-foreground"
                     >
                       No activity in this window.
@@ -1041,15 +1089,15 @@ function UsageOverview({
                           ? formatHourShort(period.hourStart, shownWindow.timeZone, hour12)
                           : formatDayShort(period.day)}
                       </td>
-                      {activeProviders.map((provider) => (
+                      {activeSeries.map((series) => (
                         <td
-                          key={provider}
+                          key={usageSeriesKey(series)}
                           className={cn(
                             "py-2 pl-4 text-right text-muted-foreground tabular-nums",
-                            figureClass(loadingProviders.has(provider)),
+                            figureClass(loadingProviders.has(series.provider)),
                           )}
                         >
-                          {formatUsd(period.byProvider.get(provider)?.costUsd ?? 0)}
+                          {formatUsd(usageSeriesValue(period, series)?.costUsd ?? 0)}
                         </td>
                       ))}
                       <td
