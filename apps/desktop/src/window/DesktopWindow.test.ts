@@ -71,6 +71,7 @@ import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
+import * as DesktopCustomBuildUpdates from "../updates/DesktopCustomBuildUpdates.ts";
 import * as DesktopApplicationMenu from "./DesktopApplicationMenu.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 
@@ -617,6 +618,7 @@ describe("DesktopWindow", () => {
           configure: Effect.void,
           subscribe: Effect.never,
         }),
+        Layer.mock(DesktopCustomBuildUpdates.DesktopCustomBuildUpdates)({}),
         Layer.mock(DesktopTelemetryPublisher.DesktopTelemetryPublisher)({
           updateRequests: Stream.empty,
           updateCancellations: Stream.empty,
