@@ -12,5 +12,14 @@ describe("sourceControlClients", () => {
     const kindOf = (url: string) => sourceControlClients.findByChangeRequestUrl(url)?.kind;
     expect(kindOf("https://git.cafe/acme/web/pulls/7")).toBe("gitcafe");
     expect(kindOf("https://codeberg.org/acme/web/pulls/7")).toBe("forgejo");
+    expect(kindOf("http://code.example:8080/tfs/collection/project/_git/repo/pullrequest/7")).toBe(
+      "azure-devops-custom-server",
+    );
+    expect(kindOf("https://dev.azure.com/org/project/_git/repo/pullrequest/7")).toBe(
+      "azure-devops",
+    );
+    expect(kindOf("https://org.visualstudio.com/project/_git/repo/pullrequest/7")).toBe(
+      "azure-devops",
+    );
   });
 });

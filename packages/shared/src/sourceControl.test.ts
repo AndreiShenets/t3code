@@ -10,6 +10,34 @@ import {
 } from "./sourceControl.ts";
 
 describe("source control presentation", () => {
+  it("recognizes custom Azure repository routes without granting credentials", () => {
+    expect(
+      detectSourceControlProviderFromRemoteUrl(
+        "https://code.example:8443/tfs/Default%20Collection/Project/_git/Web",
+      ),
+    ).toEqual({
+      kind: "azure-devops-custom-server",
+      name: "Azure DevOps Custom",
+      baseUrl: "https://code.example:8443",
+    });
+    expect(
+      detectSourceControlProviderFromRemoteUrl("https://code.example:8443/team/repo")?.kind,
+    ).toBe("unknown");
+    expect(
+      sourceControlRepositorySelector({
+        provider: "azure-devops-custom-server",
+        name: "Web",
+        displayName: "tfs/collection/project/_git/Web",
+      }),
+    ).toBe("Web");
+    expect(
+      resolveChangeRequestPresentation({
+        kind: SourceControlProviderKind.make("azure-devops-custom-server"),
+        name: "Azure DevOps Custom",
+        baseUrl: "https://code.example:8443",
+      }),
+    ).toEqual(expect.objectContaining({ providerName: "Azure DevOps Custom", shortName: "PR" }));
+  });
   it("uses merge request terminology for GitLab", () => {
     expect(getChangeRequestTerminologyForKind(SourceControlProviderKind.make("gitlab"))).toEqual({
       shortLabel: "MR",

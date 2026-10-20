@@ -12,6 +12,9 @@ import {
   PullRequestListResult,
   PullRequestReviewerRequestInput,
   PullRequestSetFilesViewedInput,
+  PullRequestReviewCommentDraft,
+  PullRequestSubmitReviewResult,
+  PullRequestSubmitReviewPartialResult,
   PullRequestSubmitReviewInput,
   pullRequestHostOf,
   resolvePullRequestAuthorFilter,
@@ -28,6 +31,30 @@ const decodeAction = Schema.decodeUnknownSync(Schema.toCodecJson(PullRequestActi
 const decodeReview = Schema.decodeUnknownSync(Schema.toCodecJson(PullRequestSubmitReviewInput));
 const decodeSetFilesViewed = Schema.decodeUnknownSync(PullRequestSetFilesViewedInput);
 const decodeFilesViewed = Schema.decodeUnknownSync(PullRequestFilesViewedResult);
+const decodeReviewDraft = Schema.decodeUnknownSync(PullRequestReviewCommentDraft);
+const decodeReviewResult = Schema.decodeUnknownSync(PullRequestSubmitReviewResult);
+const decodePartialReviewResult = Schema.decodeUnknownSync(PullRequestSubmitReviewPartialResult);
+
+it("retains rendered draft anchors and decodes legacy and partial review results", () => {
+  const draft = {
+    path: "a.ts",
+    body: "feedback",
+    position: { kind: "added", newLine: 1 },
+    baseSha: "base",
+    headSha: "head",
+  };
+  expect(decodeReviewDraft(draft)).toEqual(draft);
+  expect(decodeReviewResult(undefined)).toBeUndefined();
+  const partial = {
+    status: "partial",
+    postedCommentIndexes: [0, 2],
+    summaryPosted: true,
+    outcomeUnknown: true,
+    message: "Check the PR before retrying",
+  };
+  expect(decodeReviewResult(partial)).toEqual(partial);
+  expect(() => decodePartialReviewResult({ ...partial, postedCommentIndexes: [-1] })).toThrow();
+});
 
 const LIST_RESULT: PullRequestListResult = {
   viewers: { "github.com": "bilal", "gitlab.com": "bilal.hassan" },

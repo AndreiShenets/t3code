@@ -1,5 +1,5 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
-import type { EnvironmentId, PullRequestRef } from "@t3tools/contracts";
+import type { EnvironmentId, PullRequestRef, PullRequestDiffResult } from "@t3tools/contracts";
 import { useState } from "react";
 
 import { getRenderablePatch, resolveFileDiffPath } from "~/lib/diffRendering";
@@ -17,6 +17,13 @@ interface LoadedDiff {
 }
 
 const NO_FILES: ReadonlyMap<string, FileDiffMetadata> = new Map();
+const snapshots = new WeakMap<
+  FileDiffMetadata,
+  Pick<PullRequestDiffResult, "headSha" | "baseSha">
+>();
+export function guideDiffSnapshot(file: FileDiffMetadata) {
+  return snapshots.get(file);
+}
 
 export function useGuideDiffFiles({
   environmentId,
@@ -59,7 +66,10 @@ export function useGuideDiffFiles({
     );
     const files = new Map(current.files);
     if (parsed?.kind === "files") {
-      for (const file of parsed.files) files.set(resolveFileDiffPath(file), file);
+      for (const file of parsed.files) {
+        files.set(resolveFileDiffPath(file), file);
+        snapshots.set(file, { headSha: data.headSha, baseSha: data.baseSha });
+      }
     }
     setLoaded({
       key,

@@ -101,6 +101,23 @@ az extension add --name azure-devops
 az login
 ```
 
+### Azure DevOps Custom
+
+For Azure DevOps Server 2022 (REST API 7.0), open **Settings → Source Control → Azure DevOps Custom**
+and enter the full collection URL, including any installation path and port. A saved PAT is
+always used when provided; an invalid PAT reports an error rather than trying another account.
+With no PAT, Windows uses the account running the T3 server through system curl. macOS and Linux
+require a PAT. The availability indicator turns on when authentication succeeds; it is not an
+enable switch. Credentials stay on the server and apply only to the configured collection.
+Git clone, fetch and push use Git's own authentication separately.
+
+This integration supports comments, inline discussions, replies, editing your comments, and
+resolving/reopening threads. Reactions are comment likes (👍) only. **Request changes** casts
+Azure's **Waiting for author** vote; a comment-only review leaves your vote unchanged. If a PR
+changes while you draft inline comments, re-check them against the refreshed diff. If a review
+is only partly submitted, T3 keeps the unposted drafts; check the PR before retrying any write
+whose result is uncertain.
+
 ### GitCafe
 
 Install the GitCafe CLI and sign in:
@@ -197,7 +214,7 @@ for ten minutes during a GitHub outage; new credentials must be verified first. 
 an uncertain result is never automatically retried elsewhere. Listings, diffs, and checkout or
 PR creation from Git actions continue to use the project's environment.
 
-For Azure DevOps, use the host website to change comments. Bitbucket does not support reopening a
+For Azure DevOps cloud, use the host website to change comments. Bitbucket does not support reopening a
 declined pull request.
 
 ### Review guides
@@ -240,10 +257,15 @@ Tick a file off in the **Code** tab once you have read it and it collapses; the 
 running count. A tick belongs to the pull request rather than to a commit, so scoping the tab to a
 single commit keeps them. A file pushed to after you cleared it comes back marked **Changed**.
 
-On GitHub these are GitHub's own viewed marks, so a review carries between T3 Code and github.com
-in either direction. Forgejo, GitLab, Bitbucket, and Azure DevOps expose no record T3 Code can read, so the
-server you are connected to keeps them instead: they follow you across the apps connected to that
-server, but the host's own site will not show them, and the count reads **viewed in T3 Code**.
+GitHub and **Azure DevOps Custom** synchronize viewed marks with their host websites in both
+directions. For Azure DevOps Custom, the marks belong to the Windows or PAT account running the integration;
+use the same Azure account on the website. Earlier T3-only marks are not uploaded to Azure.
+If native tracking cannot be read or updated, T3 reports the failure rather than silently keeping
+a separate local mark.
+
+For Forgejo, GitLab, Bitbucket, and Azure DevOps cloud, the server you are connected to keeps the
+marks instead: they follow you across the apps connected to that server, but the host's own site
+will not show them, and the count reads **viewed in T3 Code**.
 
 On mobile, open a changed file and mark it viewed from its header. Viewed files collapse,
 and their marks follow the same rules as on web and desktop.

@@ -303,7 +303,7 @@ export function PullRequestReviewersRow(props: RowProps) {
             .map((reviewer) => (
               <View
                 key={reviewer.login}
-                accessibilityLabel={`${reviewer.login}, Review requested`}
+                accessibilityLabel={`${reviewer.login}, ${reviewer.reviewOutcome ?? "Review requested"}`}
                 className="min-h-14 flex-row items-center gap-3 px-4 py-2"
               >
                 <SymbolView name="clock" size={18} tintColorClassName="accent-icon-muted" />
@@ -311,6 +311,19 @@ export function PullRequestReviewersRow(props: RowProps) {
                 <Text className="min-w-0 flex-1 text-sm font-t3-medium" numberOfLines={1}>
                   {reviewer.login}
                 </Text>
+                {reviewer.reviewOutcome ? (
+                  <Text className="text-xs text-foreground-muted">
+                    {reviewer.reviewOutcome === "approved-with-suggestions"
+                      ? "Approved with suggestions"
+                      : reviewer.reviewOutcome === "waiting"
+                        ? "Waiting for author"
+                        : reviewer.reviewOutcome === "rejected"
+                          ? "Rejected"
+                          : reviewer.reviewOutcome === "approved"
+                            ? "Approved"
+                            : "No vote"}
+                  </Text>
+                ) : null}
               </View>
             ))}
           {canRequest ? (
