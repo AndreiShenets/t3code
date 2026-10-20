@@ -6,8 +6,21 @@ import {
 } from "../composerFooterLayout";
 import { measureRestingComposerControls } from "./restingComposerControlsMeasurement";
 
-function measurePicker(input: { clientWidth: number; flexGrow: string; maxWidth?: string }) {
-  const label = { clientWidth: input.clientWidth, scrollWidth: 160 };
+function measurePicker(input: {
+  clientWidth: number;
+  flexGrow: string;
+  maxWidth?: string;
+  scrollWidth?: number;
+  lineScrollWidths?: ReadonlyArray<number>;
+}) {
+  const label = {
+    clientWidth: input.clientWidth,
+    scrollWidth: input.scrollWidth ?? 160,
+    children: (input.lineScrollWidths ?? []).map((scrollWidth) => ({
+      clientWidth: input.clientWidth,
+      scrollWidth,
+    })),
+  };
   const picker = {
     getBoundingClientRect: () => ({ width: 52 }),
     querySelector: () => label,
@@ -69,6 +82,38 @@ describe("measureRestingComposerControls", () => {
     expect(resolveRestingComposerControlsLayout({ ...measurement, hostWidth: 200 })).toEqual({
       hiddenCount: 1,
       iconOnlyCount: 1,
+      visible: true,
+    });
+  });
+
+  it("recovers the widest truncated line in a two-line model label", () => {
+    const measurement = measurePicker({
+      clientWidth: 20,
+      flexGrow: "1",
+      scrollWidth: 20,
+      lineScrollWidths: [160, 200],
+    });
+
+    expect(measurement.naturalFixedWidth).toBe(232);
+    expect(resolveRestingComposerControlsLayout({ ...measurement, hostWidth: 200 })).toEqual({
+      hiddenCount: 1,
+      iconOnlyCount: 1,
+      visible: true,
+    });
+  });
+
+  it("does not recover either line when the two-line label is deliberately collapsed", () => {
+    const measurement = measurePicker({
+      clientWidth: 0,
+      flexGrow: "0",
+      scrollWidth: 0,
+      lineScrollWidths: [160, 200],
+    });
+
+    expect(measurement.naturalFixedWidth).toBe(52);
+    expect(resolveRestingComposerControlsLayout({ ...measurement, hostWidth: 200 })).toEqual({
+      hiddenCount: 0,
+      iconOnlyCount: 0,
       visible: true,
     });
   });
