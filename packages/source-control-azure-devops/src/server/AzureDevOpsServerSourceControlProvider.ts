@@ -43,15 +43,6 @@ const decodePullRequests = Schema.decodeUnknownEffect(
 const decodeRepository = Schema.decodeUnknownEffect(Repository);
 const isServerError = Schema.is(Client.AzureDevOpsServerError);
 
-function remoteSelector(remoteUrl: string): URL {
-  const url = new URL(remoteUrl);
-  if (url.protocol !== "https:" || url.search || url.hash)
-    throw new Error("Invalid repository remote");
-  url.username = "";
-  url.password = "";
-  return url;
-}
-
 function changeRequest(
   raw: typeof PullRequest.Type,
   context: Client.AzureDevOpsServerContext,
@@ -125,19 +116,10 @@ export const make = Effect.gen(function* () {
     context?: SourceControlProvider.SourceControlProviderContext;
   }) {
     if (!input.context) return yield* client.resolve({ cwd: input.cwd });
-    const remote = yield* Effect.try({
-      try: () => remoteSelector(input.context!.remoteUrl),
-      catch: () =>
-        new Client.AzureDevOpsServerError({
-          operation: "resolve",
-          reason: "failed",
-          outcome: "not-sent",
-        }),
-    });
     return yield* client.resolve({
       cwd: input.cwd,
-      host: input.context.requestedHost ?? remote.host,
-      repository: remote.pathname.slice(1),
+      remoteUrl: input.context.remoteUrl,
+      ...(input.context.requestedHost ? { host: input.context.requestedHost } : {}),
     });
   });
   const read = Effect.fnUntraced(function* (input: {
@@ -411,29 +393,20 @@ export const makeDiscovery = Effect.gen(function* () {
         ),
     ),
     refineUnknownRemote: ({ cwd, context }) =>
-      Effect.try({
-        try: () => remoteSelector(context.remoteUrl),
-        catch: () =>
-          new Client.AzureDevOpsServerError({
-            operation: "resolve",
-            reason: "failed",
-            outcome: "not-sent",
-          }),
-      }).pipe(
-        Effect.flatMap((remote) =>
-          client.resolve({
-            cwd,
-            repository: remote.pathname.slice(1),
-            host: context.requestedHost ?? remote.host,
-          }),
+      client
+        .resolve({
+          cwd,
+          remoteUrl: context.remoteUrl,
+          ...(context.requestedHost ? { host: context.requestedHost } : {}),
+        })
+        .pipe(
+          Effect.map((resolved) => ({
+            kind,
+            name: "JDWeb Server (custom)",
+            baseUrl: resolved.collectionUrl,
+          })),
+          Effect.orElseSucceed(() => null),
         ),
-        Effect.map((resolved) => ({
-          kind,
-          name: "JDWeb Server (custom)",
-          baseUrl: resolved.collectionUrl,
-        })),
-        Effect.orElseSucceed(() => null),
-      ),
   };
   return spec;
 });

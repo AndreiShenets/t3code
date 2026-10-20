@@ -1,4 +1,6 @@
 import { assert, it } from "@effect/vitest";
+import { DEFAULT_SERVER_SETTINGS, SourceControlProviderKind } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -41,6 +43,90 @@ function provider(request: Client.AzureDevOpsServerClient["Service"]["request"])
     ),
   );
 }
+
+it.effect.each([
+  "ssh://ado.example:22/Collection/Project/_git/Repo",
+  "git@ado.example:Collection/Project/_git/Repo",
+])("discovers and reads PRs from a stored unknown SSH checkout: %s", (remoteUrl) => {
+  let requests = 0;
+  return Effect.gen(function* () {
+    const client = yield* Client.make;
+    const { service, discovery } = yield* Effect.all({
+      service: Provider.make,
+      discovery: Provider.makeDiscovery,
+    }).pipe(Effect.provideService(Client.AzureDevOpsServerClient, client));
+    const checkout = {
+      cwd: "/repo",
+      context: {
+        provider: {
+          kind: SourceControlProviderKind.make("unknown"),
+          name: "ado.example",
+          baseUrl: "https://ado.example",
+        },
+        remoteName: "origin",
+        remoteUrl,
+      },
+    };
+    const result = yield* discovery.refineUnknownRemote(checkout);
+    assert.strictEqual(result?.kind, "azure-devops-custom-server");
+    assert.strictEqual(result?.baseUrl, context.collectionUrl);
+    for (const rejected of [
+      { remoteUrl: "ssh://elsewhere.example:22/Collection/Project/_git/Repo" },
+      { remoteUrl: "ssh://ado.example:22/Other/Project/_git/Repo" },
+      { requestedHost: "elsewhere.example" },
+    ]) {
+      assert.strictEqual(
+        yield* discovery.refineUnknownRemote({
+          ...checkout,
+          context: { ...checkout.context, ...rejected },
+        }),
+        null,
+      );
+    }
+    assert.ok(service.refineRepositoryIdentity);
+    const identity = yield* service.refineRepositoryIdentity({
+      resolveContext: () => Effect.die("Unexpected registry lookup"),
+      identity: {
+        canonicalKey: "ado.example/collection/project/_git/repo",
+        provider: "unknown",
+        rootPath: "/repo",
+        locator: { source: "git-remote", remoteName: "origin", remoteUrl },
+      },
+    });
+    assert.strictEqual(identity.provider, "azure-devops-custom-server");
+    assert.strictEqual(identity.webUrl, context.repositoryUrl);
+    const pullRequest = yield* service.getChangeRequest({ ...checkout, reference: "42" });
+    assert.strictEqual(pullRequest.url, `${context.repositoryUrl}/pullrequest/42`);
+    assert.strictEqual(requests, 1);
+  }).pipe(
+    Effect.provide(
+      TestHost.layer({
+        settings: {
+          ...DEFAULT_SERVER_SETTINGS,
+          sourceControlHosts: {
+            "azure-devops-custom-server": {
+              collectionUrl: context.collectionUrl,
+              authentication: "pat",
+              personalAccessToken: "test-token",
+            },
+          },
+        },
+        git: { remotes: () => Effect.die("Explicit remote should not read the checkout") },
+        process: {
+          run: () => {
+            requests++;
+            return Effect.succeed(
+              TestHost.processOutput(`${JSON.stringify(pr)}\nT3_HTTP_STATUS:200`),
+            );
+          },
+        },
+      }),
+    ),
+    Effect.provideService(FileSystem.FileSystem, FileSystem.makeNoop({})),
+    Effect.provideService(HostProcess.Platform, "linux"),
+    Effect.provideService(HostProcess.Environment, {}),
+  );
+});
 
 it.effect("keeps on-premises PR URLs and rejects references outside the selected repository", () =>
   Effect.gen(function* () {

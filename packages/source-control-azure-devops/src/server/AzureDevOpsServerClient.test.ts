@@ -283,6 +283,53 @@ it.effect("resolves full and checkout-relative selectors within the configured c
   }),
 );
 
+it.effect.each([
+  "ssh://ado.example:22/tfs/Collection/Project/_git/Repo",
+  "ssh://git@ado.example:2222/tfs/Collection/Project/_git/Repo.git",
+  "ssh://git@ADO.EXAMPLE:22/tfs/collection/Project/_git/Repo",
+  "git@ado.example:tfs/Collection/Project/_git/Repo",
+])("resolves SSH checkout %s using the configured HTTPS origin", (remoteUrl) =>
+  Effect.gen(function* () {
+    const f = fixture("pat", [200], "SSL", "win32", remoteUrl);
+    const client = yield* f.client;
+    const context = yield* client.resolve({ cwd: "/repo" });
+    assert.strictEqual(context.repositoryUrl, `${base}/Project/_git/Repo`);
+    assert.strictEqual(context.origin, "https://ado.example:8443");
+    assert.strictEqual(
+      (yield* client.resolve({ cwd: "/repo", repository: "Other" })).repositoryUrl,
+      `${base}/Project/_git/Other`,
+    );
+    assert.strictEqual(
+      (yield* client.resolve({ cwd: "/repo", remoteUrl })).repositoryUrl,
+      context.repositoryUrl,
+    );
+    yield* client.resolve({ cwd: "/repo", remoteUrl, host: "elsewhere.example" }).pipe(Effect.flip);
+    assert.strictEqual(f.calls.length, 0);
+  }),
+);
+
+it.effect("rejects SSH checkouts outside the configured host or collection", () =>
+  Effect.gen(function* () {
+    for (const remoteUrl of [
+      "ssh://elsewhere.example:22/tfs/Collection/Project/_git/Repo",
+      "git@elsewhere.example:tfs/Collection/Project/_git/Repo",
+      "ssh://ado.example:22/tfs/Other/Project/_git/Repo",
+      "ssh://ado.example:22/tfs/CollectionOther/Project/_git/Repo",
+      "ssh://ado.example:22/tfs/Collection/../Other/Project/_git/Repo",
+      "ssh://ado.example:22/tfs/Collection/..\\Other/Project/_git/Repo",
+      "ssh://ado.example:22/tfs/Collection/Project/_git/Repo?query=1",
+      "ssh://ado.example:22/tfs/Collection/Project/_git/Repo#fragment",
+      "ssh://ado.example:22/tfs/Collection/Project/_git/%2fRepo",
+    ]) {
+      const f = fixture("pat", [200], "SSL", "win32", remoteUrl);
+      const client = yield* f.client;
+      yield* client.resolve({ cwd: "/repo" }).pipe(Effect.flip);
+      yield* client.resolve({ cwd: "/repo", remoteUrl }).pipe(Effect.flip);
+      assert.strictEqual(f.calls.length, 0);
+    }
+  }),
+);
+
 it.effect("pins mutation auth after read preflight and never retries a rejected mutation", () =>
   Effect.gen(function* () {
     const f = fixture("auto", [401, 401]);
