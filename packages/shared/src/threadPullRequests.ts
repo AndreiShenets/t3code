@@ -170,7 +170,7 @@ export function legacyLinkedPullRequestOf(
   const repository = sourceControlRepositorySelector(identity);
   if (repository === null) return null;
   const azureKey =
-    identity.provider === "azure-devops"
+    identity.provider === "azure-devops" || identity.provider === "azure-devops-custom-server"
       ? canonicalRepositoryKey(identity.canonicalKey.toLowerCase())
       : null;
   const link = resolveThreadCurrentPullRequestLink(
