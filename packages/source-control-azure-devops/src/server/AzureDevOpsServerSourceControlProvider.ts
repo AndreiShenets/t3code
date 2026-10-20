@@ -187,8 +187,8 @@ export const make = Effect.gen(function* () {
         Effect.orElseSucceed(() => identity),
       );
     },
-    listChangeRequests: (input) =>
-      Effect.gen(function* () {
+    listChangeRequests: Effect.fn("AzureDevOpsServerSourceControlProvider.listChangeRequests")(
+      function* (input) {
         const context = yield* contextFor(input);
         const raw = yield* client.request({
           cwd: input.cwd,
@@ -211,14 +211,16 @@ export const make = Effect.gen(function* () {
         });
         const list = yield* decodePullRequests(raw);
         return list.value.map((pr) => changeRequest(pr, context));
-      }).pipe(Effect.mapError(mapError("listChangeRequests", input.cwd))),
+      },
+      (effect, input) => effect.pipe(Effect.mapError(mapError("listChangeRequests", input.cwd))),
+    ),
     getChangeRequest: (input) =>
       read(input).pipe(
         Effect.map(({ context, pr }) => changeRequest(pr, context)),
         Effect.mapError(mapError("getChangeRequest", input.cwd)),
       ),
-    createChangeRequest: (input) =>
-      Effect.gen(function* () {
+    createChangeRequest: Effect.fn("AzureDevOpsServerSourceControlProvider.createChangeRequest")(
+      function* (input) {
         const context = yield* contextFor(input);
         const source = SourceControlProvider.sourceControlRefFromInput(input);
         if (source?.repository || source?.owner || input.target?.repository || input.target?.owner)
@@ -242,9 +244,13 @@ export const make = Effect.gen(function* () {
             description,
           },
         });
-      }).pipe(Effect.mapError(mapError("createChangeRequest", input.cwd))),
-    getRepositoryCloneUrls: (input) =>
-      Effect.gen(function* () {
+      },
+      (effect, input) => effect.pipe(Effect.mapError(mapError("createChangeRequest", input.cwd))),
+    ),
+    getRepositoryCloneUrls: Effect.fn(
+      "AzureDevOpsServerSourceControlProvider.getRepositoryCloneUrls",
+    )(
+      function* (input) {
         if (input.context) yield* contextFor(input);
         const context = yield* client.resolve({
           cwd: input.cwd,
@@ -264,7 +270,10 @@ export const make = Effect.gen(function* () {
           url: repository.remoteUrl,
           sshUrl: repository.sshUrl ?? context.repositoryUrl,
         };
-      }).pipe(Effect.mapError(mapError("getRepositoryCloneUrls", input.cwd))),
+      },
+      (effect, input) =>
+        effect.pipe(Effect.mapError(mapError("getRepositoryCloneUrls", input.cwd))),
+    ),
     createRepository: (input) =>
       Effect.fail(
         new SourceControlProviderError({
@@ -274,8 +283,8 @@ export const make = Effect.gen(function* () {
           detail: "Publishing repositories to Azure DevOps Server is not supported.",
         }),
       ),
-    getDefaultBranch: (input) =>
-      Effect.gen(function* () {
+    getDefaultBranch: Effect.fn("AzureDevOpsServerSourceControlProvider.getDefaultBranch")(
+      function* (input) {
         const context = yield* contextFor(input);
         const raw = yield* client.request({
           cwd: input.cwd,
@@ -286,9 +295,13 @@ export const make = Effect.gen(function* () {
         });
         const repository = yield* decodeRepository(raw);
         return repository.defaultBranch?.replace(/^refs\/heads\//, "") ?? null;
-      }).pipe(Effect.mapError(mapError("getDefaultBranch", input.cwd))),
-    checkoutChangeRequest: (input) =>
-      Effect.gen(function* () {
+      },
+      (effect, input) => effect.pipe(Effect.mapError(mapError("getDefaultBranch", input.cwd))),
+    ),
+    checkoutChangeRequest: Effect.fn(
+      "AzureDevOpsServerSourceControlProvider.checkoutChangeRequest",
+    )(
+      function* (input) {
         const { context, pr } = yield* read(input);
         if (pr.forkSource != null)
           return yield* new Client.AzureDevOpsServerError({
@@ -317,7 +330,9 @@ export const make = Effect.gen(function* () {
             ? ["switch", ...(input.force ? ["--discard-changes"] : []), "--", branch]
             : ["switch", "--create", branch, "--track", `${remoteName}/${branch}`],
         });
-      }).pipe(Effect.mapError(mapError("checkoutChangeRequest", input.cwd))),
+      },
+      (effect, input) => effect.pipe(Effect.mapError(mapError("checkoutChangeRequest", input.cwd))),
+    ),
   });
 });
 
@@ -329,8 +344,8 @@ export const makeDiscovery = Effect.gen(function* () {
     kind,
     label: "JDWeb Server (custom)",
     installHint: "Configure the collection URL and authentication in Settings → Source Control.",
-    probe: (cwd) =>
-      Effect.gen(function* () {
+    probe: Effect.fn("AzureDevOpsServerSourceControlProvider.probe")(
+      function* (cwd) {
         const settings = yield* host.settings.get;
         const raw = settings.sourceControlHosts["azure-devops-custom-server"]?.collectionUrl;
         if (typeof raw !== "string" || !raw)
@@ -380,18 +395,21 @@ export const makeDiscovery = Effect.gen(function* () {
             host: configuredHost,
           }),
         };
-      }).pipe(
-        Effect.orElseSucceed(() => ({
-          kind,
-          label: "JDWeb Server (custom)",
-          executable: "curl",
-          status: "available" as const,
-          version: Option.none(),
-          installHint: spec.installHint,
-          detail: Option.none(),
-          auth: providerAuth({ status: "unknown" }),
-        })),
-      ),
+      },
+      (effect) =>
+        effect.pipe(
+          Effect.orElseSucceed(() => ({
+            kind,
+            label: "JDWeb Server (custom)",
+            executable: "curl",
+            status: "available" as const,
+            version: Option.none(),
+            installHint: spec.installHint,
+            detail: Option.none(),
+            auth: providerAuth({ status: "unknown" }),
+          })),
+        ),
+    ),
     refineUnknownRemote: ({ cwd, context }) =>
       Effect.try({
         try: () => remoteSelector(context.remoteUrl),
