@@ -83,7 +83,8 @@ import { usePreparePullRequestThreadAction } from "~/lib/sourceControlActions";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import type { ReviewCommentContext } from "~/reviewCommentContext";
-import { useProjects, useServerConfigs } from "~/state/entities";
+import { useProjects, useQuietThreadShell, useServerConfigs } from "~/state/entities";
+import { resolveDiffPathForWorkspace } from "~/diffFileActions";
 import { useEnvironments } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
@@ -196,6 +197,7 @@ import { PullRequestGuideTab } from "./PullRequestGuideTab";
 import { guideRunKey, useGuideRunStore } from "./guide/guideRunStore";
 import { useReviewGuideWriter } from "./guide/useReviewGuideWriter";
 import { useInlineActionConfirm } from "./useInlineActionConfirm";
+import { resolvePullRequestFileWorkspace } from "./pullRequestFileEditing.logic";
 
 const ACTION_FAILURE_LABELS: Record<PullRequestAction, string> = {
   merge: "Could not merge this pull request",
@@ -246,6 +248,7 @@ const TABS: ReadonlyArray<{ value: PullRequestDetailTab; label: string }> = [
 // The diff viewer pulls in its worker pool, so load it only when the reader approaches Code.
 const loadCodeTab = () => import("./PullRequestCodeTab");
 const PullRequestCodeTab = lazy(loadCodeTab);
+const PullRequestFileEditor = lazy(() => import("./PullRequestFileEditor"));
 
 /**
  * What the last hand-off wrote into each draft, kept outside React because the panel that wrote it
@@ -616,6 +619,13 @@ export function PullRequestDetailPanel({
 }) {
   const environmentConfigs = useServerConfigs();
   const projects = useProjects();
+  const thread = useQuietThreadShell(threadRef);
+  const [editingFile, setEditingFile] = useState<{
+    pullRequestKey: string;
+    environmentId: EnvironmentId;
+    workspaceRoot: string;
+    relativePath: string;
+  } | null>(null);
   const project = projects.find(
     (project) =>
       project.id === requestedReference.projectId && project.environmentId === environmentId,
@@ -762,6 +772,44 @@ export function PullRequestDetailPanel({
     detail,
   } = usePullRequestDetail(environmentId, reference, matchingListEntry);
   const handoffSummary = detail ?? sharedSummary;
+  const fileWorkspace = detail
+    ? resolvePullRequestFileWorkspace({
+        environmentId,
+        reference: { ...reference, url: detail.url },
+        projects,
+        thread:
+          thread && threadRef
+            ? { ref: threadRef, projectId: thread.projectId, worktreePath: thread.worktreePath }
+            : null,
+      })
+    : null;
+  const openCheckoutFile =
+    fileWorkspace === null
+      ? undefined
+      : (filePath: string) => {
+          const relativePath = resolveDiffPathForWorkspace({
+            filePath,
+            workspaceRoot: fileWorkspace.workspaceRoot,
+            repositoryRoot: fileWorkspace.repositoryRoot,
+          });
+          if (relativePath === null) {
+            toastManager.add({
+              type: "error",
+              title: "This file is outside the project checkout.",
+            });
+            return;
+          }
+          if (fileWorkspace.threadRef) {
+            useRightPanelStore.getState().openFile(fileWorkspace.threadRef, relativePath);
+          } else {
+            setEditingFile({
+              pullRequestKey,
+              environmentId: fileWorkspace.environmentId,
+              workspaceRoot: fileWorkspace.workspaceRoot,
+              relativePath,
+            });
+          }
+        };
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { copyToClipboard: copyReference } = useCopyToClipboard<string>({
     target: "pull request reference",
@@ -2900,6 +2948,7 @@ export function PullRequestDetailPanel({
                     refreshToken={refreshToken}
                     backgroundRefreshToken={turnRefresh ?? 0}
                     revealRequest={codeRevealRequest}
+                    onOpenFile={openCheckoutFile}
                   />
                 </Suspense>
               </div>
@@ -2908,6 +2957,12 @@ export function PullRequestDetailPanel({
         ) : null}
       </div>
 
+      {editingFile?.pullRequestKey === pullRequestKey &&
+      editingFile.environmentId === environmentId ? (
+        <Suspense fallback={null}>
+          <PullRequestFileEditor {...editingFile} onClose={() => setEditingFile(null)} />
+        </Suspense>
+      ) : null}
       {detail ? (
         <div className="absolute right-4 bottom-3 z-20">
           <PullRequestComposer
