@@ -1,6 +1,11 @@
 import { act, render } from "../../../test/render";
 import { RegistryContext } from "@effect/atom-react";
-import { EnvironmentId, ProviderInstanceId, USAGE_CONTRACT_VERSION } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProviderInstanceId,
+  USAGE_CONTRACT_VERSION,
+  type UsageSummaryInput,
+} from "@t3tools/contracts";
 import { mergeUsage } from "@t3tools/shared/usageMerge";
 import type { Atom } from "effect/reactivity";
 import { StrictMode } from "react";
@@ -13,6 +18,8 @@ type Presentations = ReadonlyMap<EnvironmentId, Record<string, unknown>>;
 const state = vi.hoisted(() => ({
   presentations: null as unknown as Atom.Writable<Presentations>,
   refreshProviders: vi.fn<(input: unknown) => Promise<undefined>>(),
+  usageWindow: null as UsageSummaryInput | null,
+  refreshUsage: vi.fn<(input?: UsageSummaryInput) => Promise<undefined>>(),
 }));
 
 vi.mock(import("@tanstack/react-router"), async (original) => ({
@@ -60,15 +67,18 @@ vi.mock(import("../../state/usage"), async (original) => {
   };
   return {
     ...(await original()),
-    useUsage: (() => ({
-      merged: mergeUsage([], USAGE_CONTRACT_VERSION),
-      environments: [environment],
-      selectedEnvironments: [environment],
-      isPending: false,
-      shown: null,
-      isPartial: false,
-      refresh: async () => undefined,
-    })) as never,
+    useUsage: ((window: UsageSummaryInput) => {
+      state.usageWindow = window;
+      return {
+        merged: mergeUsage([], USAGE_CONTRACT_VERSION),
+        environments: [environment],
+        selectedEnvironments: [environment],
+        isPending: false,
+        shown: null,
+        isPartial: false,
+        refresh: state.refreshUsage,
+      };
+    }) as never,
   };
 });
 
@@ -144,6 +154,8 @@ async function setup() {
   const previous = localStorage.getItem(PREFERENCES_KEY);
   localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ metric: "limits", windowDays: 30 }));
   state.refreshProviders.mockReset().mockResolvedValue(undefined);
+  state.refreshUsage.mockReset().mockResolvedValue(undefined);
+  state.usageWindow = null;
   await setPresentations([[environmentId, presentation()]]);
   return {
     [Symbol.dispose]() {
@@ -154,6 +166,62 @@ async function setup() {
     },
   };
 }
+
+function mockDate(date: Date) {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(date);
+  return { [Symbol.dispose]: () => vi.useRealTimers() };
+}
+
+it.each([
+  ["wide", 1440],
+  ["compact", 800],
+] as const)("selects Today from the %s period control", async (layout, width) => {
+  using _state = await setup();
+  await page.viewport(width, 900);
+  using _date = mockDate(new Date(2026, 7, 11, 12, 37));
+  localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ metric: "tokens", windowDays: 30 }));
+  await using _screen = await renderPage();
+  if (layout === "wide") {
+    await userEvent.click(page.getByRole("button", { name: "Today", exact: true }));
+  } else {
+    await userEvent.click(page.getByRole("combobox", { name: "Usage period" }));
+    await userEvent.click(page.getByRole("option", { name: "Today", exact: true }));
+  }
+  expect(state.usageWindow).toMatchObject({
+    sinceDay: "2026-08-11",
+    untilDay: "2026-08-11",
+    resolution: "hour",
+    sinceTime: new Date(2026, 7, 11).toISOString(),
+    untilTime: new Date(2026, 7, 11, 12, 37).toISOString(),
+  });
+});
+
+it("restores Today and refreshes it against the new day after midnight", async () => {
+  using _state = await setup();
+  using _date = mockDate(new Date(2026, 7, 11, 23, 59));
+  localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ metric: "tokens", windowDays: "today" }));
+  await using _screen = await renderPage();
+  expect(state.usageWindow).toMatchObject({
+    sinceDay: "2026-08-11",
+    untilDay: "2026-08-11",
+    resolution: "hour",
+    sinceTime: new Date(2026, 7, 11).toISOString(),
+    untilTime: new Date(2026, 7, 11, 23, 59).toISOString(),
+  });
+  vi.setSystemTime(new Date(2026, 7, 12, 0, 1));
+  await userEvent.click(page.getByRole("button", { name: "Refresh usage" }));
+  expect(state.refreshUsage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      sinceDay: "2026-08-12",
+      untilDay: "2026-08-12",
+      resolution: "hour",
+      sinceTime: new Date(2026, 7, 12).toISOString(),
+      untilTime: new Date(2026, 7, 12, 0, 1).toISOString(),
+    }),
+  );
+  expect(state.usageWindow?.sinceDay).toBe("2026-08-12");
+});
 
 it.each([
   ["wide", 1440],

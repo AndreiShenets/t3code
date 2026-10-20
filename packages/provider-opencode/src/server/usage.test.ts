@@ -20,6 +20,74 @@ const openDatabase = (filename: string) =>
   );
 
 describe("readOpenCodeUsage", () => {
+  it.effect("preserves upstream providers in V2, migrated and legacy messages", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "usage-upstream-test-" });
+      const db = yield* openDatabase(path.join(dir, "opencode.db"));
+      yield* db.unsafe(
+        "CREATE TABLE session_message (id TEXT, session_id TEXT, type TEXT, data TEXT, time_created INTEGER)",
+      );
+      const timestamp = 1780000000000;
+      yield* db.unsafe("INSERT INTO session_message VALUES (?, ?, ?, ?, ?)", [
+        "v2",
+        "session",
+        "assistant",
+        JSON.stringify({
+          model: { id: "gpt-6.1-sol", providerID: "openai" },
+          tokens: { input: 100, output: 20 },
+        }),
+        timestamp,
+      ]);
+      yield* db.unsafe(
+        "CREATE TABLE message (id TEXT, session_id TEXT, data TEXT, time_created INTEGER)",
+      );
+      yield* db.unsafe("INSERT INTO message VALUES (?, ?, ?, ?)", [
+        "migrated",
+        "session",
+        JSON.stringify({
+          role: "assistant",
+          modelID: "gpt-6.1-sol",
+          providerID: "github-copilot",
+          tokens: { input: 200, output: 30 },
+        }),
+        timestamp,
+      ]);
+      const legacy = path.join(dir, "storage", "message", "session");
+      yield* fs.makeDirectory(legacy, { recursive: true });
+      for (const [id, providerID] of [
+        ["legacy", "custom-provider"],
+        ["unknown", undefined],
+      ] as const) {
+        yield* fs.writeFileString(
+          path.join(legacy, `${id}.json`),
+          JSON.stringify({
+            role: "assistant",
+            modelID: "gpt-6.1-sol",
+            providerID,
+            time: { created: timestamp },
+            tokens: { input: 50, output: 10 },
+          }),
+        );
+      }
+      const result = yield* readOpenCodeUsage(dir, 0);
+      assert.isFalse(result.error);
+      const records = new Map(
+        result.files.flatMap((file) => file.records).map((record) => [record.dedupeKey, record]),
+      );
+      for (const [id, upstream] of [
+        ["v2", "openai"],
+        ["migrated", "github-copilot"],
+        ["legacy", "custom-provider"],
+        ["unknown", undefined],
+      ] as const) {
+        assert.strictEqual(records.get(`opencode:${id}`)?.upstreamProvider, upstream);
+        assert.strictEqual(records.get(`opencode:${id}`)?.model, "gpt-6.1-sol");
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("bounds raw history allocations while counting every eligible message once", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
