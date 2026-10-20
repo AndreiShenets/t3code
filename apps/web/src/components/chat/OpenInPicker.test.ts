@@ -1,5 +1,5 @@
 import { FolderClosedIcon } from "lucide-react";
-import { FileExplorerIcon, FinderIcon } from "../Icons";
+import { FileExplorerIcon, FinderIcon, VisualStudioIcon } from "../Icons";
 import { resolveOpenInOptions } from "./OpenInPicker";
 import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
@@ -66,6 +66,20 @@ describe("shouldShowOpenInPicker", () => {
 });
 
 describe("resolveOpenInOptions", () => {
+  it("includes Visual Studio only when the environment reports it installed", () => {
+    expect(resolveOpenInOptions("Win32", ["vscode", "visual-studio"])).toEqual([
+      expect.objectContaining({ value: "vscode", label: "VS Code" }),
+      expect.objectContaining({
+        value: "visual-studio",
+        label: "Visual Studio",
+        Icon: VisualStudioIcon,
+      }),
+    ]);
+    expect(resolveOpenInOptions("Win32", ["vscode"])).toEqual([
+      expect.objectContaining({ value: "vscode" }),
+    ]);
+  });
+
   it.each([
     ["MacIntel", "Finder", FinderIcon],
     ["Win32", "File Explorer", FileExplorerIcon],
