@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./usageSeries": {
+      "types": "./src/usageSeries.ts",
+      "import": "./src/usageSeries.ts"
+    },
     "./githubMarkdownLinks": {
       "types": "./src/githubMarkdownLinks.ts",
       "import": "./src/githubMarkdownLinks.ts"

@@ -1384,6 +1384,48 @@ describe("UsageService", () => {
       }).pipe(Effect.scoped),
   );
 
+  it.live("keeps OpenCode upstream providers separate through the summary and client merge", () =>
+    Effect.gen(function* () {
+      const { settings, home } = yield* setup;
+      const directory = NodePath.join(home, "opencode", "storage", "message", "session-1");
+      yield* Effect.promise(() => NodeFSP.mkdir(directory, { recursive: true }));
+      for (const providerID of ["openai", "github-copilot"]) {
+        const message = yield* encodeUnknownJson({
+          id: providerID,
+          sessionID: "session-1",
+          role: "assistant",
+          model: { id: "example-model", providerID },
+          time: { created: Date.parse("2026-08-01T10:00:00Z") },
+          tokens: { input: 10, output: 5 },
+          cost: 1,
+        });
+        yield* Effect.promise(() =>
+          NodeFSP.writeFile(NodePath.join(directory, `${providerID}.json`), message),
+        );
+      }
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(layerService({ prefix: "usage-service-opencode-upstream", home, settings })),
+      );
+      const summary = yield* service.readSummary(WINDOW);
+      assert.deepStrictEqual(summary.buckets.map((bucket) => bucket.upstreamProvider).sort(), [
+        "github-copilot",
+        "openai",
+      ]);
+      assert.strictEqual(
+        summary.sources.find((source) => source.fingerprint.provider === "opencode")
+          ?.distinctSessions,
+        1,
+      );
+      const merged = mergeUsage(
+        [{ environmentId: EnvironmentId.make("test"), label: "Test", summary }],
+        summary.contractVersion,
+      );
+      assert.strictEqual(merged.models.length, 2);
+      assert.strictEqual(merged.costUsd, 2);
+      assert.strictEqual(merged.sessions, 1);
+    }).pipe(Effect.scoped),
+  );
+
   it.live("includes host and merged OpenCode instance histories once across list aliases", () =>
     Effect.gen(function* () {
       const { settings, home } = yield* setup;
