@@ -52,7 +52,8 @@ import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefres
 import { useProject, useThreadCheckpointSummaries, useQuietThreadShell } from "../state/entities";
 import { useClientSettings, updateClientSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
-import { DiffFilePathCopyButton } from "./DiffFilePathCopyButton";
+import { DiffFileHeaderActions } from "./diffs/DiffFileHeaderActions";
+import { diffHeaderTogglePath } from "./diffs/diffHeaderInteraction";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/AnnotatableCodeView";
@@ -166,16 +167,18 @@ function DiffFileHeaderSuffix({
   error,
   truncated,
   onRetry,
+  onOpenFile,
 }: {
   filePath: string;
   hasStat: boolean;
   error: boolean;
   truncated: boolean;
   onRetry: (path: string) => void;
+  onOpenFile: (path: string) => void;
 }) {
   return (
     <>
-      <DiffFilePathCopyButton filePath={filePath} />
+      <DiffFileHeaderActions filePath={filePath} onOpenFile={onOpenFile} />
       {hasStat ? (
         <DiffFileStatus error={error} truncated={truncated} retry={() => onRetry(filePath)} />
       ) : null}
@@ -1030,29 +1033,7 @@ export default function DiffPanel({
                 <div
                   className="min-h-0 min-w-0 flex-1"
                   onClickCapture={(event) => {
-                    const composedPath = event.nativeEvent.composedPath?.() ?? [];
-                    for (const node of composedPath) {
-                      if (!(node instanceof HTMLElement)) continue;
-                      // Header controls keep their own actions. In particular, the chevron must
-                      // not also trigger the row handler or the two toggles cancel each other.
-                      if (node instanceof HTMLButtonElement || node instanceof HTMLAnchorElement) {
-                        return;
-                      }
-                    }
-                    const title = composedPath.find(
-                      (node): node is HTMLElement =>
-                        node instanceof HTMLElement && node.hasAttribute("data-title"),
-                    );
-                    const filePath = title?.textContent;
-                    if (filePath) {
-                      openDiffFile(filePath);
-                      return;
-                    }
-                    const header = composedPath.find(
-                      (node): node is HTMLElement =>
-                        node instanceof HTMLElement && node.hasAttribute("data-diffs-header"),
-                    );
-                    const headerFilePath = header?.querySelector("[data-title]")?.textContent;
+                    const headerFilePath = diffHeaderTogglePath(event.nativeEvent);
                     if (!headerFilePath) return;
                     const file = codeViewFiles.find(
                       (candidate) => candidate.filePath === headerFilePath,
@@ -1099,6 +1080,7 @@ export default function DiffPanel({
                           error={state?.error ?? false}
                           truncated={state?.truncated ?? false}
                           onRetry={retry}
+                          onOpenFile={openDiffFile}
                         />
                       );
                     }}
