@@ -308,6 +308,22 @@ const layerUpdate = Layer.mergeAll(
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
 it.layer(layerUpdate)("OpenCodeDriver updates", (it) => {
+  it.effect("rejects MCP controls on OpenCode 1 without starting a server", () =>
+    Effect.gen(function* () {
+      versionOutput.current = "1.14.19\n";
+      serverStarts.length = 0;
+      const instance = yield* create({}, noHttp);
+      const mcp = instance.mcpManagement!;
+      assert.strictEqual((yield* mcp.list("/work").pipe(Effect.flip)).reason, "unsupported");
+      assert.strictEqual(
+        (yield* mcp
+          .setEnabled({ cwd: "/work", server: "context7", enabled: true })
+          .pipe(Effect.flip)).reason,
+        "unsupported",
+      );
+      assert.deepStrictEqual(serverStarts, []);
+    }).pipe(Effect.scoped),
+  );
   it.effect("never runs the binary for a disabled instance's update check", () =>
     Effect.gen(function* () {
       versionProbes.length = 0;
