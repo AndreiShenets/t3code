@@ -204,6 +204,127 @@ describe("ProviderModelPicker", () => {
     expect(label).toContain("Mixed values");
     expect(label).not.toContain("GPT 5");
     expect(label).not.toContain("Unavailable");
+    expect(label).not.toContain("Codex");
+  });
+
+  it.each(["OpenAI", "GitHub Copilot"])(
+    "shows the selected OpenCode model's %s provider beneath its name",
+    async (subProvider) => {
+      const label = await renderPicker({
+        instanceId: "opencode",
+        driver: "opencode",
+        model: "selected/model",
+        options: [{ slug: "selected/model", name: "Selected model", subProvider }],
+      });
+
+      expect(label).toContain(`Selected modelOpenCode · ${subProvider}`);
+    },
+  );
+
+  it("shows the provider instance name when there is no upstream provider", async () => {
+    const label = await renderPicker({
+      instanceId: "claudeAgent",
+      driver: "claudeAgent",
+      model: "selected",
+      options: [{ slug: "selected", name: "Selected model" }],
+    });
+
+    expect(label).toContain("Selected modelClaude");
+  });
+
+  it.each(["sm", "xs"] as const)(
+    "centers the smaller provider subtitle inside the %s trigger without growing the control",
+    async (size) => {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const entry = providerEntry("opencode", "opencode");
+      pickerRoot = createRoot(document.body.appendChild(document.createElement("div")));
+      await act(async () =>
+        pickerRoot!.render(
+          <ProviderModelPicker
+            environmentId={null}
+            activeInstanceId={entry.instanceId}
+            model="openai/model"
+            lockedProvider={null}
+            instanceEntries={[entry]}
+            modelOptionsByInstance={
+              new Map([
+                [
+                  entry.instanceId,
+                  [{ slug: "openai/model", name: "GPT-6.1 Sol", subProvider: "GitHub Copilot" }],
+                ],
+              ])
+            }
+            size={size}
+            onInstanceModelChange={() => {}}
+          />,
+        ),
+      );
+
+      const trigger = page.getByRole("button", {
+        name: "GPT-6.1 Sol (OpenCode · GitHub Copilot)",
+      });
+      const model = trigger.getByText("GPT-6.1 Sol", { exact: true });
+      const provider = trigger.getByText("OpenCode · GitHub Copilot", { exact: true });
+      await expect.element(model).toBeVisible();
+      await expect.element(provider).toBeVisible();
+      const triggerBounds = trigger.element().getBoundingClientRect();
+      const modelBounds = model.element().getBoundingClientRect();
+      const providerBounds = provider.element().getBoundingClientRect();
+      expect(triggerBounds.height).toBeLessThanOrEqual(28);
+      expect(modelBounds.top).toBeGreaterThanOrEqual(triggerBounds.top);
+      expect(providerBounds.top).toBeGreaterThanOrEqual(modelBounds.bottom);
+      expect(providerBounds.bottom).toBeLessThanOrEqual(triggerBounds.bottom);
+      expect(Number.parseFloat(getComputedStyle(provider.element()).fontSize)).toBe(6);
+      const modelText = document.createRange();
+      modelText.selectNodeContents(model.element());
+      const providerText = document.createRange();
+      providerText.selectNodeContents(provider.element());
+      const modelTextBounds = modelText.getBoundingClientRect();
+      const providerTextBounds = providerText.getBoundingClientRect();
+      expect(
+        Math.abs(
+          modelTextBounds.left +
+            modelTextBounds.width / 2 -
+            (providerTextBounds.left + providerTextBounds.width / 2),
+        ),
+      ).toBeLessThan(1);
+    },
+  );
+
+  it("includes both upstream providers when selecting the same model through different providers", async () => {
+    const entry = providerEntry("opencode", "opencode");
+    const label = await triggerText(
+      <ProviderModelPicker
+        environmentId={null}
+        activeInstanceId={entry.instanceId}
+        model="openai/model"
+        selectedModels={[
+          { instanceId: entry.instanceId, model: "openai/model" },
+          { instanceId: entry.instanceId, model: "github-copilot/model" },
+        ]}
+        lockedProvider={null}
+        instanceEntries={[entry]}
+        modelOptionsByInstance={
+          new Map([
+            [
+              entry.instanceId,
+              [
+                { slug: "openai/model", name: "Same model", subProvider: "OpenAI" },
+                {
+                  slug: "github-copilot/model",
+                  name: "Same model",
+                  subProvider: "GitHub Copilot",
+                },
+              ],
+            ],
+          ])
+        }
+        onInstanceModelChange={() => {}}
+      />,
+    );
+
+    expect(label).toContain("Same model, Same model");
+    expect(label).toContain("OpenCode · OpenAI, OpenCode · GitHub Copilot");
   });
 
   it.each(["", ANTIGRAVITY_DEFAULT_MODEL])(
