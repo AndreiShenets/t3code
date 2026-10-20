@@ -192,7 +192,7 @@ function valueToY(value: number, max: number) {
   return max === 0 ? VIEW_HEIGHT : VIEW_HEIGHT - (value / max) * (VIEW_HEIGHT - PLOT_TOP);
 }
 
-function buildChart(
+export function buildChart(
   periods: readonly string[],
   byPeriod: ReadonlyMap<string, DailyTotals | HourlyTotals>,
   metric: UsageChartMetric,
@@ -204,14 +204,14 @@ function buildChart(
   const stepX = periods.length < 2 ? 0 : VIEW_WIDTH / (periods.length - 1);
   const paths = providers.map((provider) => {
     const slot = PROVIDER_ORDER.indexOf(provider);
-    const line = curvePath(
-      smoothCurve(
-        columns.map((column, periodIndex) => ({
-          x: periodIndex * stepX,
-          y: valueToY(column.bands[slot]?.value ?? 0, scale.max),
-        })),
-      ),
-    );
+    const points = columns.map((column, periodIndex) => ({
+      x: periodIndex * stepX,
+      y: valueToY(column.bands[slot]?.value ?? 0, scale.max),
+    }));
+    const first = points[0];
+    // A single bucket has no curve segments; extend its value without duplicating its totals.
+    if (points.length === 1 && first !== undefined) points.push({ x: VIEW_WIDTH, y: first.y });
+    const line = curvePath(smoothCurve(points));
     return {
       provider,
       loading: loadingProviders.has(provider),
@@ -360,6 +360,7 @@ function UsageChartPlot({
   };
 
   const hoveredPeriod = hoverIndex === null ? undefined : periods[hoverIndex];
+  const hoverX = periods.length === 1 ? VIEW_WIDTH / 2 : (hoverIndex ?? 0) * stepX;
 
   return (
     <div
@@ -381,8 +382,8 @@ function UsageChartPlot({
         {children}
         {hoverIndex === null ? null : (
           <line
-            x1={hoverIndex * stepX}
-            x2={hoverIndex * stepX}
+            x1={hoverX}
+            x2={hoverX}
             y1={PLOT_TOP}
             y2={VIEW_HEIGHT}
             stroke="currentColor"
@@ -511,18 +512,27 @@ export function UsageProviderChart({
         </UsageChartPlot>
       </div>
 
-      <div className="flex justify-between pl-16 text-3xs text-muted-foreground uppercase">
+      <div
+        className={cn(
+          "flex pl-16 text-3xs text-muted-foreground uppercase",
+          periods.length === 1 ? "justify-center" : "justify-between",
+        )}
+      >
         <span>{periods[0] === undefined ? "" : formatPeriod(periods[0])}</span>
-        <span>
-          {periods[Math.floor(periods.length / 2)] === undefined
-            ? ""
-            : formatPeriod(periods[Math.floor(periods.length / 2)] ?? "")}
-        </span>
-        <span>
-          {periods[periods.length - 1] === undefined
-            ? ""
-            : formatPeriod(periods[periods.length - 1] ?? "")}
-        </span>
+        {periods.length === 1 ? null : (
+          <>
+            <span>
+              {periods[Math.floor(periods.length / 2)] === undefined
+                ? ""
+                : formatPeriod(periods[Math.floor(periods.length / 2)] ?? "")}
+            </span>
+            <span>
+              {periods[periods.length - 1] === undefined
+                ? ""
+                : formatPeriod(periods[periods.length - 1] ?? "")}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );
