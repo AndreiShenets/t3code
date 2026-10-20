@@ -274,9 +274,7 @@ describe("ProviderModelPicker", () => {
       expect(modelBounds.top).toBeGreaterThanOrEqual(triggerBounds.top);
       expect(providerBounds.top).toBeGreaterThanOrEqual(modelBounds.bottom);
       expect(providerBounds.bottom).toBeLessThanOrEqual(triggerBounds.bottom);
-      expect(Number.parseFloat(getComputedStyle(provider.element()).fontSize)).toBeLessThanOrEqual(
-        8,
-      );
+      expect(Number.parseFloat(getComputedStyle(provider.element()).fontSize)).toBe(6);
       const modelText = document.createRange();
       modelText.selectNodeContents(model.element());
       const providerText = document.createRange();

@@ -284,7 +284,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 {props.triggerLabel ?? multipleLabel ?? triggerTitle}
               </span>
               {providerLabel ? (
-                <span className="w-full truncate pb-px text-4xs font-normal leading-none text-muted-foreground">
+                <span className="w-full truncate pb-px text-6xs font-normal leading-none text-muted-foreground">
                   {providerLabel}
                 </span>
               ) : null}
