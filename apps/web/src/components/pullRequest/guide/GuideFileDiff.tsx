@@ -7,7 +7,7 @@ import { FileDiff, type FileDiffOptions } from "@pierre/diffs/react";
 import { useContext } from "react";
 
 import { useCodeDisplay } from "~/hooks/useCodeDisplay";
-import { useTheme } from "~/hooks/useTheme";
+import { useRenderedAppearance } from "~/hooks/useTheme";
 import { resolveDiffThemeName, resolveFileDiffPath } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
 
@@ -21,7 +21,7 @@ export function GuideFileDiff({
   file: FileDiffMetadata;
   loadDiffFiles: FileDiffContentsLoader;
 }) {
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useRenderedAppearance();
   const workspace = useContext(GuideProseContext);
   const filePath = resolveFileDiffPath(file);
   const { onPostRender: onCodePostRender } = useCodeDisplay(workspace, [filePath]);

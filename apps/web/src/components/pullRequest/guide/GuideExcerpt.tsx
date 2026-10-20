@@ -10,7 +10,7 @@ import { ArrowUpRightIcon } from "lucide-react";
 import { useContext, useState } from "react";
 
 import { useCodeDisplay } from "~/hooks/useCodeDisplay";
-import { useTheme } from "~/hooks/useTheme";
+import { useRenderedAppearance } from "~/hooks/useTheme";
 import {
   getRenderablePatch,
   resolveDiffThemeName,
@@ -203,7 +203,7 @@ function ExcerptDiff({
   commenting: ExcerptCommenting | null;
   onOpenFile: (path: string) => void;
 }) {
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useRenderedAppearance();
   const workspace = useContext(GuideProseContext);
   const { onPostRender: onCodePostRender } = useCodeDisplay(workspace, [excerpt.path]);
   const loadExcerptFiles = excerptLoader(excerpt, slice.rows, loadDiffFiles);
