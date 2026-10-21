@@ -170,6 +170,10 @@ describe("host editor access", () => {
     const visualStudio = page.getByRole("menuitem", { name: /Visual Studio/ });
     await expect.element(visualStudio).toBeVisible();
     await userEvent.click(visualStudio);
+    expect(state.setPreferred).toHaveBeenCalledWith("visual-studio");
+    await userEvent.click(
+      page.getByRole("button", { name: "Open file in preferred editor", exact: true }),
+    );
     expect(state.run).toHaveBeenCalledWith({
       environmentId: selected,
       input: { cwd: "/work/project", editor: "visual-studio" },
@@ -177,6 +181,7 @@ describe("host editor access", () => {
 
     await fixture.renderPicker(["vscode"]);
     await userEvent.click(page.getByRole("button", { name: "Choose editor", exact: true }));
+    await expect.element(page.getByRole("menuitem", { name: /VS Code/ })).toBeVisible();
     await expect.element(visualStudio).not.toBeInTheDocument();
   });
   it("uses the selected grant for both the button and a retained shortcut", async () => {
