@@ -4,6 +4,7 @@ import type {
   PullRequestReaction,
   PullRequestReactionContent,
   PullRequestRef,
+  PullRequestCapabilities,
 } from "@t3tools/contracts";
 import { SmilePlusIcon } from "lucide-react";
 import { useState } from "react";
@@ -36,6 +37,7 @@ function reactionsSignature(reactions: ReadonlyArray<PullRequestReaction>): stri
 export function PullRequestReactionBar({
   reactions,
   canReact,
+  capabilities,
   subjectId,
   environmentId,
   reference,
@@ -44,6 +46,7 @@ export function PullRequestReactionBar({
 }: {
   readonly reactions: ReadonlyArray<PullRequestReaction>;
   readonly canReact: boolean;
+  readonly capabilities?: PullRequestCapabilities | undefined;
   /** Absent reacts to the change request itself, which is where its description's reactions live. */
   readonly subjectId?: string | undefined;
   readonly environmentId: EnvironmentId;
@@ -63,8 +66,14 @@ export function PullRequestReactionBar({
   const signature = reactionsSignature(reactions);
   const values = pending.signature === signature ? pending.values : EMPTY_PENDING;
   const shown = applyPendingPullRequestReactions(reactions, values);
+  const allowed = PULL_REQUEST_REACTION_ORDER.filter(
+    (content) => capabilities?.reactionContents?.includes(content) ?? true,
+  );
+  const enabled =
+    canReact && (subjectId !== undefined || capabilities?.descriptionReactions !== false);
 
   const toggle = async (content: PullRequestReactionContent, reacted: boolean) => {
+    if (!enabled || !allowed.includes(content)) return;
     setPending({ signature, values: new Map([...values, [content, reacted]]) });
     const result = await setReaction({
       environmentId,
@@ -87,7 +96,7 @@ export function PullRequestReactionBar({
     onRefresh();
   };
 
-  if (shown.length === 0 && !canReact) return null;
+  if (shown.length === 0 && (!enabled || allowed.length === 0)) return null;
 
   return (
     <div className={cn("flex min-w-0 max-w-full flex-wrap items-center gap-1", className)}>
@@ -99,7 +108,7 @@ export function PullRequestReactionBar({
                 type="button"
                 aria-pressed={reaction.viewerHasReacted}
                 aria-label={`${pullRequestReactionName(reaction.content)}, ${reaction.count}`}
-                disabled={!canReact}
+                disabled={!enabled || !allowed.includes(reaction.content)}
                 className={cn(
                   PILL_CLASS,
                   reaction.viewerHasReacted
@@ -118,7 +127,7 @@ export function PullRequestReactionBar({
         </Tooltip>
       ))}
 
-      {canReact ? (
+      {enabled && allowed.length > 0 ? (
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger
             render={
@@ -136,7 +145,7 @@ export function PullRequestReactionBar({
           </PopoverTrigger>
           <PopoverPopup align="start" side="top" padding="compact">
             <div className="flex items-center gap-0.5">
-              {PULL_REQUEST_REACTION_ORDER.map((content) => {
+              {allowed.map((content) => {
                 const reacted =
                   shown.find((reaction) => reaction.content === content)?.viewerHasReacted ?? false;
                 return (

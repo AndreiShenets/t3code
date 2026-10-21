@@ -21,6 +21,15 @@ function withheldDiff(): PullRequestDiffResult {
 }
 
 describe("paged mobile pull request diffs", () => {
+  it("replaces snapshot identity even when the rendered patch is unchanged", () => {
+    const first = { ...diff("first.ts"), headSha: "old-head", baseSha: "old-base" };
+    const pages = [{ cursor: null, result: first }];
+    const refreshed = { ...first, headSha: "new-head", baseSha: "new-base" };
+    const next = retainPullRequestDiffPage(pages, null, refreshed);
+    expect(next).not.toBe(pages);
+    expect(next[0]?.result).toBe(refreshed);
+    expect(pages[0]?.result.headSha).toBe("old-head");
+  });
   it("withheld PR hunks must retain provider line counts", () => {
     const result = withheldDiff();
     const cache = new WeakMap<PullRequestDiffResult, ReviewParsedDiff>();

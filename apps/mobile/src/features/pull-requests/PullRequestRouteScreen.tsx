@@ -805,6 +805,7 @@ export function PullRequestFileRouteScreen({
     if (!row || !file || !diffHead.sha || !canCommentOnDiff) return;
     const position = reviewPosition(row);
     if (!position) return;
+    const snapshot = result.snapshotForPath(file.path);
     const oldPath =
       parsed.kind === "files"
         ? parsed.files.find((entry) => entry.id === file.id)?.previousPath
@@ -816,7 +817,8 @@ export function PullRequestFileRouteScreen({
       path: file.path,
       ...(oldPath ? { oldPath } : {}),
       position,
-      headSha: diffHead.sha,
+      headSha: snapshot?.headSha ?? diffHead.sha,
+      ...(snapshot?.baseSha ? { baseSha: snapshot.baseSha } : {}),
       code: row.content ?? "",
     });
   };
