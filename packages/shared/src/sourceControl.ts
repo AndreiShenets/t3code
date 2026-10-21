@@ -1,5 +1,16 @@
 import { SourceControlProviderKind } from "@t3tools/contracts";
-import type { RepositoryIdentity, SourceControlProviderInfo } from "@t3tools/contracts";
+import type {
+  PullRequestActor,
+  RepositoryIdentity,
+  SourceControlProviderInfo,
+} from "@t3tools/contracts";
+
+export function getPullRequestActorName(
+  actor: Pick<PullRequestActor, "login" | "name"> | null | undefined,
+  fallback = "ghost",
+): string {
+  return actor?.name?.trim() || actor?.login || fallback;
+}
 
 export interface ChangeRequestPresentation {
   readonly icon:

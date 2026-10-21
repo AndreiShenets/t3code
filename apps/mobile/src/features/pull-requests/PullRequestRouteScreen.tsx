@@ -1,4 +1,5 @@
 import { Toolbar } from "../../components/ui/Toolbar";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { Chip } from "../../components/ui/Chip";
 import { pullRequestTabOffset } from "./pullRequestTabScroll";
@@ -193,7 +194,7 @@ function PullRequestIdentity(props: {
       <View className="flex-row items-center gap-2">
         <PullRequestAvatar actor={pr.author} size={20} />
         <Text className="min-w-0 flex-1 text-xs font-t3-medium" numberOfLines={1}>
-          {pr.author?.login ?? "Unknown author"}
+          {getPullRequestActorName(pr.author, "Unknown author")}
         </Text>
         <Text className="shrink text-right text-2xs text-foreground-muted" numberOfLines={1}>
           Updated {relativeTime(pr.updatedAt)} ago

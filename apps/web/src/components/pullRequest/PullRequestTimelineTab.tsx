@@ -17,6 +17,7 @@ import {
   MessageSquareIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
@@ -93,7 +94,7 @@ function TimelineBody({
 }
 
 function ActorName({ actor }: { actor: PullRequestActor | null }) {
-  return <span className="font-semibold text-foreground">{actor?.login ?? "ghost"}</span>;
+  return <span className="font-semibold text-foreground">{getPullRequestActorName(actor)}</span>;
 }
 
 function TimelineMarker({
@@ -420,7 +421,7 @@ function ReviewThreadEvent({
         {thread.isOutdated ? <span className="shrink-0 font-medium">Outdated</span> : null}
         {expanded ? null : (
           <span className="shrink-0">
-            · {event.actor?.login ?? "ghost"}
+            · {getPullRequestActorName(event.actor)}
             {replyCount > 0 ? (
               <>
                 {" "}

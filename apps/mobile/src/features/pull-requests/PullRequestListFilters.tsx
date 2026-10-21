@@ -72,6 +72,7 @@ export function PullRequestListFilters(props: {
   readonly value: PullRequestListControls;
   readonly onChange: (value: PullRequestListControls) => void;
   readonly authors: readonly string[];
+  readonly authorNames: Readonly<Record<string, string>>;
   readonly labels: readonly string[];
   readonly projects: readonly { id: string; title: string; environmentId: string }[];
 }) {
@@ -260,7 +261,7 @@ export function PullRequestListFilters(props: {
     Object.fromEntries([
       ["", "All authors"],
       ["me", "Me"],
-      ...authors.map((login) => [login, login]),
+      ...authors.map((login) => [login, props.authorNames[login] ?? login]),
     ]),
     author ?? "",
   );
