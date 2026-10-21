@@ -77,8 +77,10 @@ describe("reconcileDiffSlices", () => {
     });
   });
 
-  it("does not keep later pages when pagination or omitted file metadata changes", () => {
+  it("does not keep later pages when snapshot, pagination or omitted file metadata changes", () => {
     for (const changed of [
+      { ...loaded[0]!, headSha: "new-head" },
+      { ...loaded[0]!, baseSha: "new-base" },
       { ...loaded[0]!, nextCursor: "new-cursor" },
       { ...loaded[0]!, truncated: true },
       { ...loaded[0]!, omittedFileStats: [{ path: "large.ts", additions: 20, deletions: 0 }] },
