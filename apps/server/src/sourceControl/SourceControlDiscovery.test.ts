@@ -18,6 +18,7 @@ import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as AzureDevOpsCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsCli";
 import * as AzureDevOpsPullRequestCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsPullRequestCli";
+import * as AzureDevOpsServerClient from "@t3tools/source-control-azure-devops/server/AzureDevOpsServerClient";
 import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
 import * as BitbucketPullRequestApi from "@t3tools/source-control-bitbucket/server/BitbucketPullRequestApi";
 import * as GitHubRest from "@t3tools/source-control-github/server/GitHubRest";
@@ -46,6 +47,7 @@ const layerSourceControlProviderRegistryTest = (input: {
         }).pipe(Layer.provide(NodeServices.layer)),
         Layer.mock(AzureDevOpsCli.AzureDevOpsCli)({}),
         Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({}),
+        Layer.mock(AzureDevOpsServerClient.AzureDevOpsServerClient)({}),
         Layer.mock(BitbucketApi.BitbucketApi)(input.bitbucket),
         Layer.mock(BitbucketPullRequestApi.BitbucketPullRequestApi)({}),
         ServerSettings.ServerSettingsService.layerTest(),
@@ -221,6 +223,14 @@ Logged in to gitlab.com as gitlab-user
           auth: "authenticated",
           account: Option.some("azure-user@example.com"),
           detail: Option.none(),
+        },
+        {
+          kind: SourceControlProviderKind.make("azure-devops-custom-server"),
+          auth: "unauthenticated",
+          account: Option.none(),
+          detail: Option.some(
+            "Configure the collection URL and authentication in Settings → Source Control.",
+          ),
         },
         {
           kind: SourceControlProviderKind.make("bitbucket"),

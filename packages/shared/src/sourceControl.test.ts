@@ -5,9 +5,63 @@ import {
   sourceControlRepositorySelector,
   detectSourceControlProviderFromRemoteUrl,
   getChangeRequestTerminologyForKind,
+  getPullRequestActorName,
 } from "./sourceControl.ts";
 
+describe("getPullRequestActorName", () => {
+  it("shows a known name instead of an opaque account ID", () => {
+    expect(
+      getPullRequestActorName({
+        login: "64d61648-5e0b-4335-bcec-3a3d88963c89",
+        name: "Andrei Shenets",
+      }),
+    ).toBe("Andrei Shenets");
+  });
+
+  it("falls back to the login when the name is missing or blank", () => {
+    for (const name of [null, "", "   "]) {
+      expect(getPullRequestActorName({ login: "octocat", name })).toBe("octocat");
+    }
+  });
+
+  it("trims display names and preserves readable handles", () => {
+    expect(getPullRequestActorName({ login: "octocat", name: "  Mona Lisa  " })).toBe("Mona Lisa");
+    expect(getPullRequestActorName({ login: "octocat", name: "octocat" })).toBe("octocat");
+  });
+
+  it("preserves the caller's missing-author label", () => {
+    expect(getPullRequestActorName(null)).toBe("ghost");
+    expect(getPullRequestActorName(undefined, "Unknown author")).toBe("Unknown author");
+  });
+});
+
 describe("detectSourceControlProviderFromRemoteUrl", () => {
+  it("recognizes custom Azure repository routes without granting credentials", () => {
+    expect(
+      detectSourceControlProviderFromRemoteUrl(
+        "https://code.example:8443/tfs/Default%20Collection/Project/_git/Web",
+      ),
+    ).toEqual({
+      kind: "azure-devops-custom-server",
+      name: "Azure DevOps Custom",
+      baseUrl: "https://code.example:8443",
+    });
+    expect(
+      detectSourceControlProviderFromRemoteUrl("https://code.example:8443/team/repo")?.kind,
+    ).toBe("unknown");
+    expect(
+      sourceControlRepositorySelector({
+        provider: "azure-devops-custom-server",
+        name: "Web",
+        displayName: "tfs/collection/project/_git/Web",
+      }),
+    ).toBe("Web");
+    expect(
+      getChangeRequestTerminologyForKind(
+        SourceControlProviderKind.make("azure-devops-custom-server"),
+      ),
+    ).toEqual({ shortLabel: "PR", singular: "pull request" });
+  });
   it("detects Forgejo and Gitea hosts while preserving HTTP origins", () => {
     for (const host of ["codeberg.org", "forgejo.example.test", "gitea.example.test"]) {
       expect(detectSourceControlProviderFromRemoteUrl(`http://${host}:3000/team/repo.git`)).toEqual(
