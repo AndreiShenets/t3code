@@ -19,6 +19,7 @@ import {
 } from "./usageSeries.ts";
 
 const decodeSummary = Schema.decodeUnknownSync(UsageSummary);
+const encodeSummary = Schema.encodeSync(UsageSummary);
 
 function bucket(overrides: Partial<UsageBucket> = {}): UsageBucket {
   return {
