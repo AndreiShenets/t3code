@@ -7,6 +7,8 @@ import { useRightPanelStore, type PullRequestDetailTab } from "~/rightPanelStore
 import type { DiffFoldOverride, DiffSlice } from "./pullRequestDiff.logic";
 
 export interface PullRequestDraftAnchor {
+  readonly headSha?: string | undefined;
+  readonly baseSha?: string | undefined;
   readonly fileKey: string;
   readonly fileVersion: number;
   readonly path: string;

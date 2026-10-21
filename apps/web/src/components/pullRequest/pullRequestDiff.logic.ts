@@ -51,6 +51,8 @@ export function toggleFileDiffFoldForViewed(
 }
 
 export interface DiffSlice {
+  readonly headSha?: string | undefined;
+  readonly baseSha?: string | undefined;
   readonly cursor: string | null;
   readonly patch: string;
   readonly truncated: boolean;
@@ -66,6 +68,8 @@ export function reconcileDiffSlices(slices: ReadonlyArray<DiffSlice>, answer: Di
   if (
     existing !== undefined &&
     existing.patch === answer.patch &&
+    existing.headSha === answer.headSha &&
+    existing.baseSha === answer.baseSha &&
     existing.truncated === answer.truncated &&
     existing.nextCursor === answer.nextCursor &&
     existing.omittedFileStats.length === answer.omittedFileStats.length &&
