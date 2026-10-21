@@ -1,9 +1,19 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { SelectedLineRange } from "@pierre/diffs";
+import type { PullRequestReviewPosition, ScopedThreadRef } from "@t3tools/contracts";
 import { createStore } from "zustand/vanilla";
 
 import { useRightPanelStore, type PullRequestDetailTab } from "~/rightPanelStore";
 import type { DiffFoldOverride, DiffSlice } from "./pullRequestDiff.logic";
+
+export interface PullRequestDraftAnchor {
+  readonly fileKey: string;
+  readonly fileVersion: number;
+  readonly path: string;
+  readonly oldPath: string | null;
+  readonly position: PullRequestReviewPosition;
+  readonly range: SelectedLineRange;
+}
 
 export interface PullRequestViewState {
   timelineOrder?: "newest" | "oldest";
@@ -18,6 +28,9 @@ export interface PullRequestViewState {
     visibleCommitCount: number;
     wordWrap: boolean;
     ignoreWhitespace: boolean;
+    draft?: PullRequestDraftAnchor | null;
+    draftText?: string;
+    selectedLines?: { id: string; range: SelectedLineRange } | null;
   };
 }
 

@@ -5,7 +5,6 @@ import type {
   PullRequestDetailView,
   PullRequestDiffSide,
   PullRequestRef,
-  PullRequestReviewPosition,
   PullRequestReviewThread,
   PullRequestThreadCommentsResult,
 } from "@t3tools/contracts";
@@ -33,6 +32,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ComponentProps,
   type ReactNode,
 } from "react";
 
@@ -104,7 +104,7 @@ import {
   type DiffFoldOverride,
   type DiffSlice,
 } from "./pullRequestDiff.logic";
-import type { PullRequestViewStateStore } from "./pullRequestViewState";
+import type { PullRequestDraftAnchor, PullRequestViewStateStore } from "./pullRequestViewState";
 import { PullRequestDiffStat, PullRequestMetaLine } from "./pullRequestPresentation";
 import { PullRequestDiffUnavailableState } from "./PullRequestDiffUnavailableState";
 import { usePullRequestFilesViewed } from "./usePullRequestFilesViewed";
@@ -222,12 +222,31 @@ interface MutableAnnotationGroup {
   draft: boolean;
 }
 
-interface DraftAnchor {
-  readonly fileKey: string;
-  readonly path: string;
-  readonly oldPath: string | null;
-  readonly position: PullRequestReviewPosition;
-  readonly range: SelectedLineRange;
+// Keep keystrokes local: changing the viewer's annotation renderer recreates its portals.
+function PullRequestDraftCommentAnnotation({
+  draft,
+  viewState,
+  ...props
+}: Omit<ComponentProps<typeof DiffCommentAnnotation>, "text" | "onTextChange"> & {
+  draft: PullRequestDraftAnchor;
+  viewState: PullRequestViewStateStore | undefined;
+}) {
+  const [text, setText] = useState(() => {
+    const code = viewState?.getState().code;
+    return code?.draft === draft ? (code.draftText ?? "") : "";
+  });
+  return (
+    <DiffCommentAnnotation
+      {...props}
+      text={text}
+      onTextChange={(text) => {
+        setText(text);
+        viewState?.setState((state) =>
+          state.code?.draft === draft ? { code: { ...state.code, draftText: text } } : state,
+        );
+      }}
+    />
+  );
 }
 
 export interface PullRequestAgentSelectionInput {
@@ -304,8 +323,8 @@ function PullRequestCodeTab({
   const [selectedLines, setSelectedLines] = useState<{
     id: string;
     range: SelectedLineRange;
-  } | null>(null);
-  const [draft, setDraft] = useState<DraftAnchor | null>(null);
+  } | null>(savedCode?.selectedLines ?? null);
+  const [draft, setDraft] = useState<PullRequestDraftAnchor | null>(savedCode?.draft ?? null);
   const [threadPending, setThreadPending] = useState(false);
   const [orphansOpen, setOrphansOpen] = useState(false);
   // Which pull request the slices belong to travels with them, so a render taken before the
@@ -450,7 +469,7 @@ function PullRequestCodeTab({
     }
   }, [data, diffPending, diffError, dataUpdatedAt, refreshDiffPage, revalidateAfter]);
   useLayoutEffect(() => {
-    viewState?.setState({
+    viewState?.setState((state) => ({
       code: {
         scopeKey,
         slices: loadedSlices,
@@ -459,8 +478,11 @@ function PullRequestCodeTab({
         visibleCommitCount,
         wordWrap,
         ignoreWhitespace,
+        draft,
+        draftText: state.code?.draft === draft ? (state.code.draftText ?? "") : "",
+        selectedLines,
       },
-    });
+    }));
   }, [
     viewState,
     scopeKey,
@@ -470,6 +492,8 @@ function PullRequestCodeTab({
     visibleCommitCount,
     wordWrap,
     ignoreWhitespace,
+    draft,
+    selectedLines,
   ]);
 
   // The sentinel is held as state rather than a ref because the viewer mounts its own footer:
@@ -511,6 +535,16 @@ function PullRequestCodeTab({
   const fileVersions = new Map(
     files.map((file) => [buildFileDiffIdentityKey(file), buildFileDiffContentVersion(file)]),
   );
+  if (draft !== null) {
+    const version = fileVersions.get(draft.fileKey);
+    const fileRemoved =
+      version === undefined && loadedSlices.length > 0 && loadedSlices.at(-1)?.nextCursor === null;
+    // Never attach a saved comment to lines in a different version of its file.
+    if (fileRemoved || (version !== undefined && version !== draft.fileVersion)) {
+      setDraft(null);
+      setSelectedLines(null);
+    }
+  }
   const filePaths = files.map((file) => resolveFileDiffPath(file));
   const omittedFileStats = new Map(
     loadedSlices.flatMap((slice) =>
@@ -765,15 +799,17 @@ function PullRequestCodeTab({
     if (position === null) return;
     setDraft({
       fileKey: item.id,
+      fileVersion: buildFileDiffContentVersion(file),
       path,
       oldPath: previousPath === path ? null : previousPath,
       position,
       range,
     });
+    setSelectedLines({ id: item.id, range });
   };
 
   const finishSelection = (
-    anchor: DraftAnchor,
+    anchor: PullRequestDraftAnchor,
     text: string,
     onFinish: (comment: ReviewCommentContext) => void,
   ) => {
@@ -969,10 +1005,11 @@ function PullRequestCodeTab({
         />
       ))}
       {annotation.metadata.draft && draft && canSelectLines ? (
-        <DiffCommentAnnotation
+        <PullRequestDraftCommentAnnotation
+          draft={draft}
+          viewState={viewState}
           kind="draft"
           rangeLabel={`${draft.path}:${getReviewPositionAnchor(draft.position).line}`}
-          text=""
           submitLabel={canCommentOnLines ? "Add to review" : "Add to agent"}
           {...(canCommentOnLines && onAddToAgentSelection
             ? {

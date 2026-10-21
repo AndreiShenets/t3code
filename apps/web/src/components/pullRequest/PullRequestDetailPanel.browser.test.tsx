@@ -9,13 +9,13 @@ import {
 } from "@t3tools/contracts";
 import type { ComponentProps } from "react";
 import { expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { AppAtomRegistryProvider, appAtomRegistry } from "~/rpc/atomRegistry";
 import { selectActiveRightPanelSurface, useRightPanelStore } from "~/rightPanelStore";
 import { RightPanelSurfaceContent } from "../chat/RightPanelSurfaceContent";
 import { PullRequestDetailPanel } from "./PullRequestDetailPanel";
-import { createPullRequestViewState } from "./pullRequestViewState";
+import { createPullRequestViewState, getPullRequestViewState } from "./pullRequestViewState";
 import { pullRequestReviewKey, usePullRequestReviewStore } from "./pullRequestReviewStore";
 
 import "~/index.css";
@@ -228,6 +228,158 @@ const codePatch = (path: string, increment = 1) => `diff --git a/${path} b/${pat
 ${Array.from({ length: 150 }, (_, index) => `-const old${index} = ${index};`).join("\n")}
 ${Array.from({ length: 150 }, (_, index) => `+const next${index} = ${index + increment};`).join("\n")}
 `;
+
+const commentPatch = (value = 1) => `diff --git a/review.ts b/review.ts
+new file mode 100644
+--- /dev/null
++++ b/review.ts
+@@ -0,0 +1,2 @@
++const reviewMe = ${value};
++export { reviewMe };
+`;
+
+function setupInlineReview() {
+  setup();
+  codeTest.detail = {
+    ...detail,
+    capabilities: {
+      ...detail.capabilities,
+      review: { ...detail.capabilities.review, inlineComment: true },
+    },
+    viewerPermissions: { ...detail.viewerPermissions, comment: true },
+  };
+  const result = {
+    patch: commentPatch(),
+    truncated: false,
+    nextCursor: null,
+  } satisfies PullRequestDiffResult;
+  const atom = Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(
+    AsyncResult.success(result),
+  );
+  codeTest.pages.set("first", atom);
+  return { atom, result };
+}
+
+async function beginInlineComment() {
+  const line = page.getByText("const reviewMe = 1;", { exact: true });
+  await expect.element(line).toBeVisible();
+  const root = line.element().getRootNode() as ShadowRoot;
+  const gutter = root.querySelector<HTMLElement>('[data-column-number="1"]')!;
+  await userEvent.click(gutter);
+  const input = page.getByRole("textbox", { name: "Comment on lines review.ts:1" });
+  await expect.element(input).toBeVisible();
+  return input;
+}
+
+it.each(["Cancel", "Add to review"])(
+  "keeps an inline draft through an editor round trip and clears it after %s",
+  async (action) => {
+    setupInlineReview();
+    useRightPanelStore.getState().openPullRequest(threadRef, { ...surface, detailTab: "code" });
+    const selected = selectActiveRightPanelSurface(
+      useRightPanelStore.getState().byThreadKey,
+      threadRef,
+    )!;
+    const viewState = getPullRequestViewState(threadRef, selected);
+    await using screen = await render({ viewState, initialTab: "code" });
+    const input = await beginInlineComment();
+    await input.fill("Check this condition");
+    const selectedLines = viewState.getState().code?.selectedLines;
+    expect(selectedLines?.range).toMatchObject({ start: 1, end: 1 });
+
+    useRightPanelStore.getState().openFile(threadRef, "review.ts");
+    await screen.rerender(<textarea aria-label="File editor" />);
+    await expect.element(page.getByRole("textbox", { name: "File editor" })).toBeVisible();
+    useRightPanelStore.getState().openPullRequest(threadRef, surface);
+    const returned = selectActiveRightPanelSurface(
+      useRightPanelStore.getState().byThreadKey,
+      threadRef,
+    )!;
+    expect(getPullRequestViewState(threadRef, returned)).toBe(viewState);
+    await screen.rerender(
+      panel({
+        viewState,
+        initialTab:
+          returned.kind === "pull-request" ? (returned.detailTab ?? "summary") : "summary",
+      }),
+    );
+
+    const restored = page.getByRole("textbox", { name: "Comment on lines review.ts:1" });
+    await expect.element(restored).toHaveValue("Check this condition");
+    expect(viewState.getState().code?.selectedLines).toEqual(selectedLines);
+    const root = page
+      .getByText("const reviewMe = 1;", { exact: true })
+      .element()
+      .getRootNode() as ShadowRoot;
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-column-number="1"][data-selected-line]')).not.toBeNull(),
+    );
+    await restored.fill("Check this condition before merging");
+    await page.getByRole("button", { name: action, exact: true }).click();
+    await expect.element(restored).not.toBeInTheDocument();
+    if (action === "Add to review") {
+      expect(usePullRequestReviewStore.getState().drafts[pullRequestReviewKey(detail)]).toEqual([
+        expect.objectContaining({ path: "review.ts", body: "Check this condition before merging" }),
+      ]);
+    }
+    await screen.rerender(null);
+    await screen.rerender(panel({ viewState, initialTab: "code" }));
+    await expect
+      .element(page.getByRole("textbox", { name: "Comment on lines review.ts:1" }))
+      .not.toBeInTheDocument();
+    expect(viewState.getState().code?.draft).toBeNull();
+    expect(viewState.getState().code?.draftText).toBe("");
+  },
+);
+
+it("discards an inline draft when its file changes instead of attaching it to different code", async () => {
+  const { atom, result } = setupInlineReview();
+  const viewState = createPullRequestViewState();
+  await using _screen = await render({ viewState, initialTab: "code" });
+  const input = await beginInlineComment();
+  await input.fill("Comment on the original code");
+  await act(async () => {
+    appAtomRegistry.set(atom, AsyncResult.success({ ...result, patch: commentPatch(2) }));
+  });
+  await expect.element(page.getByText("const reviewMe = 2;", { exact: true })).toBeVisible();
+  await expect.element(input).not.toBeInTheDocument();
+  expect(viewState.getState().code?.draft).toBeNull();
+  expect(viewState.getState().code?.selectedLines).toBeNull();
+  expect(usePullRequestReviewStore.getState().drafts).toEqual({});
+});
+
+it("keeps an inline draft when another file changes", async () => {
+  const { atom, result } = setupInlineReview();
+  const viewState = createPullRequestViewState();
+  await using _screen = await render({ viewState, initialTab: "code" });
+  const input = await beginInlineComment();
+  await input.fill("Keep this finding");
+  await act(async () => {
+    appAtomRegistry.set(
+      atom,
+      AsyncResult.success({ ...result, patch: commentPatch() + codePatch("unrelated.ts") }),
+    );
+  });
+  await expect.element(page.getByText("2 files", { exact: true })).toBeVisible();
+  await expect.element(input).toHaveValue("Keep this finding");
+});
+
+it("does not restore an inline draft into another pull request", async () => {
+  setupInlineReview();
+  const viewState = createPullRequestViewState();
+  await using screen = await render({ viewState, initialTab: "code" });
+  const input = await beginInlineComment();
+  await input.fill("Only for the first pull request");
+  await screen.rerender(null);
+  const other = { ...detail, number: 2 };
+  codeTest.detail = other;
+  await screen.rerender(panel({ viewState, initialTab: "code", reference: other }));
+  await expect.element(page.getByText("const reviewMe = 1;", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByRole("textbox", { name: "Comment on lines review.ts:1" }))
+    .not.toBeInTheDocument();
+  expect(viewState.getState().code?.draft).toBeNull();
+});
 
 it.each([
   ["first.ts", "turn", "expanded"],
