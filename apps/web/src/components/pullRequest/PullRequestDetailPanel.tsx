@@ -2949,6 +2949,7 @@ export function PullRequestDetailPanel({
                     backgroundRefreshToken={turnRefresh ?? 0}
                     revealRequest={codeRevealRequest}
                     onOpenFile={openCheckoutFile}
+                    fileWorkspace={fileWorkspace}
                   />
                 </Suspense>
               </div>
