@@ -1,26 +1,27 @@
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { releaseCodeWhitespace, renderCodeWhitespace } from "./codeWhitespace";
 
-const containers: HTMLElement[] = [];
-
-afterEach(() => {
-  for (const container of containers) releaseCodeWhitespace(container);
-  containers.length = 0;
-});
-
 function codeContainer() {
   const container = document.createElement("div");
-  containers.push(container);
   const root = container.attachShadow({ mode: "open" });
   root.innerHTML =
     '<div data-column-number>1</div><div data-line><span>\tconst </span><span>name</span><span> = "a b"; \t\t</span></div><div data-line-annotation>A comment with spaces</div>';
-  return { container, root, line: root.querySelector("[data-line]")! };
+  return {
+    container,
+    root,
+    line: root.querySelector("[data-line]")!,
+    [Symbol.dispose]() {
+      releaseCodeWhitespace(container);
+      container.remove();
+    },
+  };
 }
 
 describe("display-only whitespace markers", () => {
   it("keeps copied text and token boundaries while distinguishing spaces from tabs", () => {
-    const { container, root, line } = codeContainer();
+    using host = codeContainer();
+    const { container, root, line } = host;
     const original = line.textContent;
     const tokens = [...line.children];
     renderCodeWhitespace(container, true);
@@ -40,7 +41,8 @@ describe("display-only whitespace markers", () => {
   });
 
   it("handles repeated virtualized renders and new lines without nesting markers", () => {
-    const { container, root, line } = codeContainer();
+    using host = codeContainer();
+    const { container, root, line } = host;
     const original = line.textContent;
     renderCodeWhitespace(container, true);
     const count = root.querySelectorAll("[data-code-whitespace]").length;
@@ -60,7 +62,8 @@ describe("display-only whitespace markers", () => {
   });
 
   it("removes markers when disabled and can enable them again without changing source", () => {
-    const { container, root, line } = codeContainer();
+    using host = codeContainer();
+    const { container, root, line } = host;
     const original = line.textContent;
     renderCodeWhitespace(container, false);
     expect(root.querySelector("[data-code-whitespace]")).toBeNull();
@@ -74,7 +77,8 @@ describe("display-only whitespace markers", () => {
   });
 
   it("preserves composing text through mutations and renders, then resumes decoration", async () => {
-    const { container, root, line } = codeContainer();
+    using host = codeContainer();
+    const { container, root, line } = host;
     renderCodeWhitespace(container, true);
     const marker = line.querySelector('[data-code-whitespace="space"]')!;
     const composingText = marker.firstChild as Text;
@@ -109,7 +113,8 @@ describe("display-only whitespace markers", () => {
     ["enabling", false, [true]],
     ["enabling and disabling", false, [true, false]],
   ] as const)("defers %s markers until composition finishes", async (_label, initial, toggles) => {
-    const { container, root, line } = codeContainer();
+    using host = codeContainer();
+    const { container, root, line } = host;
     line.textContent = " a b ";
     renderCodeWhitespace(container, initial);
     const composingText = (line.querySelector("[data-code-whitespace]")?.firstChild ??
@@ -135,7 +140,8 @@ describe("display-only whitespace markers", () => {
   });
 
   it("defers renders from compositionend handlers and respects a new composition", async () => {
-    const { container, root, line } = codeContainer();
+    using host = codeContainer();
+    const { container, root, line } = host;
     renderCodeWhitespace(container, true);
     const marker = line.querySelector("[data-code-whitespace]")!;
     const composingText = marker.firstChild;
@@ -162,7 +168,8 @@ describe("display-only whitespace markers", () => {
   it.each([false, true])(
     "stops composition repainting and observation on release (end first: %s)",
     async (endFirst) => {
-      const { container, root, line } = codeContainer();
+      using host = codeContainer();
+      const { container, root, line } = host;
       renderCodeWhitespace(container, true);
       line.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
       const end = () =>
