@@ -658,6 +658,188 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
     },
   });
   const CHILD = "ses_f1485c529ffea4URrYruwEg0Ja";
+  const backgroundShell = {
+    id: "sh_background",
+    status: "running",
+    command: "npm test",
+    cwd: WORK,
+    shell: "/bin/sh",
+    file: "/work/shell.out",
+    metadata: { sessionID: SESSION },
+    time: { started: 1 },
+  };
+  const shellLaunch = (): ReadonlyArray<ProviderReplayEntry> => {
+    const tool = { sessionID: SESSION, assistantMessageID: "msg_assistant", id: "call-shell" };
+    return [
+      out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+      promptAccepted,
+      event("session.execution.started", { sessionID: SESSION }),
+      event("session.tool.input.started", { ...tool, name: "shell" }),
+      event("session.tool.called", {
+        ...tool,
+        name: "shell",
+        input: { command: backgroundShell.command, background: true },
+        executed: false,
+      }),
+      event("shell.created", { info: backgroundShell }),
+      event("session.tool.progress", { ...tool, metadata: { shellID: backgroundShell.id } }),
+      event("session.tool.success", {
+        ...tool,
+        content: [{ type: "text", text: "Command moved to the background" }],
+        metadata: { status: "running", shellID: backgroundShell.id },
+      }),
+      event("session.execution.succeeded", { sessionID: SESSION }),
+    ];
+  };
+  it.effect("keeps background shells pending after the parent turn ends", () =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed(shellLaunch());
+      const watch = yield* watchCalls(runtime, thread);
+      yield* runtime.startTurn(turnInput(thread));
+      yield* watch.until(() => watch.state.terminal === "completed");
+      assert.deepEqual(watch.state.roster, [
+        { taskId: backgroundShell.id, kind: "command", description: backgroundShell.command },
+      ]);
+      assert.isTrue(yield* runtime.hasPendingBackgroundWork!);
+      assert.isTrue(yield* runtime.hasPendingBackgroundWorkForThread!(thread));
+    }).pipe(Effect.scoped),
+  );
+  it.effect.each([
+    ["success", "exited", 0],
+    ["failure", "exited", 1],
+    ["timeout", "timeout", 1],
+    ["killed", "killed", 1],
+  ] as const)("clears background shells when they end (%s)", ([, status, exit]) =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed([
+        ...shellLaunch(),
+        event("shell.exited", { id: backgroundShell.id, status, exit }),
+      ]);
+      const watch = yield* watchCalls(runtime, thread);
+      yield* runtime.startTurn(turnInput(thread));
+      yield* watch.until(() => watch.state.roster?.length === 0);
+      assert.isFalse(yield* runtime.hasPendingBackgroundWork!);
+      assert.isFalse(yield* runtime.hasPendingBackgroundWorkForThread!(thread));
+    }).pipe(Effect.scoped),
+  );
+  it.effect("ignores shells belonging to other sessions", () =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed([
+        out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+        promptAccepted,
+        event("session.execution.started", { sessionID: SESSION }),
+        event("shell.created", {
+          info: { ...backgroundShell, metadata: { sessionID: "ses_other" } },
+        }),
+        event("shell.created", { info: { ...backgroundShell, id: "sh_unowned", metadata: {} } }),
+        event("session.execution.succeeded", { sessionID: SESSION }),
+      ]);
+      const terminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+      yield* runtime.startTurn(turnInput(thread));
+      yield* Fiber.join(terminal);
+      assert.isFalse(yield* runtime.hasPendingBackgroundWork!);
+    }).pipe(Effect.scoped),
+  );
+  it.effect("keeps waiting for the remaining shell when one of two commands exits", () =>
+    Effect.gen(function* () {
+      const gate = makeProviderReplayGate(["last-exit"]);
+      const second = { ...backgroundShell, id: "sh_second", command: "npm run build" };
+      const { runtime, thread } = yield* resumed(
+        [
+          ...shellLaunch(),
+          event("shell.created", { info: second }),
+          event("shell.exited", { id: backgroundShell.id, status: "exited", exit: 0 }),
+          event("shell.exited", { id: second.id, status: "exited", exit: 0 }, "last-exit"),
+        ],
+        { replayGate: gate },
+      );
+      const watch = yield* watchCalls(runtime, thread);
+      yield* runtime.startTurn(turnInput(thread));
+      yield* watch.until(
+        () => watch.state.roster?.length === 1 && watch.state.roster[0]?.taskId === second.id,
+      );
+      assert.isTrue(yield* runtime.hasPendingBackgroundWorkForThread!(thread));
+      gate.release("last-exit");
+      yield* watch.until(() => watch.state.roster?.length === 0);
+      assert.isFalse(yield* runtime.hasPendingBackgroundWorkForThread!(thread));
+    }).pipe(Effect.scoped),
+  );
+  it.effect("stops background shells after the parent turn ends", () =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed([
+        ...shellLaunch(),
+        out("shell.remove", { id: backgroundShell.id, "location[directory]": WORK }),
+        reply("shell.remove", null),
+      ]);
+      const terminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+      yield* runtime.startTurn(turnInput(thread));
+      yield* Fiber.join(terminal);
+      yield* runtime.interruptTurn({
+        providerThread: thread,
+        providerTurnId: yield* providerTurnId,
+        requestRuntimeRestart: true,
+      });
+      assert.isFalse(yield* runtime.hasPendingBackgroundWork!);
+    }).pipe(Effect.scoped),
+  );
+  it.effect("keeps a background shell tracked if Stop cannot reach it", () =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed([
+        ...shellLaunch(),
+        out("shell.remove", { id: backgroundShell.id, "location[directory]": WORK }),
+        reply("shell.remove", {
+          status: 500,
+          body: { _tag: "UnknownError", message: "remove failed" },
+        }),
+      ]);
+      const terminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+      yield* runtime.startTurn(turnInput(thread));
+      yield* Fiber.join(terminal);
+      yield* runtime.interruptTurn({
+        providerThread: thread,
+        providerTurnId: yield* providerTurnId,
+        requestRuntimeRestart: true,
+      });
+      assert.isTrue(yield* runtime.hasPendingBackgroundWorkForThread!(thread));
+    }).pipe(Effect.scoped),
+  );
+  it.effect.each([
+    ["running", true],
+    ["exited", false],
+  ] as const)("reconciles background shells after reconnect (%s)", ([, running]) =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed([
+        ...shellLaunch(),
+        { type: "runtime_exit", status: "success" },
+        out("event.subscribe"),
+        out("session.active"),
+        replyData("session.active", {}),
+        out("shell.list", { "location[directory]": WORK }),
+        reply("shell.list", {
+          location: { directory: WORK },
+          data: running ? [backgroundShell] : [],
+        }),
+        event("session.model.selected", {
+          sessionID: SESSION,
+          model: { providerID: "opencode", id: "other-model" },
+        }),
+      ]);
+      const reconciled = yield* Deferred.make<void>();
+      yield* runtime.events.pipe(
+        Stream.tap((event) =>
+          event.type === "provider_thread.updated" &&
+          event.providerThread.nativeMetadata?.modelSelection?.model === "opencode/other-model"
+            ? Deferred.succeed(reconciled, undefined)
+            : Effect.void,
+        ),
+        Stream.runDrain,
+        Effect.forkScoped,
+      );
+      yield* runtime.startTurn(turnInput(thread));
+      yield* Deferred.await(reconciled);
+      assert.equal(yield* runtime.hasPendingBackgroundWorkForThread!(thread), running);
+    }).pipe(Effect.scoped),
+  );
   const watchBackgroundTurn = (runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime) =>
     Effect.gen(function* () {
       const attached = yield* Deferred.make<void>();
@@ -877,7 +1059,10 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         string,
         Record<string, { status: string; result: string | null }>
       >();
-      const state: { roster: ReadonlyArray<unknown> | undefined } = { roster: undefined };
+      const state: {
+        roster: OrchestrationV2ProviderThread["pendingBackgroundTasks"];
+        terminal: string | undefined;
+      } = { roster: undefined, terminal: undefined };
       let wake = yield* Deferred.make<void>();
       yield* runtime.events.pipe(
         Stream.tap((event) =>
@@ -891,6 +1076,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
             if (event.type === "provider_thread.updated" && event.providerThread.id === thread.id) {
               state.roster = event.providerThread.pendingBackgroundTasks;
             }
+            if (event.type === "turn.terminal") state.terminal = event.status;
             const id =
               event.type === "provider_turn.updated"
                 ? event.providerTurn.nativeTurnRef?.nativeId
