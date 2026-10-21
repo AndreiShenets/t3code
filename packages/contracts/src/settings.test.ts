@@ -23,6 +23,19 @@ const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
 const decodeClaudeSettings = Schema.decodeUnknownSync(ClaudeSettings);
 
+describe("ClientSettings whitespace characters", () => {
+  it("defaults whitespace markers off and round-trips explicit preferences", () => {
+    expect(decodeClientSettings({}).showWhitespace).toBe(false);
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("showWhitespace");
+    for (const showWhitespace of [true, false]) {
+      const preference = { showWhitespace };
+      const stored = encodeClientSettings(decodeClientSettings(preference));
+      expect(decodeClientSettings(stored)).toMatchObject(preference);
+      expect(decodeClientSettingsPatch(preference)).toEqual(preference);
+    }
+  });
+});
+
 describe("storage cleanup settings", () => {
   it("keeps cleanup disabled for existing installations", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();
