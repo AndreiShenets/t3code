@@ -74,7 +74,9 @@ const withSettings = <A, E, R>(
     return yield* effect.pipe(
       Effect.provide(
         DesktopAppSettings.layer.pipe(
-          Layer.provideMerge(layerEnvironment(baseDir, options?.appVersion, options?.customBuildStamp)),
+          Layer.provideMerge(
+            layerEnvironment(baseDir, options?.appVersion, options?.customBuildStamp),
+          ),
           Layer.provideMerge(NodeServices.layer),
         ),
       ),
