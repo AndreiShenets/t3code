@@ -5,7 +5,6 @@ import {
   sourceControlRepositorySelector,
   detectSourceControlProviderFromRemoteUrl,
   getChangeRequestTerminologyForKind,
-  resolveChangeRequestPresentation,
 } from "./sourceControl.ts";
 
 describe("detectSourceControlProviderFromRemoteUrl", () => {
@@ -30,12 +29,10 @@ describe("detectSourceControlProviderFromRemoteUrl", () => {
       }),
     ).toBe("Web");
     expect(
-      resolveChangeRequestPresentation({
-        kind: SourceControlProviderKind.make("azure-devops-custom-server"),
-        name: "Azure DevOps Custom",
-        baseUrl: "https://code.example:8443",
-      }),
-    ).toEqual(expect.objectContaining({ providerName: "Azure DevOps Custom", shortName: "PR" }));
+      getChangeRequestTerminologyForKind(
+        SourceControlProviderKind.make("azure-devops-custom-server"),
+      ),
+    ).toEqual({ shortLabel: "PR", singular: "pull request" });
   });
   it("detects Forgejo and Gitea hosts while preserving HTTP origins", () => {
     for (const host of ["codeberg.org", "forgejo.example.test", "gitea.example.test"]) {

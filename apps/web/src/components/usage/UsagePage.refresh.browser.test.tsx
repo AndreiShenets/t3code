@@ -1,4 +1,4 @@
-import { act, render } from "../../../test/render";
+import { act, fakeTimers, render } from "../../../test/render";
 import { RegistryContext } from "@effect/atom-react";
 import {
   EnvironmentId,
@@ -168,9 +168,9 @@ async function setup() {
 }
 
 function mockDate(date: Date) {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  const timers = fakeTimers();
   vi.setSystemTime(date);
-  return { [Symbol.dispose]: () => vi.useRealTimers() };
+  return timers;
 }
 
 it.each([

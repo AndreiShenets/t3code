@@ -2,6 +2,7 @@ import { AuthOrchestrationOperateScope, EnvironmentId, type EditorId } from "@t3
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { AsyncResult } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { page, userEvent } from "vite-plus/test/browser";
 
 import { act, render as renderUi } from "../../../test/render";
 import type { RemoteOpenState } from "../../remoteOpen";
@@ -161,6 +162,23 @@ async function setup() {
 }
 
 describe("host editor access", () => {
+  it("offers and opens installed Visual Studio without advertising it for other environments", async () => {
+    await using fixture = await setup();
+    state.allowed.add(selected);
+    await fixture.renderPicker(["vscode", "visual-studio"]);
+    await userEvent.click(page.getByRole("button", { name: "Choose editor", exact: true }));
+    const visualStudio = page.getByRole("menuitem", { name: /Visual Studio/ });
+    await expect.element(visualStudio).toBeVisible();
+    await userEvent.click(visualStudio);
+    expect(state.run).toHaveBeenCalledWith({
+      environmentId: selected,
+      input: { cwd: "/work/project", editor: "visual-studio" },
+    });
+
+    await fixture.renderPicker(["vscode"]);
+    await userEvent.click(page.getByRole("button", { name: "Choose editor", exact: true }));
+    await expect.element(visualStudio).not.toBeInTheDocument();
+  });
   it("uses the selected grant for both the button and a retained shortcut", async () => {
     await using fixture = await setup();
     const { renderPicker, byLabel, primaryButton, click, pressOpenFavorite } = fixture;

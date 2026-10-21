@@ -428,7 +428,10 @@ it.each([
       await document.fonts.ready;
       viewer.scrollTop = 400;
       focused.focus({ preventScroll: true });
-      await new Promise(requestAnimationFrame);
+    });
+    await vi.waitFor(() => {
+      expect(viewer.scrollTop).toBeGreaterThan(0);
+      expect((focused.getRootNode() as ShadowRoot).activeElement).toBe(focused);
     });
     const top = viewer.scrollTop;
     expect(top).toBeGreaterThan(0);
@@ -518,10 +521,8 @@ it("keeps a multi-page code review in place during background reads and after re
   const viewer = () => document.querySelector<HTMLElement>(".diff-render-surface")!;
   await expect.poll(() => viewer()?.scrollTop ?? 0, { timeout: 10_000 }).toBeGreaterThan(6000);
   const node = viewer();
-  await act(async () => {
-    await document.fonts.ready;
-    await new Promise(requestAnimationFrame);
-  });
+  await document.fonts.ready;
+  await vi.waitFor(() => expect(node.scrollTop).toBeGreaterThan(6000));
   const top = node.scrollTop;
   await expect.element(page.getByText("second.ts", { exact: true })).toBeVisible();
 

@@ -7,9 +7,10 @@ import {
 } from "@pierre/diffs";
 import { Editor, EditStateManager, type EditorFactory } from "@pierre/diffs/edit";
 import { EditProvider, File as ReactFile } from "@pierre/diffs/react";
-import { act, createElement, type CSSProperties } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { createElement, type CSSProperties } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { act, render } from "../../test/render";
 
 import {
   CODE_WHITESPACE_UNSAFE_CSS,
@@ -18,19 +19,17 @@ import {
 } from "./codeWhitespace";
 import { useEditorTabSize } from "../components/files/useEditorTabSize";
 
-beforeAll(async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+async function setup() {
   await getSharedHighlighter({ themes: ["pierre-dark"], langs: ["typescript"] });
-});
-
-afterEach(() => document.body.replaceChildren());
-
-function setup() {
   const element = document.createElement("diffs-container");
   document.body.append(element);
   let enabled = true;
   return {
     element,
+    [Symbol.dispose]() {
+      releaseCodeWhitespace(element);
+      element.remove();
+    },
     root: element.shadowRoot!,
     setEnabled(value: boolean) {
       enabled = value;
@@ -65,8 +64,9 @@ function deferred() {
 }
 
 describe("Pierre whitespace decoration", () => {
-  it("preserves the source through highlighting, toggling and file replacement", () => {
-    const { element, root, options, setEnabled } = setup();
+  it("preserves the source through highlighting, toggling and file replacement", async () => {
+    using host = await setup();
+    const { element, root, options, setEnabled } = host;
     const file = { name: "app.ts", contents: '\tconst name = "a b";\n \tname;\n' };
     const viewer = new File(options);
     try {
@@ -90,8 +90,9 @@ describe("Pierre whitespace decoration", () => {
     }
   });
 
-  it.each(["split", "unified"] as const)("preserves both sides of a %s diff", (diffStyle) => {
-    const { element, root, options } = setup();
+  it.each(["split", "unified"] as const)("preserves both sides of a %s diff", async (diffStyle) => {
+    using host = await setup();
+    const { element, root, options } = host;
     const oldFile = { name: "app.ts", contents: "\tconst a = 1; \n" };
     const newFile = { name: "app.ts", contents: " \tconst a = 2;\n" };
     const fileDiff = parseDiffFromFile(oldFile, newFile);
@@ -112,7 +113,8 @@ describe("Pierre whitespace decoration", () => {
   it.each(["app.ts", "notes.txt"])(
     "keeps edits and undo in %s with markers enabled",
     async (name) => {
-      const { element, root, options } = setup();
+      using host = await setup();
+      const { element, root, options } = host;
       const file = { name, contents: "\tconst a = 1;\n" };
       const viewer = new File(options);
       const editor = new Editor("file");
@@ -139,8 +141,9 @@ describe("Pierre whitespace decoration", () => {
     },
   );
 
-  it("retains unsaved text, selection and undo when tab size remounts the editor", () => {
-    const { element, options } = setup();
+  it("retains unsaved text, selection and undo when tab size remounts the editor", async () => {
+    using host = await setup();
+    const { element, options } = host;
     const file = { name: "app.ts", contents: "\tconst a = 1;\n" };
     const first = new File(options);
     const editor = new Editor("file", {}, "tab-size-test");
@@ -155,7 +158,7 @@ describe("Pierre whitespace decoration", () => {
     const view = editor.getViewState();
     first.cleanUp();
 
-    const replacement = setup();
+    using replacement = await setup();
     replacement.element.style.setProperty("--diffs-tab-size", "8");
     const second = new File(replacement.options);
     const restored = new Editor("file", {}, "tab-size-test");
@@ -174,8 +177,9 @@ describe("Pierre whitespace decoration", () => {
     }
   });
 
-  it("starts a fresh draft when an external update replaces a retained source", () => {
-    const { element, options } = setup();
+  it("starts a fresh draft when an external update replaces a retained source", async () => {
+    using host = await setup();
+    const { element, options } = host;
     const oldFile = { name: "app.ts", contents: "const oldValue = 1;\n" };
     const newFile = { name: "app.ts", contents: "const agentValue = 2;\n" };
     const first = new File(options);
@@ -187,7 +191,7 @@ describe("Pierre whitespace decoration", () => {
     ]);
     first.cleanUp();
 
-    const replacement = setup();
+    using replacement = await setup();
     const second = new File(replacement.options);
     const freshEditor = new Editor("file", {}, "external-source:1");
     try {
@@ -210,12 +214,13 @@ describe("Pierre whitespace decoration", () => {
     }
   });
 
-  it.each([2, 8])("uses native editing commands at %s-column tab stops", (width) => {
-    const { element, root, options } = setup();
+  it.each([2, 8])("uses native editing commands at %s-column tab stops", async (width) => {
+    using host = await setup();
+    const { element, root, options } = host;
     const viewer = new File(options);
     const editor = new Editor("file");
     const computedStyle = window.getComputedStyle.bind(window);
-    const styleSpy = vi.spyOn(window, "getComputedStyle").mockImplementation((node) => {
+    using _styleSpy = vi.spyOn(window, "getComputedStyle").mockImplementation((node) => {
       const style = computedStyle(node);
       // jsdom cannot resolve the shadow stylesheet's --diffs-tab-size variable.
       if (node.matches("[data-content]")) style.tabSize = String(width);
@@ -256,15 +261,12 @@ describe("Pierre whitespace decoration", () => {
     } finally {
       editor.cleanUp("discard");
       viewer.cleanUp();
-      styleSpy.mockRestore();
     }
   });
 
   it("commits an IME composition before applying an asynchronously resolved tab width", async () => {
-    const { options } = setup();
-    const host = document.createElement("div");
-    document.body.append(host);
-    const root = createRoot(host);
+    using display = await setup();
+    const { options } = display;
     const file = { name: "notes.txt", contents: "before " };
     let currentEditor: Editor<"file"> | undefined;
     let attached = deferred();
@@ -309,12 +311,15 @@ describe("Pierre whitespace decoration", () => {
         ),
       );
     }
-    try {
-      await act(() => root.render(createElement(Surface, { resolvedTabSize: 2 })));
+    using _retainedEdit = {
+      [Symbol.dispose]: () => EditStateManager.clear("file", "composing-width"),
+    };
+    await using screen = await render(createElement(Surface, { resolvedTabSize: 2 }));
+    {
       await act(async () => {
         await attached.promise;
       });
-      const container = host.querySelector<HTMLElement>("diffs-container")!;
+      const container = screen.container.querySelector<HTMLElement>("diffs-container")!;
       const content = container.shadowRoot!.querySelector("[data-content]")!;
       currentEditor!.setSelections([
         { start: { line: 0, character: 7 }, end: { line: 0, character: 7 }, direction: "none" },
@@ -326,8 +331,8 @@ describe("Pierre whitespace decoration", () => {
       });
       const text = content.querySelector('[data-code-whitespace="space"]')!.firstChild as Text;
       text.data = " 日本";
-      await act(() => root.render(createElement(Surface, { resolvedTabSize: 8 })));
-      expect(host.querySelector("diffs-container")).toBe(container);
+      await screen.rerender(createElement(Surface, { resolvedTabSize: 8 }));
+      expect(screen.container.querySelector("diffs-container")).toBe(container);
       expect(content.contains(text)).toBe(true);
       expect(container.style.getPropertyValue("--diffs-tab-size")).toBe("2");
       attached = deferred();
@@ -344,12 +349,9 @@ describe("Pierre whitespace decoration", () => {
         await attached.promise;
       });
       expect(currentEditor!.getText()).toBe("before 日本");
-      const replacement = host.querySelector<HTMLElement>("diffs-container")!;
+      const replacement = screen.container.querySelector<HTMLElement>("diffs-container")!;
       expect(replacement).not.toBe(container);
       expect(replacement.style.getPropertyValue("--diffs-tab-size")).toBe("8");
-    } finally {
-      await act(() => root.unmount());
-      EditStateManager.clear("file", "composing-width");
     }
   });
 });
