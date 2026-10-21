@@ -4,6 +4,8 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   isFileDiffCollapsed,
   isLineInFileDiff,
+  reconcileDiffSlices,
+  type DiffSlice,
   toggleFileDiffFoldForViewed,
 } from "./pullRequestDiff.logic";
 
@@ -36,6 +38,53 @@ describe("isLineInFileDiff", () => {
   it("keeps the two sides apart, since one line number means two lines", () => {
     expect(isLineInFileDiff(file, "right", 43)).toBe(true);
     expect(isLineInFileDiff(file, "left", 40)).toBe(false);
+  });
+});
+
+describe("reconcileDiffSlices", () => {
+  const slice = (cursor: string | null, patch: string, nextCursor: string | null): DiffSlice => ({
+    cursor,
+    patch,
+    truncated: false,
+    nextCursor,
+    omittedFileStats: [],
+  });
+  const loaded = [slice(null, "a", "2"), slice("2", "b", "3"), slice("3", "c", null)];
+
+  it("appends a new page", () => {
+    expect(reconcileDiffSlices(loaded.slice(0, 1), loaded[1]!)).toEqual({
+      cursor: "2",
+      slices: loaded.slice(0, 2),
+    });
+  });
+
+  it("keeps all pages and their parsed identities while revalidating unchanged answers", () => {
+    const first = reconcileDiffSlices(loaded, slice(null, "a", "2"));
+    expect(first.cursor).toBe("2");
+    expect(first.slices).toBe(loaded);
+    expect(reconcileDiffSlices(first.slices, slice("2", "b", "3")).cursor).toBe("3");
+    expect(reconcileDiffSlices(loaded, slice("3", "c", null))).toEqual({
+      cursor: "3",
+      slices: loaded,
+    });
+  });
+
+  it("discards only pages after a changed page", () => {
+    const changed = slice("2", "new b", "3");
+    expect(reconcileDiffSlices(loaded, changed)).toEqual({
+      cursor: "2",
+      slices: [loaded[0], changed],
+    });
+  });
+
+  it("does not keep later pages when pagination or omitted file metadata changes", () => {
+    for (const changed of [
+      { ...loaded[0]!, nextCursor: "new-cursor" },
+      { ...loaded[0]!, truncated: true },
+      { ...loaded[0]!, omittedFileStats: [{ path: "large.ts", additions: 20, deletions: 0 }] },
+    ]) {
+      expect(reconcileDiffSlices(loaded, changed).slices).toEqual([changed]);
+    }
   });
 });
 
