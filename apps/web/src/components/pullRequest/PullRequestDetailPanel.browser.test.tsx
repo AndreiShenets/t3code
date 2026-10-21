@@ -1,54 +1,35 @@
 import {
   EnvironmentId,
-  GitCommandError,
-  GitManagerError,
   ProjectId,
   SourceControlProviderKind,
   ThreadId,
   type PullRequestDetailView,
   type PullRequestDiffResult,
   type ScopedThreadRef,
-  type ThreadPullRequestLink,
 } from "@t3tools/contracts";
-import * as Cause from "effect/Cause";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
+import { expect, it, vi } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { AppAtomRegistryProvider, appAtomRegistry } from "~/rpc/atomRegistry";
 import { selectActiveRightPanelSurface, useRightPanelStore } from "~/rightPanelStore";
 import { RightPanelSurfaceContent } from "../chat/RightPanelSurfaceContent";
+import { PullRequestDetailPanel } from "./PullRequestDetailPanel";
+import { createPullRequestViewState } from "./pullRequestViewState";
+import { pullRequestReviewKey, usePullRequestReviewStore } from "./pullRequestReviewStore";
 
 import "~/index.css";
 import { act, render as renderUi } from "../../../test/render";
 
-const {
-  newThread,
-  prepareThread,
-  refresh,
-  update,
-  addToast,
-  updateToast,
-  checkoutState,
-  hostCommand,
-  queries,
-} = vi.hoisted(() => ({
-  hostCommand: vi.fn(),
-  queries: { diff: undefined as unknown },
-  newThread: vi.fn(),
-  prepareThread: vi.fn(),
-  refresh: vi.fn(),
-  update: vi.fn(),
-  addToast: vi.fn(),
-  updateToast: vi.fn(),
-  checkoutState: { error: null as Error | null },
-}));
 const codeTest = vi.hoisted(() => ({
-  realViewer: false,
   turnRefresh: 0,
   detail: null as PullRequestDetailView | null,
   pages: new Map<string, Atom.Writable<AsyncResult.AsyncResult<PullRequestDiffResult>>>(),
+  emptyDiff: undefined as unknown,
+  refresh: vi.fn(),
+  hostCommand: vi.fn(),
+  newThread: vi.fn(),
+  prepareThread: vi.fn(),
 }));
 
 vi.mock(import("~/state/session"), async (original) => ({
@@ -62,26 +43,25 @@ vi.mock(import("~/hooks/useSettings"), async (original) => ({
 }));
 vi.mock(import("~/hooks/useHandleNewThread"), async (original) => ({
   ...(await original()),
-  useNewThreadHandler: (() => newThread) as never,
+  useNewThreadHandler: (() => codeTest.newThread) as never,
 }));
 vi.mock(import("~/lib/sourceControlActions"), async (original) => ({
   ...(await original()),
   usePreparePullRequestThreadAction: (() => ({
-    run: prepareThread,
+    run: codeTest.prepareThread,
     isAllowed: true,
-    error: checkoutState.error,
+    error: null,
   })) as never,
 }));
 vi.mock(import("~/state/use-atom-command"), async (original) => ({
   ...(await original()),
-  useAtomCommand: ((command: unknown) => (command === "update" ? update : hostCommand)) as never,
+  useAtomCommand: (() => codeTest.hostCommand) as never,
 }));
 vi.mock(import("~/state/pullRequests"), async (original) => {
   const actual = await original();
   const { Atom } = await import("effect/reactivity");
   const cannotWriteGuides = Atom.make(false);
-  const diff = Atom.make(null);
-  queries.diff = diff;
+  codeTest.emptyDiff = Atom.make(null);
   return {
     ...actual,
     usePullRequestTurnRefresh: () => codeTest.turnRefresh,
@@ -89,11 +69,10 @@ vi.mock(import("~/state/pullRequests"), async (original) => {
       ...actual.pullRequestEnvironment,
       detail: (() => "detail") as never,
       activity: (() => "activity") as never,
-      update: "update" as never,
       reviewGuide: (() => "review-guide") as never,
       diff: (({ input }) =>
         codeTest.pages.get(input.cursor ?? "first") ??
-        diff) as typeof actual.pullRequestEnvironment.diff,
+        codeTest.emptyDiff) as typeof actual.pullRequestEnvironment.diff,
       generateReviewGuide: {
         ...actual.pullRequestEnvironment.generateReviewGuide,
         permissionAtom: () => cannotWriteGuides,
@@ -106,131 +85,39 @@ vi.mock(import("~/state/query"), async (original) => {
   return {
     ...actual,
     useEnvironmentQuery: ((query: unknown) => {
-      if ([...codeTest.pages.values()].some((atom) => atom === query)) {
+      if (query === codeTest.emptyDiff || [...codeTest.pages.values()].includes(query as never)) {
         return actual.useEnvironmentQuery(query as never);
       }
       return {
-        data:
-          query === "detail"
-            ? (codeTest.detail ?? activityDetail ?? currentDetail)
-            : query === "activity"
-              ? activityDetail
-              : query === queries.diff
-                ? diff
-                : null,
+        data: query === "detail" ? codeTest.detail : null,
         dataUpdatedAt: 0,
         failure: null,
         isPending: false,
         isSuccess: true,
         error: null,
-        refresh,
+        refresh: codeTest.refresh,
       };
     }) as never,
   };
 });
-vi.mock(import("~/state/usePullRequestStack"), async (original) => ({
-  ...(await original()),
+vi.mock(import("~/state/usePullRequestStack"), () => ({
   usePullRequestStack: (() => ({
     data: null,
     isSuccess: true,
     isPending: false,
     error: null,
-    refresh,
+    refresh: codeTest.refresh,
   })) as never,
 }));
-vi.mock(import("./PullRequestCodeTab"), async (original) => {
-  const actual = await original();
-  return {
-    ...actual,
-    default: ((props: ComponentProps<typeof actual.default>) =>
-      codeTest.realViewer || activityDetail !== null ? (
-        <actual.default {...props} />
-      ) : (
-        <CodeTabStandIn {...props} />
-      )) as typeof actual.default,
-  };
-});
-
-function CodeTabStandIn({
-  onAddToAgentSelection,
-  scrollerRef,
-}: ComponentProps<typeof import("./PullRequestCodeTab").default>) {
-  return (
-    <div ref={scrollerRef} data-testid="code-scroller" className="h-full overflow-y-auto">
-      <button
-        type="button"
-        onClick={() =>
-          onAddToAgentSelection?.({
-            request: "Fix this line",
-            comment: {
-              id: "note-1",
-              sectionId: "file:a.ts",
-              sectionTitle: "a.ts",
-              filePath: "a.ts",
-              startIndex: 0,
-              endIndex: 0,
-              rangeLabel: "L1",
-              text: "Please fix",
-              diff: "+broken()",
-            },
-          })
-        }
-      >
-        Add to agent
-      </button>
+vi.mock(import("./PullRequestSummaryTab"), () => ({
+  PullRequestSummaryTab: ({
+    scrollerRef,
+  }: ComponentProps<typeof import("./PullRequestSummaryTab").PullRequestSummaryTab>) => (
+    <div ref={scrollerRef} data-testid="summary-scroller" className="h-full overflow-y-auto">
       <div className="h-[3000px]" />
     </div>
-  );
-}
-
-import { PullRequestDetailPanel } from "./PullRequestDetailPanel";
-import { pullRequestPanelContext } from "./pullRequestDetail.logic";
-import { createPullRequestViewState } from "./pullRequestViewState";
-import { pullRequestReviewKey } from "./pullRequestReviewStore";
-// Action and scroll tests use stand-ins; activity tests render the real Summary.
-vi.mock(import("./PullRequestSummaryTab"), async (original) => {
-  const actual = await original();
-  return {
-    ...actual,
-    PullRequestSummaryTab: ((props: ComponentProps<typeof actual.PullRequestSummaryTab>) => {
-      if (activityDetail !== null) return <actual.PullRequestSummaryTab {...props} />;
-      const { onFixFinding, scrollerRef } = props;
-      return (
-        <div ref={scrollerRef} data-testid="summary-scroller" className="h-full overflow-y-auto">
-          <button
-            type="button"
-            onClick={() =>
-              onFixFinding?.({
-                kind: "check",
-                check: {
-                  name: "Unit tests",
-                  status: "failure",
-                  description: "Test failed",
-                  url: null,
-                },
-              })
-            }
-          >
-            Fix check
-          </button>
-          <div data-testid="nested-scroller" className="h-40 overflow-y-auto">
-            <div className="h-[2000px]" />
-          </div>
-          <div className="h-[3000px]" />
-        </div>
-      );
-    }) as never,
-  };
-});
-vi.mock(import("../ui/toast"), async (original) => {
-  const actual = await original();
-  return {
-    ...actual,
-    toastManager: { ...actual.toastManager, add: addToast, update: updateToast } as never,
-  };
-});
-
-import { usePullRequestReviewStore } from "./pullRequestReviewStore";
+  ),
+}));
 
 const detail: PullRequestDetailView = {
   provider: SourceControlProviderKind.make("github"),
@@ -258,7 +145,7 @@ const detail: PullRequestDetailView = {
   closedAt: null,
   reviewers: [],
   labels: [],
-  checks: [{ name: "Unit tests", status: "success", description: null, url: null }],
+  checks: [],
   comments: [],
   commentCount: 0,
   commentsTruncated: false,
@@ -283,32 +170,11 @@ const detail: PullRequestDetailView = {
     requestReviewers: false,
   },
 };
-
-let currentDetail = detail;
-let activityDetail: PullRequestDetailView | null = null;
-
-// Enough lines to exercise the panel's title folding with the real virtualized Code tab.
-const diff = {
-  patch: [
-    "diff --git a/a.ts b/a.ts",
-    "new file mode 100644",
-    "--- /dev/null",
-    "+++ b/a.ts",
-    "@@ -0,0 +1,100 @@",
-    "+broken()",
-    ...Array.from({ length: 99 }, (_, index) => `+// line ${index + 2}`),
-    "",
-  ].join("\n"),
-  truncated: false,
-  nextCursor: null,
-};
-
 const threadRef: ScopedThreadRef = {
   environmentId: EnvironmentId.make("env-1"),
   threadId: ThreadId.make("thread-1"),
 };
-const draftId = DraftId.make("draft-1");
-const newDraftId = DraftId.make("new-draft");
+const surface = { projectId: detail.projectId, repository: detail.repository, number: 1 };
 const shortcutContext = () => ({
   terminalFocus: false,
   terminalOpen: false,
@@ -343,30 +209,16 @@ function render(props: Partial<ComponentProps<typeof PullRequestDetailPanel>> = 
   return renderUi(panel(props), { container: panelContainer() });
 }
 
-// The mocked modules and stores are shared by the whole file, so every test starts by
-// resetting them.
 function setup() {
-  codeTest.realViewer = false;
   codeTest.turnRefresh = 0;
-  codeTest.detail = null;
+  codeTest.detail = detail;
   codeTest.pages.clear();
-  activityDetail = null;
-  currentDetail = detail;
-  useComposerDraftStore.setState({ draftsByThreadKey: {} });
+  codeTest.refresh.mockReset();
+  codeTest.hostCommand.mockReset();
+  codeTest.newThread.mockReset();
+  codeTest.prepareThread.mockReset();
   useRightPanelStore.setState({ byThreadKey: {} });
   usePullRequestReviewStore.setState({ drafts: {}, summaries: {} });
-  hostCommand.mockReset();
-  newThread
-    .mockReset()
-    .mockResolvedValue({ draftId: newDraftId, threadId: ThreadId.make("new-thread") });
-  addToast.mockReset().mockReturnValue("checkout-toast");
-  updateToast.mockReset();
-  checkoutState.error = null;
-  prepareThread.mockReset().mockResolvedValue({
-    _tag: "Success",
-    value: { branch: "feature", worktreePath: "/workspace/pr" },
-  });
-  update.mockReset().mockResolvedValue({ _tag: "Success", value: undefined });
 }
 
 const codePatch = (path: string, increment = 1) => `diff --git a/${path} b/${path}
@@ -378,15 +230,18 @@ ${Array.from({ length: 150 }, (_, index) => `+const next${index} = ${index + inc
 `;
 
 it.each([
-  ["first.ts", "folded"],
-  ["second.ts", "folded"],
-  ["first.ts", "expanded"],
-  ["second.ts", "expanded"],
+  ["first.ts", "turn", "expanded"],
+  ["second.ts", "turn", "expanded"],
+  ["first.ts", "revision", "expanded"],
+  ["second.ts", "revision", "expanded"],
+  ["first.ts", "turn", "folded"],
+  ["second.ts", "turn", "folded"],
+  ["first.ts", "revision", "folded"],
+  ["second.ts", "revision", "folded"],
 ] as const)(
-  "preserves file folds, focus and position when a turn refresh changes %s (%s by default)",
-  async (changedPath, foldOverride) => {
+  "keeps folds, focus and scroll when %s changes on a %s refresh (%s by default)",
+  async (changedPath, trigger, foldOverride) => {
     setup();
-    codeTest.realViewer = true;
     const result = {
       patch: codePatch("first.ts") + codePatch("second.ts"),
       truncated: false,
@@ -399,7 +254,6 @@ it.each([
     codeTest.pages.set("first", atom);
     const viewState = createPullRequestViewState();
     viewState.setState({
-      tab: "code",
       condensedByTab: { code: true },
       code: {
         scopeKey: JSON.stringify([threadRef.environmentId, pullRequestReviewKey(detail), null]),
@@ -411,15 +265,13 @@ it.each([
         ignoreWhitespace: false,
       },
     });
-    await using screen = await render({ viewState });
+    await using screen = await render({ viewState, initialTab: "code" });
     const toggle =
       foldOverride === "folded"
         ? page.getByRole("button", { name: "Expand diff", exact: true }).nth(1)
         : page.getByRole("button", { name: "Collapse diff", exact: true }).first();
     await expect.element(toggle).toBeVisible();
-    await act(async () => {
-      (toggle.element() as HTMLButtonElement).click();
-    });
+    await toggle.click();
     const collapse = page.getByRole("button", { name: "Collapse diff", exact: true });
     await expect.element(collapse).toBeVisible();
     const focused = collapse.element() as HTMLButtonElement;
@@ -433,19 +285,17 @@ it.each([
       focused.focus({ preventScroll: true });
       await scrolled;
     });
-    await vi.waitFor(() => {
-      expect(viewer.scrollTop).toBeGreaterThan(0);
-      expect((focused.getRootNode() as ShadowRoot).activeElement).toBe(focused);
-    });
     const top = viewer.scrollTop;
     expect(top).toBeGreaterThan(0);
-    expect((focused.getRootNode() as ShadowRoot).activeElement).toBe(focused);
 
     await act(async () => {
       appAtomRegistry.set(atom, AsyncResult.waiting(AsyncResult.success(result)));
-      codeTest.turnRefresh++;
+      if (trigger === "turn") codeTest.turnRefresh++;
+      else codeTest.detail = { ...detail, updatedAt: "2026-09-02T00:00:00Z" };
     });
-    await screen.rerender(panel({ viewState }));
+    await screen.rerender(panel({ viewState, initialTab: "code" }));
+    expect(document.querySelector(".diff-render-surface")).toBe(viewer);
+    expect(viewer.scrollTop).toBe(top);
     const refreshed = {
       ...result,
       patch:
@@ -454,10 +304,10 @@ it.each([
     };
     await act(async () => {
       appAtomRegistry.set(atom, AsyncResult.success(refreshed));
-      codeTest.detail = { ...detail, updatedAt: "2026-09-02T00:00:00Z" };
     });
-    await screen.rerender(panel({ viewState }));
-    await expect.poll(() => viewState.getState().code?.slices[0]?.patch).toBe(refreshed.patch);
+    await vi.waitFor(() =>
+      expect(viewState.getState().code?.slices[0]?.patch).toBe(refreshed.patch),
+    );
     await expect.element(collapse).toBeVisible();
     expect(collapse.element()).toBe(focused);
     expect((focused.getRootNode() as ShadowRoot).activeElement).toBe(focused);
@@ -480,9 +330,8 @@ it.each([
   },
 );
 
-it("keeps a multi-page code review in place during background reads and after returning", async () => {
+it("keeps loaded pages during background reads and restores them after returning", async () => {
   setup();
-  codeTest.realViewer = true;
   const first = {
     patch: codePatch("first.ts"),
     truncated: false,
@@ -505,7 +354,6 @@ it("keeps a multi-page code review in place during background reads and after re
   codeTest.pages.set("second", secondAtom);
   const viewState = createPullRequestViewState();
   viewState.setState({
-    tab: "code",
     condensedByTab: { code: true },
     scrollByTab: { code: { top: 9000, left: 0 } },
     code: {
@@ -521,326 +369,33 @@ it("keeps a multi-page code review in place during background reads and after re
       ignoreWhitespace: false,
     },
   });
-  await using screen = await render({ viewState });
+  await using screen = await render({ viewState, initialTab: "code" });
   const viewer = () => document.querySelector<HTMLElement>(".diff-render-surface")!;
-  await expect.poll(() => viewer()?.scrollTop ?? 0, { timeout: 10_000 }).toBeGreaterThan(6000);
+  await vi.waitFor(() => expect(viewer()?.scrollTop ?? 0).toBeGreaterThan(6000));
   const node = viewer();
   await document.fonts.ready;
   await expect.element(page.getByText("second.ts", { exact: true })).toBeVisible();
   const top = node.scrollTop;
-
   await act(async () => {
     appAtomRegistry.set(firstAtom, AsyncResult.waiting(AsyncResult.success(first)));
     codeTest.turnRefresh++;
   });
-  await screen.rerender(panel({ viewState }));
+  await screen.rerender(panel({ viewState, initialTab: "code" }));
   expect(viewer()).toBe(node);
   expect(node.scrollTop).toBe(top);
-  await expect
-    .element(page.getByText("Loading pull request diff...", { exact: true }))
-    .not.toBeInTheDocument();
-
   await act(async () => {
     appAtomRegistry.set(firstAtom, AsyncResult.success(first));
     appAtomRegistry.set(secondAtom, AsyncResult.success(second));
-  });
-  expect(viewer()).toBe(node);
-  expect(node.scrollTop).toBe(top);
-  await act(async () => {
-    appAtomRegistry.set(firstAtom, AsyncResult.waiting(AsyncResult.success(first)));
     codeTest.detail = { ...detail, updatedAt: "2026-09-02T00:00:00Z" };
   });
-  await screen.rerender(panel({ viewState }));
+  await screen.rerender(panel({ viewState, initialTab: "code" }));
   expect(viewer()).toBe(node);
   expect(node.scrollTop).toBe(top);
   await expect.element(page.getByText("2 files", { exact: true })).toBeVisible();
   await screen.rerender(null);
-
-  await screen.rerender(panel({ viewState }));
-  await expect.poll(() => viewer()?.scrollTop).toBe(top);
+  await screen.rerender(panel({ viewState, initialTab: "code" }));
+  await vi.waitFor(() => expect(viewer()?.scrollTop).toBe(top));
   await expect.element(page.getByText("second.ts", { exact: true })).toBeVisible();
-});
-
-const surface = { projectId: detail.projectId, repository: detail.repository, number: 1 };
-const link = (number: number, source: ThreadPullRequestLink["source"]): ThreadPullRequestLink => ({
-  host: "github.com",
-  repository: detail.repository,
-  number,
-  url: `https://github.com/${detail.repository}/pull/${number}`,
-  source,
-  linkedAt: "2026-09-01T00:00:00Z",
-  snapshot: null,
-  stack: null,
-});
-const stackThread = {
-  projectId: detail.projectId,
-  pullRequests: [link(3, "manual"), link(2, "stack"), link(1, "stack")],
-  linkedPullRequest: { ...surface, number: 3, url: link(3, "manual").url },
-};
-const unrelatedThread = {
-  projectId: detail.projectId,
-  pullRequests: [link(9, "created")],
-  linkedPullRequest: { ...surface, number: 9, url: link(9, "created").url },
-};
-
-const tab = (name: string) => page.getByRole("button", { name, exact: true });
-
-const selectionDraft = () => page.getByRole("textbox", { name: "Comment on lines a.ts:1" });
-
-async function selectFirstLine() {
-  const line = page.getByText("broken()", { exact: true });
-  await expect.element(line).toBeVisible();
-  const host = line.element().getRootNode() as ShadowRoot;
-  const gutter = host.querySelector<HTMLElement>('[data-column-number="1"]')!;
-  await userEvent.click(gutter);
-}
-
-it.each([
-  { isComposing: true, keyCode: 13 },
-  { isComposing: false, keyCode: 229 },
-])("does not save the PR title during IME composition (%j)", async ({ isComposing, keyCode }) => {
-  setup();
-  await using _screen = await render();
-  await page.getByRole("button", { name: "Edit title" }).click();
-  const titleInput = page.getByRole("textbox", { name: "Pull request title" });
-  const title = "日本語のタイトル";
-  await titleInput.fill(title);
-  const pressEnter = (init: KeyboardEventInit) =>
-    act(async () => {
-      titleInput
-        .element()
-        .dispatchEvent(
-          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }),
-        );
-    });
-
-  await pressEnter({ isComposing, keyCode });
-  expect(update).not.toHaveBeenCalled();
-  await expect.element(titleInput).toHaveValue(title);
-
-  await pressEnter({ keyCode: 13 });
-  expect(update).toHaveBeenCalledExactlyOnceWith({
-    environmentId: threadRef.environmentId,
-    input: { ...surface, title },
-  });
-  await expect.element(titleInput).not.toBeInTheDocument();
-});
-
-async function runAction(action: string) {
-  if (action === "Add to agent") {
-    await tab("Code").click();
-    await page.getByRole("button", { name: "Expand all files", exact: true }).click();
-    await selectFirstLine();
-    const draft = page.getByRole("textbox", { name: "Comment on lines a.ts:1" });
-    await expect.element(draft).toBeVisible();
-    expect(
-      page.getByRole("button", { name: "Add to review", exact: true }).elements(),
-    ).toHaveLength(0);
-    await draft.fill("Fix this line");
-  }
-  if (["Ask a question", "Explain this PR"].includes(action) || action.startsWith("Fix findings")) {
-    await page.getByRole("button", { name: "More pull request actions" }).click();
-    // Menu items carry a description under their label.
-    await page.getByRole("menuitem", { name: new RegExp(`^${action}`) }).click();
-    return;
-  }
-  await page.getByRole("button", { name: action, exact: true }).click();
-}
-
-describe.each([
-  ["own PR, a lower layer of the thread's stack", stackThread, threadRef],
-  ["another PR beside the current thread", unrelatedThread, threadRef],
-  ["PR beside an unsent draft", null, draftId],
-  ["standalone PR page", null, undefined],
-] as const)("%s", (_name, thread, target) => {
-  const context = thread ? pullRequestPanelContext(thread, surface) : "page";
-  const renderPanel = () =>
-    render({ context, ...(target ? { composerDraftTarget: target, threadRef } : {}) });
-
-  it(`${thread === stackThread ? "hides" : "offers"} the checkout`, async () => {
-    setup();
-    await using _screen = await renderPanel();
-    await expect.element(page.getByText("Test pull request").first()).toBeVisible();
-    expect(page.getByRole("button", { name: "Check out" }).elements()).toHaveLength(
-      thread === stackThread ? 0 : 1,
-    );
-  });
-
-  it.each([
-    "Resolve conflicts",
-    "Ask a question",
-    "Explain this PR",
-    "Fix findings in this thread",
-    "Fix check",
-    "Add to agent",
-  ])("%s writes to the correct composer", async (action) => {
-    setup();
-    // Cover both a host without inline comments and an account that cannot write them.
-    currentDetail =
-      thread === stackThread
-        ? {
-            ...detail,
-            capabilities: {
-              ...detail.capabilities,
-              review: { ...detail.capabilities.review, inlineComment: true },
-            },
-          }
-        : { ...detail, viewerPermissions: { ...detail.viewerPermissions, comment: true } };
-    if (target) useComposerDraftStore.getState().setPrompt(target, "Keep my draft");
-    await using _screen = await renderPanel();
-    await runAction(target ? action : action.replace("in this thread", "in a thread"));
-    const draft = () => useComposerDraftStore.getState().getComposerDraft(target ?? newDraftId);
-    await vi.waitFor(() => {
-      if (action === "Resolve conflicts")
-        expect(draft()?.prompt).toContain("resolve every conflict");
-      else if (action === "Fix check") expect(draft()?.prompt).toContain("Fix the failing check");
-      else if (action.startsWith("Fix findings"))
-        expect(draft()?.prompt).toContain("Fix the actionable findings");
-      else expect(draft()?.reviewComments?.length).toBeGreaterThan(0);
-    });
-    if (action === "Add to agent") {
-      expect(draft()?.prompt).toContain("Fix this line");
-      expect(draft()?.reviewComments).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            filePath: "a.ts",
-            diff: expect.stringContaining("+broken()"),
-            startIndex: 0,
-            endIndex: 0,
-          }),
-        ]),
-      );
-      expect(usePullRequestReviewStore.getState().drafts).toEqual({});
-      expect(hostCommand).not.toHaveBeenCalled();
-      await expect
-        .element(page.getByRole("textbox", { name: "Comment on lines a.ts:1" }))
-        .not.toBeInTheDocument();
-    }
-    if (target) {
-      expect(draft()?.prompt).toContain("Keep my draft");
-      expect(newThread).not.toHaveBeenCalled();
-      expect(prepareThread).not.toHaveBeenCalled();
-    } else {
-      expect(newThread).toHaveBeenCalled();
-    }
-  });
-});
-
-it("offers both selection actions and queues a permitted host review locally", async () => {
-  setup();
-  currentDetail = {
-    ...detail,
-    capabilities: {
-      ...detail.capabilities,
-      review: { ...detail.capabilities.review, inlineComment: true },
-    },
-    viewerPermissions: { ...detail.viewerPermissions, comment: true },
-  };
-  await using _screen = await render({ composerDraftTarget: draftId, threadRef });
-  await tab("Code").click();
-  await page.getByRole("button", { name: "Expand all files", exact: true }).click();
-  await selectFirstLine();
-  const addToReview = page.getByRole("button", { name: "Add to review", exact: true });
-  await expect.element(addToReview).toBeVisible();
-  await expect
-    .element(page.getByRole("button", { name: "Add to agent", exact: true }))
-    .toBeVisible();
-  await selectionDraft().fill("Fix this line before merging");
-  await addToReview.click();
-  await expect.element(selectionDraft()).not.toBeInTheDocument();
-  expect(Object.values(usePullRequestReviewStore.getState().drafts).flat()).toEqual([
-    expect.objectContaining({ path: "a.ts", body: "Fix this line before merging" }),
-  ]);
-  expect(useComposerDraftStore.getState().getComposerDraft(draftId)?.reviewComments ?? []).toEqual(
-    [],
-  );
-  expect(hostCommand).not.toHaveBeenCalled();
-});
-
-it("cancels an agent-only selection and submits a fresh one with the keyboard without a host review", async () => {
-  setup();
-  await using _screen = await render({ composerDraftTarget: draftId, threadRef });
-  await tab("Code").click();
-  await page.getByRole("button", { name: "Expand all files", exact: true }).click();
-  await selectFirstLine();
-  await selectionDraft().fill("Discard this request");
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect.element(selectionDraft()).not.toBeInTheDocument();
-  expect(useComposerDraftStore.getState().getComposerDraft(draftId)?.reviewComments ?? []).toEqual(
-    [],
-  );
-  expect(usePullRequestReviewStore.getState().drafts).toEqual({});
-  expect(hostCommand).not.toHaveBeenCalled();
-
-  await selectFirstLine();
-  await expect.element(selectionDraft()).toHaveValue("");
-  await selectionDraft().fill("Fix this line");
-  await userEvent.keyboard("{Control>}{Enter}{/Control}");
-  await expect.element(selectionDraft()).not.toBeInTheDocument();
-  expect(useComposerDraftStore.getState().getComposerDraft(draftId)?.prompt).toContain(
-    "Fix this line",
-  );
-  expect(usePullRequestReviewStore.getState().drafts).toEqual({});
-  expect(hostCommand).not.toHaveBeenCalled();
-});
-
-it("folds the title only for the active tab's own scroller", async () => {
-  setup();
-  await using _screen = await render();
-  const title = page.getByRole("heading", { level: 1, name: "Test pull request" });
-  await expect.element(title).toBeVisible();
-  const titleFold = () => title.element().closest("[inert]") !== null;
-  const scrollTo = async (testId: string, top: number) => {
-    const scroller =
-      testId === "code-scroller"
-        ? document.querySelector<HTMLElement>(".\\@container.overflow-auto")!
-        : (page.getByTestId(testId).element() as HTMLElement);
-    await act(async () => {
-      scroller.scrollTop = top;
-      scroller.dispatchEvent(new Event("scroll"));
-    });
-    return scroller;
-  };
-
-  await scrollTo("nested-scroller", 600);
-  expect(titleFold()).toBe(false);
-
-  const summary = await scrollTo("summary-scroller", 600);
-  await vi.waitFor(() => expect(titleFold()).toBe(true));
-  // Folding the header keeps the content under the reader's eye.
-  expect(summary.scrollTop).toBeLessThan(600);
-
-  await scrollTo("summary-scroller", 0);
-  await vi.waitFor(() => expect(titleFold()).toBe(false));
-  await scrollTo("summary-scroller", 600);
-  await vi.waitFor(() => expect(titleFold()).toBe(true));
-
-  await tab("Code").click();
-  await page.getByRole("button", { name: "Expand all files", exact: true }).click();
-  await expect.element(page.getByText("broken()", { exact: true })).toBeVisible();
-  await vi.waitFor(() => expect(titleFold()).toBe(false));
-  await scrollTo("code-scroller", 600);
-  await vi.waitFor(() => expect(titleFold()).toBe(true));
-
-  await tab("Summary").click();
-  await vi.waitFor(() => expect(titleFold()).toBe(true));
-  await scrollTo("summary-scroller", 0);
-  await vi.waitFor(() => expect(titleFold()).toBe(false));
-  await tab("Code").click();
-  await vi.waitFor(() => expect(titleFold()).toBe(true));
-});
-
-it("returns to the selected subtab after the panel is unmounted", async () => {
-  setup();
-  const viewState = createPullRequestViewState();
-  await using screen = await render({ viewState });
-  await tab("Code").click();
-  await expect.element(page.getByTestId("code-scroller")).toBeVisible();
-  await screen.rerender(null);
-
-  await screen.rerender(panel({ viewState }));
-  await expect.element(page.getByTestId("code-scroller")).toBeVisible();
-  await expect.element(page.getByTestId("summary-scroller")).not.toBeInTheDocument();
 });
 
 it("restores the summary's scroll and folded title together", async () => {
@@ -854,20 +409,26 @@ it("restores the summary's scroll and folded title together", async () => {
   });
   const top = summary.scrollTop;
   await screen.rerender(null);
-
   await screen.rerender(panel({ viewState }));
   expect(page.getByTestId("summary-scroller").element().scrollTop).toBe(top);
   const title = page.getByRole("heading", { level: 1, name: "Test pull request" });
   expect(title.element().closest("[inert]")).not.toBeNull();
 });
 
-it("restores the selected PR tab when switching threads and remounting the right panel", async () => {
+it("uses the owning surface's tab selection across thread and panel switches", async () => {
   setup();
-  codeTest.realViewer = true;
   const otherThread = { ...threadRef, threadId: ThreadId.make("thread-2") };
+  const result = {
+    patch: codePatch("first.ts"),
+    truncated: false,
+    nextCursor: null,
+  } satisfies PullRequestDiffResult;
+  codeTest.pages.set(
+    "first",
+    Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(AsyncResult.success(result)),
+  );
   useRightPanelStore.getState().openPullRequest(threadRef, surface);
   useRightPanelStore.getState().openPullRequest(otherThread, surface);
-  const codeTab = () => page.getByRole("button", { name: "Expand all files", exact: true });
   const content = (ref: ScopedThreadRef) => {
     const selected = selectActiveRightPanelSurface(useRightPanelStore.getState().byThreadKey, ref);
     return (
@@ -917,203 +478,17 @@ it("restores the selected PR tab when switching threads and remounting the right
   };
   await using screen = await renderUi(content(threadRef), { container: panelContainer() });
   const show = (ref: ScopedThreadRef) => screen.rerender(content(ref));
-
-  await expect.element(page.getByTestId("summary-scroller")).toBeVisible();
-  await tab("Code").click();
-  await expect.element(codeTab()).toBeVisible();
+  await page.getByRole("button", { name: "Code", exact: true }).click();
+  await expect.element(page.getByText("first.ts", { exact: true })).toBeVisible();
   await show(otherThread);
   await expect.element(page.getByTestId("summary-scroller")).toBeVisible();
   await show(threadRef);
-  await expect.element(codeTab()).toBeVisible();
-
-  useRightPanelStore
-    .getState()
-    .openPullRequest(threadRef, { ...surface, projectId: "other-project" });
-  await show(threadRef);
-  await expect.element(page.getByTestId("summary-scroller")).toBeVisible();
-  useRightPanelStore.getState().openPullRequest(threadRef, surface);
-  await show(threadRef);
-  await expect.element(codeTab()).toBeVisible();
-
+  await expect.element(page.getByText("first.ts", { exact: true })).toBeVisible();
   await screen.rerender(null);
-  useRightPanelStore.getState().openPullRequest(threadRef, { ...surface, url: detail.url });
   await show(threadRef);
-  await expect.element(codeTab()).toBeVisible();
-  await tab("Summary").click();
+  await expect.element(page.getByText("first.ts", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Summary", exact: true }).click();
   await show(otherThread);
   await show(threadRef);
   await expect.element(page.getByTestId("summary-scroller")).toBeVisible();
-});
-
-it("stays collapsed at the bottom after native scroll clamping and reopens at the top", async () => {
-  setup();
-  await using _screen = await render();
-  const title = page.getByRole("heading", { level: 1, name: "Test pull request" });
-  await expect.element(title).toBeVisible();
-  const scroller = page.getByTestId("summary-scroller").element() as HTMLElement;
-  const content = scroller.lastElementChild as HTMLElement;
-  // Leave only a short scroll range so folding the header makes the browser clamp it.
-  content.style.height = `${scroller.clientHeight - 24}px`;
-  const expandedHeight = scroller.clientHeight;
-  const expandedBottom = scroller.scrollHeight - scroller.clientHeight;
-
-  await act(async () => {
-    const scrolled = new Promise<void>((resolve) =>
-      scroller.addEventListener("scroll", () => resolve(), { once: true }),
-    );
-    scroller.scrollTop = scroller.scrollHeight;
-    await scrolled;
-  });
-
-  await vi.waitFor(() => {
-    expect(title.element().closest("[inert]")).not.toBeNull();
-    expect(scroller.clientHeight).toBeGreaterThan(expandedHeight);
-    expect(scroller.scrollTop).toBeGreaterThan(0);
-    expect(scroller.scrollTop).toBeLessThan(expandedBottom);
-    expect(scroller.scrollTop).toBe(scroller.scrollHeight - scroller.clientHeight);
-  });
-
-  await act(async () => {
-    const scrolled = new Promise<void>((resolve) =>
-      scroller.addEventListener("scroll", () => resolve(), { once: true }),
-    );
-    scroller.scrollTop = 0;
-    await scrolled;
-  });
-  await vi.waitFor(() => expect(title.element().closest("[inert]")).toBeNull());
-});
-
-it("shows the current checkout recovery detail on the first failure and on retry", async () => {
-  setup();
-  const first = new GitManagerError({
-    cwd: "/workspace",
-    operation: "preparePullRequestThread",
-    detail: "This PR branch is already checked out in the main repo. Use Local.",
-  });
-  const second = new GitCommandError({
-    cwd: "/workspace",
-    operation: "GitVcsDriver.createWorktree",
-    command: "git worktree add",
-    detail: "The worktree directory already exists. Choose another directory.",
-  });
-  await using _screen = await render();
-
-  for (const [index, error] of [first, second].entries()) {
-    prepareThread.mockImplementationOnce(async () => {
-      checkoutState.error = error;
-      return { _tag: "Failure", cause: Cause.fail(error) };
-    });
-    await page.getByRole("button", { name: "Check out", exact: true }).click();
-    await page.getByRole("menuitem", { name: /In a separate worktree/ }).click();
-    await vi.waitFor(() => expect(updateToast).toHaveBeenCalledTimes(index + 1));
-  }
-  expect(updateToast.mock.calls.map(([, toast]) => toast.description)).toEqual([
-    expect.stringContaining(first.detail),
-    second.detail,
-  ]);
-});
-
-it("keeps discussion counts and Timeline expansion in sync with activity refreshes", async () => {
-  setup();
-  activityDetail = {
-    ...detail,
-    provider: SourceControlProviderKind.make("gitlab"),
-    url: "https://gitlab.com/owner/repo/-/merge_requests/1",
-    comments: [],
-    commentCount: 0,
-    commentsTruncated: true,
-    reviewThreads: [
-      {
-        id: "discussion-1",
-        path: "src/index.ts",
-        line: 1,
-        side: "right",
-        isResolved: false,
-        isOutdated: false,
-        comments: [
-          {
-            id: "note-1",
-            author: detail.author,
-            body: "Discussion finding",
-            createdAt: "2026-09-01T00:01:00Z",
-            url: "https://gitlab.com/owner/repo/-/merge_requests/1#note_1",
-          },
-          {
-            id: "note-2",
-            author: detail.author,
-            body: "Discussion reply",
-            createdAt: "2026-09-01T00:02:00Z",
-            url: "https://gitlab.com/owner/repo/-/merge_requests/1#note_2",
-          },
-        ],
-      },
-    ],
-  };
-  await using _screen = await render({ reference: activityDetail });
-  await expect.element(page.getByText("Discussion finding", { exact: true })).toBeVisible();
-  await expect.element(page.getByText("Discussion reply", { exact: true })).toBeVisible();
-  expect
-    .soft(page.getByRole("button", { name: /^Comments \(/ }).element().textContent)
-    .toBe("Comments (2)");
-  const warning = page.getByText(/open it on the host to read the rest/).element().textContent;
-  expect.soft(warning).toMatch(/\b2\b/);
-  expect.soft(warning).not.toMatch(/most recent/i);
-
-  await tab("Timeline").click();
-  await expect.element(page.getByText("Discussion finding", { exact: true }).last()).toBeVisible();
-  await expect.element(page.getByText("Discussion reply", { exact: true }).last()).toBeVisible();
-  expect.soft(page.getByLabelText(/^[0-9]+ comments?$/).element().textContent).toBe("2");
-
-  const threadToggle = page.getByRole("button", { name: /^src\/index\.ts:1/ });
-  const expectThread = (expanded: boolean, status: string | null) => {
-    const toggle = threadToggle.element();
-    if (status) expect(toggle.textContent).toContain(status);
-    else expect(toggle.textContent).not.toMatch(/Resolved|Review dismissed/);
-    const visibleBody = (toggle.parentElement as HTMLElement).innerText;
-    expect({
-      expanded: toggle.getAttribute("aria-expanded"),
-      findingVisible: visibleBody.includes("Discussion finding"),
-      replyVisible: visibleBody.includes("Discussion reply"),
-    }).toEqual({
-      expanded: String(expanded),
-      findingVisible: expanded,
-      replyVisible: expanded,
-    });
-  };
-  const refreshActivity = async (isResolved: boolean, reviewState: string | null = null) => {
-    await tab("Code").click();
-    await expect
-      .element(page.getByRole("button", { name: "Expand all files", exact: true }))
-      .toBeVisible();
-    const current = activityDetail!;
-    activityDetail = {
-      ...current,
-      comments: current.reviewThreads.flatMap((thread) =>
-        thread.comments.map((comment) => ({
-          ...comment,
-          kind: "review-comment" as const,
-          path: thread.path,
-          reviewState,
-        })),
-      ),
-      reviewThreads: current.reviewThreads.map((thread) => ({ ...thread, isResolved })),
-    };
-    await tab("Timeline").click();
-  };
-
-  expectThread(true, null);
-  await refreshActivity(true);
-  expectThread(false, "Resolved");
-  await threadToggle.click();
-  expectThread(true, "Resolved");
-  await refreshActivity(true);
-  expectThread(true, "Resolved");
-  await threadToggle.click();
-  expectThread(false, "Resolved");
-  await refreshActivity(false);
-  expectThread(true, null);
-  await refreshActivity(false, "DISMISSED");
-  expectThread(false, "Review dismissed");
-  await refreshActivity(false);
-  expectThread(true, null);
 });

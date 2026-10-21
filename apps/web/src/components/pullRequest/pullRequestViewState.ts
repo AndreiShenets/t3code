@@ -2,13 +2,10 @@ import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { createStore } from "zustand/vanilla";
 
-import { useRightPanelStore } from "~/rightPanelStore";
+import { useRightPanelStore, type PullRequestDetailTab } from "~/rightPanelStore";
 import type { DiffFoldOverride, DiffSlice } from "./pullRequestDiff.logic";
 
-export type PullRequestDetailTab = "summary" | "guide" | "timeline" | "code";
-
 export interface PullRequestViewState {
-  tab?: PullRequestDetailTab;
   timelineOrder?: "newest" | "oldest";
   commitOid?: string | null;
   condensedByTab?: Partial<Record<PullRequestDetailTab, boolean>>;

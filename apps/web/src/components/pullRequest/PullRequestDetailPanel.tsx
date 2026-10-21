@@ -198,8 +198,6 @@ import { useReviewGuideWriter } from "./guide/useReviewGuideWriter";
 import { useInlineActionConfirm } from "./useInlineActionConfirm";
 import { savePullRequestScroll, type PullRequestViewStateStore } from "./pullRequestViewState";
 
-type DetailTab = PullRequestDetailTab;
-
 const ACTION_FAILURE_LABELS: Record<PullRequestAction, string> = {
   merge: "Could not merge this pull request",
   ready: "Could not mark this ready for review",
@@ -651,7 +649,7 @@ export function PullRequestDetailPanel({
   const [threadPickerOpen, setThreadPickerOpen] = useState(false);
   const [openReviewRequest, setOpenReviewRequest] = useState(0);
   const savedView = viewState?.getState();
-  const [tab, setTab] = useState<DetailTab>(savedView?.tab ?? initialTab);
+  const [tab, setTab] = useState<PullRequestDetailTab>(initialTab);
   const selectTab = (next: PullRequestDetailTab) => {
     setTab(next);
     onTabChange?.(next);
@@ -694,7 +692,7 @@ export function PullRequestDetailPanel({
   const tabScopeKey = `${environmentId}:${pullRequestKey}`;
   const [tabMountState, setTabMountState] = useState(() => ({
     key: tabScopeKey,
-    tabs: new Set<DetailTab>([tab]),
+    tabs: new Set<PullRequestDetailTab>([tab]),
   }));
   // A previously visited Code tab must not fetch diffs for every later PR while hidden.
   const mountedTabs =
@@ -705,9 +703,9 @@ export function PullRequestDetailPanel({
     setTabMountState({ key: tabScopeKey, tabs: new Set(tabMountState.tabs).add(tab) });
   }
   // Each tab restores the condensed state its own scrolling left behind.
-  const [condensedByTab, setCondensedByTab] = useState<Partial<Record<DetailTab, boolean>>>(
-    savedView?.condensedByTab ?? {},
-  );
+  const [condensedByTab, setCondensedByTab] = useState<
+    Partial<Record<PullRequestDetailTab, boolean>>
+  >(savedView?.condensedByTab ?? {});
   const condensed = condensedByTab[tab] ?? false;
   const scrollerByTab = useRef<Partial<Record<PullRequestDetailTab, HTMLDivElement | null>>>({});
   // Fresh ref callbacks would detach and reattach every scroller on each render.
@@ -733,8 +731,8 @@ export function PullRequestDetailPanel({
     },
   }));
   useLayoutEffect(() => {
-    viewState?.setState({ tab, timelineOrder, commitOid: selectedCodeCommitOid, condensedByTab });
-  }, [viewState, tab, timelineOrder, selectedCodeCommitOid, condensedByTab]);
+    viewState?.setState({ timelineOrder, commitOid: selectedCodeCommitOid, condensedByTab });
+  }, [viewState, timelineOrder, selectedCodeCommitOid, condensedByTab]);
   const foldRef = useRef<HTMLDivElement | null>(null);
   const condensedRowRef = useRef<HTMLDivElement | null>(null);
   // Save the target before collapse: the browser may clamp scrollTop as the viewport grows,

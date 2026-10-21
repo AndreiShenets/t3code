@@ -1704,6 +1704,13 @@ function PullRequestsRouteView() {
               shortcutsEnabled={activePullRequestSurface?.id === renderedPullRequestSurface.id}
               key={`${renderedPullRequestSurface.id}:${renderedPullRequestViewState?.instanceId ?? ""}`}
               {...(renderedPullRequestViewState ? { viewState: renderedPullRequestViewState } : {})}
+              initialTab={renderedPullRequestSurface.detailTab ?? "summary"}
+              onTabChange={(tab) => {
+                if (rightPanelRef === null) return;
+                useRightPanelStore
+                  .getState()
+                  .setPullRequestDetailTab(rightPanelRef, renderedPullRequestSurface.id, tab);
+              }}
               environmentId={panelEnvironmentId}
               onGuideShown={onGuideShown}
               onSelectPullRequest={(reference) => {
