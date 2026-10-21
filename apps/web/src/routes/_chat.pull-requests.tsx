@@ -107,6 +107,7 @@ import { assignProjectsToEnvironments } from "../components/pullRequest/pullRequ
 import { pullRequestFilterProjects } from "../components/pullRequest/pullRequestProjectFilter.logic";
 import { environmentMachineIcon } from "../components/EnvironmentMachineIcon";
 import { PullRequestDetailPanel } from "../components/pullRequest/PullRequestDetailPanel";
+import { getPullRequestViewState } from "../components/pullRequest/pullRequestViewState";
 import {
   PullRequestFiltersMenu,
   PullRequestFilterOptionIcon,
@@ -391,6 +392,10 @@ function PullRequestsRouteView() {
   );
   const rightPanelPresent = rightPanelPresence.present;
   const renderedPullRequestSurface = rightPanelPresence.value?.activeSurface ?? null;
+  const renderedPullRequestViewState =
+    rightPanelRef !== null && renderedPullRequestSurface !== null
+      ? getPullRequestViewState(rightPanelRef, renderedPullRequestSurface)
+      : undefined;
   const renderedRightPanelSurfaces = rightPanelPresence.value?.surfaces ?? [];
   const panelEnvironmentId =
     (renderedPullRequestSurface?.environmentId as EnvironmentId | undefined) ??
@@ -1697,7 +1702,8 @@ function PullRequestsRouteView() {
             <PullRequestDetailPanel
               getShortcutContext={getShortcutContext}
               shortcutsEnabled={activePullRequestSurface?.id === renderedPullRequestSurface.id}
-              key={renderedPullRequestSurface.id}
+              key={`${renderedPullRequestSurface.id}:${renderedPullRequestViewState?.instanceId ?? ""}`}
+              {...(renderedPullRequestViewState ? { viewState: renderedPullRequestViewState } : {})}
               environmentId={panelEnvironmentId}
               onGuideShown={onGuideShown}
               onSelectPullRequest={(reference) => {
