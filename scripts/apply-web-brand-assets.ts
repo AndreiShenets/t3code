@@ -29,7 +29,7 @@ export const applyWebBrandAssets = Effect.fn("applyWebBrandAssets")(function* (
   const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
 
   yield* Effect.forEach(
-    resolveWebIconOverrides(brand, targetDirectory),
+    resolveWebIconOverrides(brand === "development" ? brand : "nightly", targetDirectory),
     (override) =>
       fs.copyFile(
         path.join(repoRoot, override.sourceRelativePath),
