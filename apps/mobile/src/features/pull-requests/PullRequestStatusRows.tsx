@@ -2,6 +2,7 @@ import { usePullRequestConnected } from "./usePullRequestConnected";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigation } from "@react-navigation/native";
 import type { PullRequestAction, PullRequestDetail } from "@t3tools/contracts";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import Animated from "react-native-reanimated";
 import { PR_ROW_LAYOUT, PR_DISCLOSURE_ENTER, PR_ROW_EXIT } from "./pullRequestAnimations";
 import { useState } from "react";
@@ -269,7 +270,7 @@ export function PullRequestReviewersRow(props: RowProps) {
           {summary.reviews.map((review) => (
             <View
               key={review.id}
-              accessibilityLabel={`${review.author?.login ?? "Unknown reviewer"}, ${review.reviewState === "APPROVED" ? "Approved" : review.reviewState === "CHANGES_REQUESTED" ? "Changes requested" : "Commented"}`}
+              accessibilityLabel={`${getPullRequestActorName(review.author, "Unknown reviewer")}, ${review.reviewState === "APPROVED" ? "Approved" : review.reviewState === "CHANGES_REQUESTED" ? "Changes requested" : "Commented"}`}
               className="min-h-14 flex-row items-center gap-3 px-4 py-2"
             >
               <SymbolView
@@ -291,7 +292,7 @@ export function PullRequestReviewersRow(props: RowProps) {
               />
               <PullRequestAvatar actor={review.author} size={32} />
               <Text className="min-w-0 flex-1 text-sm font-t3-medium" numberOfLines={1}>
-                {review.author?.login ?? "Unknown reviewer"}
+                {getPullRequestActorName(review.author, "Unknown reviewer")}
               </Text>
             </View>
           ))}
@@ -303,13 +304,13 @@ export function PullRequestReviewersRow(props: RowProps) {
             .map((reviewer) => (
               <View
                 key={reviewer.login}
-                accessibilityLabel={`${reviewer.login}, ${reviewer.reviewOutcome ?? "Review requested"}`}
+                accessibilityLabel={`${getPullRequestActorName(reviewer)}, ${reviewer.reviewOutcome ?? "Review requested"}`}
                 className="min-h-14 flex-row items-center gap-3 px-4 py-2"
               >
                 <SymbolView name="clock" size={18} tintColorClassName="accent-icon-muted" />
                 <PullRequestAvatar actor={reviewer} size={32} />
                 <Text className="min-w-0 flex-1 text-sm font-t3-medium" numberOfLines={1}>
-                  {reviewer.login}
+                  {getPullRequestActorName(reviewer)}
                 </Text>
                 {reviewer.reviewOutcome ? (
                   <Text className="text-xs text-foreground-muted">

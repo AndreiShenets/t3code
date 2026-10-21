@@ -21,6 +21,7 @@ import {
   UserRoundIcon,
 } from "lucide-react";
 import { type ElementType, useState } from "react";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 
 import { getSourceControlPresentationForKind } from "~/sourceControlPresentation";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
@@ -262,7 +263,7 @@ function PullRequestAuthorFilter({
         <UserRoundIcon aria-hidden className="size-3.5" />
         <span className="flex-1">Author</span>
         <span className="min-w-0 max-w-32 truncate text-xs text-muted-foreground">
-          {value ?? "Anyone"}
+          {selected ? getPullRequestActorName(selected.actor) : (value ?? "Anyone")}
         </span>
       </MenuSubTrigger>
       <MenuSubPopup>
@@ -295,7 +296,9 @@ function PullRequestAuthorFilter({
             <MenuRadioItem key={option.actor.login.toLowerCase()} value={option.actor.login}>
               <span className="flex min-w-0 items-center gap-2">
                 <PullRequestActorAvatar actor={option.actor} />
-                <span className="min-w-0 flex-1 truncate">{option.actor.login}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {getPullRequestActorName(option.actor)}
+                </span>
                 <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                   {option.mergedCount} merges loaded
                 </span>
