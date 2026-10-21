@@ -695,6 +695,145 @@ it.effect("keeps scanning after the caller is interrupted and shares that scan",
   );
 });
 
+it.effect.each([
+  { root: "ProgramFiles", version: "2022", edition: "Community" },
+  { root: "ProgramW6432", version: "18", edition: "Professional" },
+  { root: "ProgramFiles(x86)", version: "2019", edition: "Enterprise" },
+])(
+  "discovers Visual Studio $version $edition outside PATH via $root",
+  ({ root, version, edition }) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-visual-studio-" });
+      const executable = path.join(
+        home,
+        "Microsoft Visual Studio",
+        version,
+        edition,
+        "Common7/IDE/devenv.exe",
+      );
+      yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
+      yield* fs.writeFileString(executable, "");
+      let spawned: ChildProcess.StandardCommand | undefined;
+      const cwd = "C:\\workspace with spaces\\app.sln";
+
+      yield* Effect.gen(function* () {
+        const launcher = yield* ExternalLauncher.ExternalLauncher;
+        assert.include(yield* launcher.resolveAvailableEditors(), "visual-studio");
+        yield* launcher.launchEditor({ editor: "visual-studio", cwd });
+      }).pipe(
+        Effect.provide(
+          layerTest({
+            platform: "win32",
+            env: { [root]: home, PATH: path.join(home, "empty") },
+            onSpawn: (command) => {
+              spawned = command;
+            },
+          }),
+        ),
+      );
+
+      assert.ok(spawned);
+      assert.equal(spawned.command, executable);
+      assert.deepEqual(spawned.args, [cwd]);
+      assert.equal(spawned.options.shell, false);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect.each([
+  { cwd: "C:\\workspace with spaces", args: ["C:\\workspace with spaces"] },
+  { cwd: "C:\\workspace\\file.cs", args: ["C:\\workspace\\file.cs"] },
+  {
+    cwd: "C:\\workspace with spaces\\file.cs:12",
+    args: ["/Edit", "C:\\workspace with spaces\\file.cs", "/Command", "Edit.GoTo 12"],
+  },
+  {
+    cwd: "C:\\workspace with spaces\\file.cs:12:4",
+    args: ["/Edit", "C:\\workspace with spaces\\file.cs", "/Command", "Edit.GoTo 12"],
+  },
+])("launches Visual Studio from PATH with arguments for $cwd", ({ cwd, args }) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const binDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-visual-studio-path-" });
+    // The GUI executable must win even when PATHEXT prefers the console launcher.
+    yield* fs.writeFileString(path.join(binDir, "devenv.com"), "");
+    yield* fs.writeFileString(path.join(binDir, "devenv.exe"), "");
+    let spawned: ChildProcess.StandardCommand | undefined;
+
+    yield* Effect.gen(function* () {
+      const launcher = yield* ExternalLauncher.ExternalLauncher;
+      assert.include(yield* launcher.resolveAvailableEditors(), "visual-studio");
+      yield* launcher.launchEditor({ editor: "visual-studio", cwd });
+    }).pipe(
+      Effect.provide(
+        layerTest({
+          platform: "win32",
+          env: { PATH: binDir, PATHEXT: ".COM;.EXE;.BAT;.CMD" },
+          onSpawn: (command) => {
+            spawned = command;
+          },
+        }),
+      ),
+    );
+
+    assert.ok(spawned);
+    assert.equal(spawned.command, "devenv.exe");
+    assert.deepEqual(spawned.args, args);
+    assert.equal(spawned.options.shell, false);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect("does not mistake VS Code or Build Tools for Visual Studio", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-no-visual-studio-" });
+    const code = path.join(home, "Microsoft VS Code/bin/code.cmd");
+    yield* fs.makeDirectory(path.dirname(code), { recursive: true });
+    yield* fs.writeFileString(code, "");
+    yield* fs.makeDirectory(
+      path.join(home, "Microsoft Visual Studio/2022/BuildTools/Common7/IDE"),
+      { recursive: true },
+    );
+    yield* Effect.gen(function* () {
+      const launcher = yield* ExternalLauncher.ExternalLauncher;
+      const editors = yield* launcher.resolveAvailableEditors();
+      assert.include(editors, "vscode");
+      assert.notInclude(editors, "visual-studio");
+    }).pipe(
+      Effect.provide(
+        layerTest({
+          platform: "win32",
+          env: { ProgramFiles: home, PATH: path.join(home, "empty") },
+        }),
+      ),
+    );
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect.each(["darwin", "linux"] as const)(
+  "does not discover or launch Visual Studio on %s",
+  (platform) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const binDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-visual-studio-platform-" });
+      const executable = path.join(binDir, "devenv.exe");
+      yield* fs.writeFileString(executable, "#!/bin/sh\n");
+      yield* fs.chmod(executable, 0o755);
+      yield* Effect.gen(function* () {
+        const launcher = yield* ExternalLauncher.ExternalLauncher;
+        assert.notInclude(yield* launcher.resolveAvailableEditors(), "visual-studio");
+        const error = yield* launcher
+          .launchEditor({ editor: "visual-studio", cwd: "/workspace" })
+          .pipe(Effect.flip);
+        assert.equal(error._tag, "ExternalLauncherUnsupportedEditorError");
+      }).pipe(Effect.provide(layerTest({ platform, env: { PATH: binDir } })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
 const launchWindowsShimEditor = (cwd: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
