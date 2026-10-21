@@ -3,7 +3,7 @@ import { makeProviderSettingsSchema, ProviderDriverKind, TrimmedString } from "@
 import * as Schema from "effect/Schema";
 
 import { providerClients } from "./providerDriverMeta";
-import { sourceControlClients } from "@t3tools/client-runtime/sourceControlClients";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   deriveProviderSettingsFields,
   nextProviderConfigWithFieldValue,
