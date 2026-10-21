@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { act, render } from "../../../test/render";
 import { TooltipProvider } from "../ui/tooltip";
+import { RiderIcon } from "../JetBrainsIcons";
 import { DiffFileHeaderActions } from "./DiffFileHeaderActions";
 import { diffHeaderTogglePath } from "./diffHeaderInteraction";
 
@@ -10,6 +11,7 @@ describe("diff file header interactions across the shadow boundary", () => {
     await using stack = new AsyncDisposableStack();
     const toggle = vi.fn();
     const open = vi.fn();
+    const openEditor = vi.fn();
     const container = document.createElement("div");
     stack.defer(() => container.remove());
     document.body.append(container);
@@ -37,7 +39,17 @@ describe("diff file header interactions across the shadow boundary", () => {
             <span data-title>
               <span>src/new.ts</span>
             </span>
-            <DiffFileHeaderActions filePath="src/new.ts" onOpenFile={open} />
+            <DiffFileHeaderActions
+              filePath="src/new.ts"
+              onOpenFile={open}
+              editorAction={{
+                Icon: RiderIcon,
+                label: "Open in Rider",
+                iconClassName: "",
+                disabled: false,
+                onOpen: openEditor,
+              }}
+            />
             <label data-viewed-toggle>
               <input type="checkbox" />
               Viewed
@@ -59,6 +71,7 @@ describe("diff file header interactions across the shadow boundary", () => {
       shadow,
       toggle,
       open,
+      openEditor,
       click,
       [Symbol.asyncDispose]: () => environment.disposeAsync(),
     };
@@ -98,6 +111,14 @@ describe("diff file header interactions across the shadow boundary", () => {
     expect(write).toHaveBeenCalledExactlyOnceWith("src/new.ts");
     expect(toggle).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
+  });
+
+  it("opens the external editor without opening the integrated editor or collapsing the diff", async () => {
+    await using screen = await setup();
+    await screen.click('[aria-label="Open in Rider"]');
+    expect(screen.openEditor).toHaveBeenCalledExactlyOnceWith();
+    expect(screen.open).not.toHaveBeenCalled();
+    expect(screen.toggle).not.toHaveBeenCalled();
   });
 
   it("leaves viewed toggles and the code body alone", async () => {

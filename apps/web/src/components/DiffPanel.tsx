@@ -52,7 +52,8 @@ import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefres
 import { useProject, useThreadCheckpointSummaries, useQuietThreadShell } from "../state/entities";
 import { useClientSettings, updateClientSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
-import { DiffFileHeaderActions } from "./diffs/DiffFileHeaderActions";
+import { DiffFileHeaderActions, type DiffFileEditorAction } from "./diffs/DiffFileHeaderActions";
+import { useDiffEditorAction } from "./diffs/useDiffEditorAction";
 import { diffHeaderTogglePath } from "./diffs/diffHeaderInteraction";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { DiffStatLabel } from "./chat/DiffStatLabel";
@@ -168,6 +169,7 @@ function DiffFileHeaderSuffix({
   truncated,
   onRetry,
   onOpenFile,
+  editorAction,
 }: {
   filePath: string;
   hasStat: boolean;
@@ -175,10 +177,15 @@ function DiffFileHeaderSuffix({
   truncated: boolean;
   onRetry: (path: string) => void;
   onOpenFile: (path: string) => void;
+  editorAction: DiffFileEditorAction | null;
 }) {
   return (
     <>
-      <DiffFileHeaderActions filePath={filePath} onOpenFile={onOpenFile} />
+      <DiffFileHeaderActions
+        filePath={filePath}
+        onOpenFile={onOpenFile}
+        editorAction={editorAction}
+      />
       {hasStat ? (
         <DiffFileStatus error={error} truncated={truncated} retry={() => onRetry(filePath)} />
       ) : null}
@@ -237,6 +244,11 @@ export default function DiffPanel({
   const activeRepositoryRoot = activeThread?.worktreePath
     ? undefined
     : activeProject?.repositoryIdentity?.rootPath;
+  const getEditorAction = useDiffEditorAction(
+    activeThread?.environmentId ?? null,
+    activeCwd,
+    activeRepositoryRoot,
+  );
   const serverConfig = useAtomValue(
     serverEnvironment.configValueAtom(activeThread?.environmentId ?? null),
   );
@@ -1083,6 +1095,7 @@ export default function DiffPanel({
                           truncated={state?.truncated ?? false}
                           onRetry={retry}
                           onOpenFile={openDiffFile}
+                          editorAction={getEditorAction(path)}
                         />
                       );
                     }}

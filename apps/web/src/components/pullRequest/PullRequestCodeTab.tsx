@@ -70,6 +70,7 @@ import { DiffPanelLoadingState } from "../DiffPanelShell";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { DiffFileTree } from "../diffs/DiffFileTree";
 import { DiffFileHeaderActions } from "../diffs/DiffFileHeaderActions";
+import { useDiffEditorAction } from "../diffs/useDiffEditorAction";
 import { diffHeaderTogglePath } from "../diffs/diffHeaderInteraction";
 import { useCodeViewFileReveal } from "../diffs/useCodeViewFileReveal";
 import { diffFileTreeEntries } from "../diffs/diffFileTree.logic";
@@ -257,6 +258,7 @@ function PullRequestCodeTab({
   backgroundRefreshToken = 0,
   revealRequest = null,
   onOpenFile,
+  fileWorkspace,
 }: {
   scrollerRef: (node: HTMLDivElement | null) => void;
   environmentId: EnvironmentId;
@@ -273,7 +275,13 @@ function PullRequestCodeTab({
   backgroundRefreshToken?: number;
   revealRequest?: { readonly path: string; readonly nonce: number } | null;
   onOpenFile?: ((path: string) => void) | undefined;
+  fileWorkspace?: { workspaceRoot: string; repositoryRoot: string | undefined } | null | undefined;
 }) {
+  const getEditorAction = useDiffEditorAction(
+    environmentId,
+    fileWorkspace?.workspaceRoot,
+    fileWorkspace?.repositoryRoot,
+  );
   const resolvedTheme = useRenderedAppearance();
   const settings = useClientSettings((settings) => ({
     diffFilesCollapsed: settings.diffFilesCollapsed,
@@ -1451,6 +1459,7 @@ function PullRequestCodeTab({
                   <DiffFileHeaderActions
                     filePath={resolveFileDiffPath(item.fileDiff)}
                     onOpenFile={onOpenFile}
+                    editorAction={getEditorAction(resolveFileDiffPath(item.fileDiff))}
                   />
                 ) : null
               }
