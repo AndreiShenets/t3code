@@ -61,6 +61,7 @@ export default function PullRequestFileEditor({
                 </FileSurfaceNotice>
               ) : null}
               <SourceFilePreview
+                workspace={{ environmentId, cwd: workspaceRoot }}
                 name={relativePath}
                 text={file.data.contents}
                 cacheKey={projectFileCacheKey(workspaceRoot, relativePath, file.data.contents)}
