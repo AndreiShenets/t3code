@@ -152,12 +152,14 @@ export function PullRequestComposer({
               environmentId={environmentId}
               reference={reference}
               verdicts={verdicts}
+              verdictOnly={detail.capabilities.review.verdictOnly === true}
               requestChangesSummaryRequired={sourceControlClients
                 .get(detail.provider)
                 .reviewSummaryRequired("request-changes")}
               textareaRef={reviewRef}
               pending={reviewPending}
               onPendingChange={setReviewPending}
+              onPartial={onReviewSubmitted}
               onSubmitted={() => {
                 setOpen(false);
                 onReviewSubmitted();
