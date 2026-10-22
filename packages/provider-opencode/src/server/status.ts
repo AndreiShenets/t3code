@@ -544,10 +544,6 @@ export function openCode2CommandsToServerProviderSlashCommands(
   return slashCommands;
 }
 
-/**
- * Auto asks like Supervised: OpenCode has no reviewer that approves routine
- * actions.
- */
 const OPENCODE_2_PRESENTATION = {
   ...OPENCODE_PRESENTATION,
   showInteractionModeToggle: true,
