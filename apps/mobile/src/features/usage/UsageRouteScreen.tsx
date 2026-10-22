@@ -17,6 +17,13 @@ import {
   type MergedUsage,
 } from "@t3tools/shared/usageMerge";
 import {
+  usageModelKey,
+  usageSeriesKey,
+  usageSeriesLabel,
+  usageSeriesColor,
+  usageSeriesTotals,
+} from "@t3tools/shared/usageSeries";
+import {
   enumerateDays,
   enumerateHourStarts,
   formatCount,
@@ -27,6 +34,7 @@ import {
   formatUsageContractMismatch,
   formatUsd,
   makeWindow,
+  type UsagePeriod,
 } from "@t3tools/shared/usageFormat";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, RefreshControl, View } from "react-native";
@@ -56,7 +64,12 @@ import { UsageLimitsSection } from "./UsageLimitsPooled";
 import { Menu } from "../../components/ui/Menu";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import type { UsageChartMetric } from "./usageChartData";
-import { PROVIDER_LABEL, useProviderColors, useUsageMixColors } from "./usageProviders";
+import {
+  PROVIDER_LABEL,
+  PROVIDER_ORDER,
+  useProviderColors,
+  useUsageMixColors,
+} from "./usageProviders";
 
 type UsageTab = "usage" | "limits";
 const TAB_OPTIONS = [
@@ -65,6 +78,7 @@ const TAB_OPTIONS = [
 ] as const satisfies readonly { value: UsageTab; label: string }[];
 
 const WINDOW_OPTIONS = [
+  { value: "today", label: "Today", accessibilityLabel: "Today since midnight" },
   { value: 1, label: "24h", accessibilityLabel: "Past 24 hours" },
   { value: 7, label: "7d", accessibilityLabel: "Past 7 days" },
   { value: 30, label: "30d", accessibilityLabel: "Past 30 days" },
@@ -97,12 +111,12 @@ export function UsageRouteScreen() {
   const { tab } = selection;
   const setTab = (tab: UsageTab) => setSelection({ params: route.params, tab });
   const [windowSelection, setWindowSelection] = useState(() => ({
-    days: 30,
+    days: 30 as UsagePeriod,
     window: makeWindow(30),
   }));
   const [metric, setMetric] = useState<UsageChartMetric>("cost");
   const { days: windowDays, window } = windowSelection;
-  const isPast24Hours = windowDays === 1;
+  const isHourly = window.resolution === "hour";
   const [selectedEnvironmentIds, setSelectedEnvironmentIds] =
     useState<ReadonlySet<EnvironmentId> | null>(null);
   const { merged, environments, selectedEnvironments, isPending, refresh } = useUsage(
@@ -138,15 +152,16 @@ export function UsageRouteScreen() {
 
   const days = enumerateDays(window.sinceDay, window.untilDay);
   const chartDays =
-    isPast24Hours && window.sinceTime !== undefined && window.untilTime !== undefined
+    isHourly && window.sinceTime !== undefined && window.untilTime !== undefined
       ? enumerateHourStarts(window.sinceTime, window.untilTime)
       : days;
-  const chartTotals: readonly DailyTotals[] = isPast24Hours
+  const chartTotals: readonly DailyTotals[] = isHourly
     ? merged.hourly.map((hour) => ({
         day: hour.hourStart,
         costUsd: hour.costUsd,
         totalTokens: hour.totalTokens,
         byProvider: hour.byProvider,
+        ...(hour.bySeries === undefined ? {} : { bySeries: hour.bySeries }),
       }))
     : merged.daily;
 
@@ -157,15 +172,15 @@ export function UsageRouteScreen() {
     refreshing: refreshingUsage,
     providerLabel,
   });
-  const selectWindow = (days: number) => {
+  const selectWindow = (days: UsagePeriod) => {
     setWindowSelection({
       days,
-      window: makeWindow(days, undefined, days === 1 ? "hour" : "day"),
+      window: makeWindow(days),
     });
   };
   const refreshWindow = () => {
     if (refreshingRef.current) return;
-    const nextWindow = makeWindow(windowDays, undefined, isPast24Hours ? "hour" : "day");
+    const nextWindow = makeWindow(windowDays);
     if (
       nextWindow.sinceDay !== window.sinceDay ||
       nextWindow.untilDay !== window.untilDay ||
@@ -339,7 +354,7 @@ export function UsageRouteScreen() {
                       metric={metric}
                       sinceDay={window.sinceDay}
                       untilDay={window.untilDay}
-                      isPast24Hours={isPast24Hours}
+                      isHourly={isHourly}
                       timeZone={window.timeZone}
                     />
                     <ProviderSection
@@ -349,7 +364,7 @@ export function UsageRouteScreen() {
                       showCursorEnvironment={selectedEnvironments.length > 1}
                       onCursorEnabled={refreshAfterCursorEnable}
                     />
-                    <TotalsSection merged={merged} isPast24Hours={isPast24Hours} />
+                    <TotalsSection merged={merged} isHourly={isHourly} />
                     <CostSection merged={merged} />
                     <ModelsSection merged={merged} metric={metric} />
                   </UsageUpdating>
@@ -510,12 +525,17 @@ function ChartCard(props: {
   readonly metric: UsageChartMetric;
   readonly sinceDay: string;
   readonly untilDay: string;
-  readonly isPast24Hours: boolean;
+  readonly isHourly: boolean;
   readonly timeZone: string;
 }) {
   const { merged, metric } = props;
   const colors = useProviderColors();
   const hasActivity = props.daily.some((period) => period.totalTokens > 0);
+  const series = usageSeriesTotals(merged).sort(
+    (a, b) =>
+      PROVIDER_ORDER.indexOf(a.provider) - PROVIDER_ORDER.indexOf(b.provider) ||
+      (a.upstreamProvider ?? "").localeCompare(b.upstreamProvider ?? ""),
+  );
 
   return (
     <View className="gap-4 rounded-[24px] border-continuous bg-grouped-card p-4">
@@ -539,6 +559,7 @@ function ChartCard(props: {
           daily={props.daily}
           metric={metric}
           height={CHART_HEIGHT}
+          series={series}
         />
       ) : (
         <View style={{ height: CHART_HEIGHT }} className="items-center justify-center">
@@ -549,25 +570,25 @@ function ChartCard(props: {
       <View className="gap-2">
         <View className="flex-row items-center justify-between">
           <Text className="text-xs text-foreground-tertiary">
-            {props.isPast24Hours
+            {props.isHourly
               ? formatHourShort(props.days[0] ?? "", props.timeZone)
               : formatDayShort(props.sinceDay)}
           </Text>
           <Text className="text-xs text-foreground-tertiary">
-            {props.isPast24Hours
+            {props.isHourly
               ? formatHourShort(props.days[props.days.length - 1] ?? "", props.timeZone)
               : formatDayShort(props.untilDay)}
           </Text>
         </View>
         <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
-          {merged.providers.map((provider) => (
-            <View key={provider.provider} className="flex-row items-center gap-1.5">
+          {series.map((provider) => (
+            <View key={usageSeriesKey(provider)} className="flex-row items-center gap-1.5">
               <View
                 className="size-2 rounded-full"
-                style={{ backgroundColor: colors[provider.provider] }}
+                style={{ backgroundColor: usageSeriesColor(provider, colors[provider.provider]) }}
               />
               <Text className="text-xs text-foreground-muted">
-                {PROVIDER_LABEL[provider.provider]}
+                {usageSeriesLabel(provider, PROVIDER_LABEL[provider.provider])}
               </Text>
             </View>
           ))}
@@ -589,7 +610,7 @@ function ProviderSection(props: {
   if (merged.providers.length === 0 && props.cursorAccessEnvironments.length === 0) return null;
 
   // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023 method.
-  const ordered = [...merged.providers].sort((a, b) =>
+  const ordered = usageSeriesTotals(merged).sort((a, b) =>
     metric === "cost" ? b.costUsd - a.costUsd : b.totalTokens - a.totalTokens,
   );
   const rows: Array<
@@ -626,19 +647,23 @@ function ProviderSection(props: {
           );
         }
         const provider = row.provider;
-        const share = metric === "cost" ? provider.costShare : provider.tokenShare;
+        const total = metric === "cost" ? merged.costUsd : merged.totalTokens;
+        const share =
+          total === 0 ? 0 : (metric === "cost" ? provider.costUsd : provider.totalTokens) / total;
         return (
           <View
-            key={provider.provider}
+            key={usageSeriesKey(provider)}
             className={index === 0 ? "gap-2 p-4" : "gap-2 border-t border-border-subtle p-4"}
           >
             <View className="flex-row items-baseline justify-between gap-3">
               <View className="flex-row items-center gap-2">
                 <View
                   className="size-2.5 rounded-full"
-                  style={{ backgroundColor: colors[provider.provider] }}
+                  style={{ backgroundColor: usageSeriesColor(provider, colors[provider.provider]) }}
                 />
-                <Text className="text-lg text-foreground">{PROVIDER_LABEL[provider.provider]}</Text>
+                <Text className="text-lg text-foreground">
+                  {usageSeriesLabel(provider, PROVIDER_LABEL[provider.provider])}
+                </Text>
               </View>
               <Text className="text-lg tabular-nums text-foreground">
                 {metric === "cost"
@@ -649,7 +674,10 @@ function ProviderSection(props: {
             <View className="h-1 flex-row overflow-hidden rounded-full bg-subtle">
               <View
                 className="h-full rounded-full"
-                style={{ flex: share, backgroundColor: colors[provider.provider] }}
+                style={{
+                  flex: share,
+                  backgroundColor: usageSeriesColor(provider, colors[provider.provider]),
+                }}
               />
               <View style={{ flex: 1 - share }} />
             </View>
@@ -665,9 +693,9 @@ function ProviderSection(props: {
   );
 }
 
-function TotalsSection(props: { readonly merged: MergedUsage; readonly isPast24Hours: boolean }) {
+function TotalsSection(props: { readonly merged: MergedUsage; readonly isHourly: boolean }) {
   const { merged } = props;
-  const activePeriods = (props.isPast24Hours ? merged.hourly : merged.daily).filter(
+  const activePeriods = (props.isHourly ? merged.hourly : merged.daily).filter(
     (period) => period.totalTokens > 0,
   ).length;
   const periodAverage = activePeriods === 0 ? 0 : merged.totalTokens / activePeriods;
@@ -680,7 +708,7 @@ function TotalsSection(props: { readonly merged: MergedUsage; readonly isPast24H
         <MetricCell
           label="Processed tokens"
           value={formatTokens(merged.totalTokens)}
-          detail={`${formatTokens(periodAverage)} per active ${props.isPast24Hours ? "hour" : "day"}`}
+          detail={`${formatTokens(periodAverage)} per active ${props.isHourly ? "hour" : "day"}`}
         />
         <MetricCell
           label="Cache savings"
@@ -823,7 +851,7 @@ function ModelsSection(props: { readonly merged: MergedUsage; readonly metric: U
     <SettingsSection title="By model">
       {ordered.map((model, index) => (
         <View
-          key={`${model.provider}:${model.model}`}
+          key={usageModelKey(model)}
           className={
             index === 0
               ? "flex-row items-center gap-3 p-4"
@@ -832,12 +860,17 @@ function ModelsSection(props: { readonly merged: MergedUsage; readonly metric: U
         >
           <View
             className="size-2.5 shrink-0 rounded-full"
-            style={{ backgroundColor: colors[model.provider] }}
+            style={{ backgroundColor: usageSeriesColor(model, colors[model.provider]) }}
           />
           <View className="min-w-0 flex-1 gap-0.5">
             <Text className="text-base text-foreground" numberOfLines={1}>
               {model.model}
             </Text>
+            {model.upstreamProvider === undefined ? null : (
+              <Text className="text-sm text-foreground-muted">
+                {usageSeriesLabel(model, PROVIDER_LABEL[model.provider])}
+              </Text>
+            )}
             <Text className="text-sm text-foreground-muted">
               {metric === "tokens"
                 ? `${formatPercent(model.tokenShare)} of tokens · ${
