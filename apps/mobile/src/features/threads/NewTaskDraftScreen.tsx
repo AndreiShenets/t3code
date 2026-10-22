@@ -882,7 +882,7 @@ export function NewTaskDraftScreen(props: {
         });
         flow.setPrompt("");
       }
-      return;
+      return null;
     }
 
     if (
