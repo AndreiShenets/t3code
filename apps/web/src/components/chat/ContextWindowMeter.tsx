@@ -33,7 +33,6 @@ export function ContextWindowMeter(props: {
   const dashOffset = circumference * (1 - normalizedPercentage / 100);
   const totalProcessedTokens = usage.totalProcessedTokens ?? null;
   const showTotalProcessed = totalProcessedTokens !== null && totalProcessedTokens > 0;
-  const sessionCost = usage.cost == null ? null : formatContextWindowCost(usage.cost);
   const contextLabel =
     usage.maxTokens !== null && usedPercentage
       ? `Context window ${usedPercentage} used`
@@ -50,13 +49,7 @@ export function ContextWindowMeter(props: {
         delay={150}
         closeDelay={onCompact ? 150 : 0}
         render={
-          <Button
-            size={sessionCost === null ? "icon-sm" : "sm"}
-            variant="ghost-muted"
-            aria-label={
-              sessionCost === null ? contextLabel : `${contextLabel}, session cost ${sessionCost}`
-            }
-          >
+          <Button size="icon-sm" variant="ghost-muted" aria-label={contextLabel}>
             <span className="relative flex size-5 items-center justify-center">
               <svg
                 viewBox="0 0 24 24"
@@ -85,9 +78,6 @@ export function ContextWindowMeter(props: {
                 />
               </svg>
             </span>
-            {sessionCost !== null ? (
-              <span className="text-xs tabular-nums">{sessionCost}</span>
-            ) : null}
           </Button>
         }
       />
