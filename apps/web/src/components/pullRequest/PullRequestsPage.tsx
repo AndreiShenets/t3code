@@ -53,6 +53,7 @@ import {
 } from "./pullRequestListPreferences";
 import { environmentMachineIcon } from "../EnvironmentMachineIcon";
 import { PullRequestDetailPanel } from "./PullRequestDetailPanel";
+import { getPullRequestViewState } from "./pullRequestViewState";
 import {
   PullRequestFiltersMenu,
   PullRequestSearchInput,
@@ -190,6 +191,10 @@ export function PullRequestsPage() {
   );
   const rightPanelPresent = rightPanelPresence.present;
   const renderedPullRequestSurface = rightPanelPresence.value?.activeSurface ?? null;
+  const renderedPullRequestViewState =
+    rightPanelRef !== null && renderedPullRequestSurface !== null
+      ? getPullRequestViewState(rightPanelRef, renderedPullRequestSurface)
+      : undefined;
   const renderedRightPanelSurfaces = rightPanelPresence.value?.surfaces ?? [];
   const panelEnvironmentId =
     (renderedPullRequestSurface?.environmentId as EnvironmentId | undefined) ??
@@ -1469,7 +1474,15 @@ export function PullRequestsPage() {
             <PullRequestDetailPanel
               getShortcutContext={getShortcutContext}
               shortcutsEnabled={activePullRequestSurface?.id === renderedPullRequestSurface.id}
-              key={renderedPullRequestSurface.id}
+              key={`${renderedPullRequestSurface.id}:${renderedPullRequestViewState?.instanceId ?? ""}`}
+              {...(renderedPullRequestViewState ? { viewState: renderedPullRequestViewState } : {})}
+              initialTab={renderedPullRequestSurface.detailTab ?? "summary"}
+              onTabChange={(tab) => {
+                if (rightPanelRef === null) return;
+                useRightPanelStore
+                  .getState()
+                  .setPullRequestDetailTab(rightPanelRef, renderedPullRequestSurface.id, tab);
+              }}
               environmentId={panelEnvironmentId}
               onGuideShown={onGuideShown}
               onSelectPullRequest={(reference) => {
