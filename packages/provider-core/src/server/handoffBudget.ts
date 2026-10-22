@@ -87,6 +87,7 @@ export function contextUsageForHandoff(input: {
   const maxTokens = input.reuseTelemetry ? reportedMax : (input.knownModelWindow ?? reportedMax);
   return {
     usedTokens: input.previousUsage.usedTokens,
+    ...(input.previousUsage.cost === undefined ? {} : { cost: input.previousUsage.cost }),
     ...(maxTokens === undefined ? {} : { maxTokens }),
   };
 }
