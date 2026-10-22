@@ -1,6 +1,8 @@
 import * as AzureDevOpsCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsCli";
 import * as AzureDevOpsPullRequestCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsPullRequestCli";
 import * as AzureDevOpsDriver from "@t3tools/source-control-azure-devops/server/driver";
+import * as AzureDevOpsServerDriver from "@t3tools/source-control-azure-devops/server/customDriver";
+import * as AzureDevOpsServerClient from "@t3tools/source-control-azure-devops/server/AzureDevOpsServerClient";
 import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
 import * as BitbucketPullRequestApi from "@t3tools/source-control-bitbucket/server/BitbucketPullRequestApi";
 import * as BitbucketDriver from "@t3tools/source-control-bitbucket/server/driver";
@@ -24,6 +26,7 @@ const drivers = [
   GitHubDriver.driver,
   GitLabDriver.driver,
   AzureDevOpsDriver.driver,
+  AzureDevOpsServerDriver.driver,
   BitbucketDriver.driver,
   ForgejoDriver.driver,
   GitCafeDriver.driver,
@@ -41,6 +44,7 @@ export const layer = Layer.mergeAll(
   // reader shares, so the server builds it once, here.
   GitHubPullRequestApi.layer.pipe(Layer.provideMerge(GitHubRest.layerWithDependencies)),
   AzureDevOpsPullRequestCli.layer.pipe(Layer.provideMerge(AzureDevOpsCli.layer)),
+  AzureDevOpsServerClient.layer,
   BitbucketPullRequestApi.layer.pipe(Layer.provideMerge(BitbucketApi.layer)),
   ForgejoCli.layer,
   GitCafeApi.layer.pipe(Layer.provideMerge(GitCafeCredentials.layer)),

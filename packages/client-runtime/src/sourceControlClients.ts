@@ -1,4 +1,5 @@
 import * as AzureDevOps from "@t3tools/source-control-azure-devops/client/definition";
+import * as AzureDevOpsServer from "@t3tools/source-control-azure-devops/client/customDefinition";
 import * as Bitbucket from "@t3tools/source-control-bitbucket/client/definition";
 import {
   makeSourceControlClientRegistry,
@@ -28,6 +29,7 @@ const BUILT_IN_SOURCE_CONTROL_CLIENTS = [
   GitCafe.definition,
   Forgejo.definition,
   Bitbucket.definition,
+  AzureDevOpsServer.definition,
   AzureDevOps.definition,
 ];
 

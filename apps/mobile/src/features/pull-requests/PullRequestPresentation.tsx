@@ -1,5 +1,6 @@
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import type { PullRequestActor } from "@t3tools/contracts";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import IconAlertTriangle from "@tabler/icons-react-native/IconAlertTriangle";
 import { Image } from "expo-image";
 import { View } from "react-native";
@@ -42,7 +43,7 @@ export function PullRequestAvatar(props: {
     <Image
       source={{ uri: props.actor.avatarUrl }}
       recyclingKey={props.actor.avatarUrl}
-      accessibilityLabel={props.actor.login}
+      accessibilityLabel={getPullRequestActorName(props.actor)}
       style={{ width: size, height: size, borderRadius: size / 2 }}
       cachePolicy="memory-disk"
     />
@@ -52,7 +53,7 @@ export function PullRequestAvatar(props: {
       style={{ width: size, height: size }}
     >
       <Text className="font-t3-medium text-foreground-muted" style={{ fontSize: size * 0.45 }}>
-        {props.actor?.login.slice(0, 1).toUpperCase() ?? "?"}
+        {getPullRequestActorName(props.actor, "?").slice(0, 1).toUpperCase()}
       </Text>
     </View>
   );
