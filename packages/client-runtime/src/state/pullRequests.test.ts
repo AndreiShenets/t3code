@@ -8,6 +8,7 @@ import {
   ProjectId,
   PullRequestOperationError,
   WS_METHODS,
+  type PullRequestDiffFileContentsInput,
   type AuthSessionState,
 } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
@@ -1005,6 +1006,65 @@ it.effect("keeps concurrent diff file reads on different hosts separate", () =>
         { _tag: "Success", value: { newContents: "github.example.com" } },
       ]);
       expect(calls).toEqual(["github.com", "github.example.com"]);
+    }),
+  ),
+);
+
+it.effect("caches snapshot file reads by host and revision and refreshes them explicitly", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const reads: PullRequestDiffFileContentsInput[] = [];
+      const client = {
+        [WS_METHODS.pullRequestsDiffFileContents]: (input: PullRequestDiffFileContentsInput) =>
+          Effect.sync(() => {
+            reads.push(input);
+            return { oldContents: "", newContents: `${input.host}:${input.commit}` };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const input = {
+        projectId: ProjectId.make("project-1"),
+        host: "github.com",
+        repository: "acme/web",
+        number: 1,
+        commit: "reviewed-head",
+        changeType: "new",
+        oldPath: ".editorconfig",
+        newPath: ".editorconfig",
+      } as const;
+      const query = atoms.diffFileContentsQuery({ environmentId: TARGET.environmentId, input });
+      yield* AtomRegistry.mount(registry, query);
+      expect((yield* AtomRegistry.getResult(registry, query)).newContents).toBe(
+        "github.com:reviewed-head",
+      );
+      const same = atoms.diffFileContentsQuery({
+        environmentId: TARGET.environmentId,
+        input: { ...input },
+      });
+      yield* AtomRegistry.mount(registry, same);
+      expect((yield* AtomRegistry.getResult(registry, same)).newContents).toBe(
+        "github.com:reviewed-head",
+      );
+      expect(reads).toHaveLength(1);
+      for (const scoped of [
+        { ...input, commit: "historical" },
+        { ...input, host: "github.example.com" },
+      ]) {
+        const other = atoms.diffFileContentsQuery({
+          environmentId: TARGET.environmentId,
+          input: scoped,
+        });
+        yield* AtomRegistry.mount(registry, other);
+        expect((yield* AtomRegistry.getResult(registry, other)).newContents).toBe(
+          `${scoped.host}:${scoped.commit}`,
+        );
+      }
+      expect(reads).toHaveLength(3);
+      registry.refresh(query);
+      expect(
+        (yield* AtomRegistry.getResult(registry, query, { suspendOnWaiting: true })).newContents,
+      ).toBe("github.com:reviewed-head");
+      expect(reads).toHaveLength(4);
     }),
   ),
 );
