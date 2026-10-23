@@ -110,7 +110,7 @@ export function ComposerMcpSheet(props: {
               <Text className="text-sm font-medium text-foreground">{server.name}</Text>
               <Text className="text-xs text-foreground-muted">
                 {server.status === "needs-auth"
-                  ? "Needs authentication — sign in using OpenCode /mcps."
+                  ? "Needs authentication. Sign in using OpenCode /mcps."
                   : server.status}
               </Text>
             </View>

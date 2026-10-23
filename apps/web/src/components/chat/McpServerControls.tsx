@@ -117,7 +117,7 @@ export function McpServerList(props: McpManagementRequest) {
             <p className="break-all text-sm font-medium">{server.name}</p>
             <p className="text-xs text-muted-foreground">
               {server.status === "needs-auth"
-                ? "Needs authentication — sign in using OpenCode /mcps."
+                ? "Needs authentication. Sign in using OpenCode /mcps."
                 : server.status}
             </p>
           </div>
