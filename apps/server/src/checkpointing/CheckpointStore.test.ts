@@ -114,6 +114,58 @@ it.layer(layerTest)("CheckpointStore.layer", (it) => {
     }),
   );
   describe("diffCheckpoints", () => {
+    it.effect.each([false, true])(
+      "keeps nested workspace patches and numstat repository-relative (diff.relative=%s)",
+      (relative) =>
+        Effect.gen(function* () {
+          const tmp = yield* makeTmpDir();
+          yield* initRepoWithCommit(tmp);
+          yield* git(tmp, ["config", "diff.relative", String(relative)]);
+          const fileSystem = yield* FileSystem.FileSystem;
+          const cwd = NodePath.join(tmp, "app");
+          yield* fileSystem.makeDirectory(cwd);
+          const checkpointStore = yield* CheckpointStore.CheckpointStore;
+          const threadId = ThreadId.make("checkpoint-repository-relative");
+          const refs = {
+            cwd,
+            fromCheckpointRef: checkpointRefForThreadTurn(threadId, 0),
+            toCheckpointRef: checkpointRefForThreadTurn(threadId, 1),
+          };
+          yield* checkpointStore.captureCheckpoint({
+            cwd: tmp,
+            checkpointRef: refs.fromCheckpointRef,
+          });
+          yield* writeTextFile(NodePath.join(cwd, "file.txt"), "inside\n");
+          yield* writeTextFile(NodePath.join(tmp, "README.md"), "outside\n");
+          yield* checkpointStore.captureCheckpoint({
+            cwd: tmp,
+            checkpointRef: refs.toCheckpointRef,
+          });
+
+          for (const filePaths of [undefined, ["app/file.txt"], ["README.md"]]) {
+            const input = { ...refs, ignoreWhitespace: false, ...(filePaths && { filePaths }) };
+            const expectedPaths = filePaths ?? ["README.md", "app/file.txt"];
+            const patch = yield* checkpointStore.diffCheckpoints(input);
+            expect(patch.match(/^diff --git .+$/gm)).toEqual(
+              expectedPaths.map((file) => `diff --git a/${file} b/${file}`),
+            );
+            const numstat = yield* checkpointStore.diffCheckpoints({
+              ...input,
+              format: "numstat",
+            });
+            expect(new Set(parseTurnDiffFilesFromNumstat(numstat))).toEqual(
+              new Set(
+                expectedPaths.map((file) => ({
+                  path: file,
+                  additions: 1,
+                  deletions: file === "README.md" ? 1 : 0,
+                })),
+              ),
+            );
+          }
+        }),
+    );
+
     it.effect("returns full oversized checkpoint diffs without truncation", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
@@ -458,6 +510,47 @@ it.layer(layerTest)("CheckpointStore.layer", (it) => {
   });
 
   describe("listAuthoredPaths", () => {
+    it.effect.each([false, true])(
+      "keeps committed and uncommitted paths repository-relative (diff.relative=%s)",
+      (relative) =>
+        Effect.gen(function* () {
+          const tmp = yield* makeTmpDir();
+          yield* initRepoWithCommit(tmp);
+          yield* git(tmp, ["config", "diff.relative", String(relative)]);
+          const fileSystem = yield* FileSystem.FileSystem;
+          const cwd = NodePath.join(tmp, "app");
+          yield* fileSystem.makeDirectory(cwd);
+          const checkpointStore = yield* CheckpointStore.CheckpointStore;
+          const threadId = ThreadId.make("checkpoint-authored-repository-relative");
+          const refs = {
+            cwd,
+            fromCheckpointRef: checkpointRefForThreadTurn(threadId, 0),
+            toCheckpointRef: checkpointRefForThreadTurn(threadId, 1),
+          };
+          const before = ["app/before.txt", "before.txt"];
+          const committed = ["app/committed.txt", "committed.txt"];
+          const after = ["app/after.txt", "after.txt"];
+          for (const file of before) yield* writeTextFile(NodePath.join(tmp, file), "before\n");
+          yield* checkpointStore.captureCheckpoint({
+            cwd: tmp,
+            checkpointRef: refs.fromCheckpointRef,
+          });
+          for (const file of before) yield* fileSystem.remove(NodePath.join(tmp, file));
+          for (const file of committed) yield* writeTextFile(NodePath.join(tmp, file), "commit\n");
+          yield* git(tmp, ["add", "."]);
+          yield* git(tmp, ["commit", "-m", "authored during turn"]);
+          for (const file of after) yield* writeTextFile(NodePath.join(tmp, file), "after\n");
+          yield* checkpointStore.captureCheckpoint({
+            cwd: tmp,
+            checkpointRef: refs.toCheckpointRef,
+          });
+
+          expect(yield* checkpointStore.listAuthoredPaths(refs)).toEqual(
+            new Set([...before, ...committed, ...after]),
+          );
+        }),
+    );
+
     it.effect("leaves out paths that only a merged upstream changed", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
