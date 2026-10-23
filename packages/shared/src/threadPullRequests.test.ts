@@ -1,7 +1,4 @@
-import {
-  type ThreadPullRequestLink,
-  type ThreadPullRequestSnapshot,
-} from "@t3tools/contracts";
+import { type ThreadPullRequestLink, type ThreadPullRequestSnapshot } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
