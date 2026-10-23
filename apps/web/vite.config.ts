@@ -99,6 +99,7 @@ const unitTestProject = {
 // range, which fail with EACCES rather than triggering Vite's occupied-port fallback.
 // Keep Windows below that range and other platforms above Linux's ephemeral range.
 const browserTestApiPort =
+  // oxlint-disable-next-line t3code/no-global-process-runtime -- Vite evaluates this config before an Effect runtime exists.
   (process.platform === "win32" ? 20_000 : 61_000) +
   ((Hash.string(import.meta.dirname) >>> 0) % 4_000);
 
