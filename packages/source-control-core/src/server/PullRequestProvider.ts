@@ -24,6 +24,7 @@ import type {
   PullRequestReaction,
   PullRequestReactionContent,
   PullRequestReviewCommentDraft,
+  PullRequestSubmitReviewPartialResult,
   PullRequestReviewDecision,
   PullRequestReviewThread,
   PullRequestThreadCommentsResult,
@@ -208,6 +209,8 @@ export interface ProviderChangeRequestActivity {
 }
 
 export interface ProviderDiffSlice {
+  readonly baseSha?: string;
+  readonly headSha?: string;
   readonly patch: string;
   /** Something in this slice could not be shown, as opposed to there being more slices. */
   readonly truncated: boolean;
@@ -496,7 +499,7 @@ export interface PullRequestProviderApi {
       readonly body: string;
       readonly comments: ReadonlyArray<PullRequestReviewCommentDraft>;
     },
-  ) => Effect.Effect<void, PullRequestProviderError>;
+  ) => Effect.Effect<void | PullRequestSubmitReviewPartialResult, PullRequestProviderError>;
 
   /**
    * The author is left out by each provider rather than by the caller, because only the

@@ -16,6 +16,16 @@ import {
 } from "./git.ts";
 
 describe("normalizeGitRemoteUrl", () => {
+  it("preserves HTTP ports for custom Azure repository identity", () => {
+    expect(
+      normalizeGitRemoteUrl(
+        "http://code.example:8080/tfs/Default%20Collection/Project/_git/Web.git",
+      ),
+    ).toBe("code.example:8080/tfs/default%20collection/project/_git/web");
+    expect(normalizeGitRemoteUrl("https://dev.azure.com:8443/org/project/_git/web")).toBe(
+      "dev.azure.com/org/project/_git/web",
+    );
+  });
   it("canonicalizes equivalent GitHub remotes across protocol variants", () => {
     expect(normalizeGitRemoteUrl("git@github.com:T3Tools/T3Code.git")).toBe(
       "github.com/t3tools/t3code",

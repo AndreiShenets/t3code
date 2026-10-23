@@ -12,13 +12,17 @@ export function pullRequestSyncKey(
   reference: PullRequestRef,
   identity?: RepositoryIdentity | null,
 ): ThreadPullRequestKey | null {
-  if (identity?.provider === "azure-devops" && !reference.repository.includes("/")) {
+  if (
+    (identity?.provider === "azure-devops" ||
+      identity?.provider === "azure-devops-custom-server") &&
+    !reference.repository.includes("/")
+  ) {
     if (
       reference.repository.toLowerCase() !==
         sourceControlRepositorySelector(identity)?.toLowerCase() ||
       (reference.host !== undefined &&
         reference.host.toLowerCase() !==
-          pullRequestHostOf(identity, SourceControlProviderKind.make("azure-devops")))
+          pullRequestHostOf(identity, SourceControlProviderKind.make(identity.provider)))
     )
       return null;
     const [host, ...repository] = identity.canonicalKey.split("/");

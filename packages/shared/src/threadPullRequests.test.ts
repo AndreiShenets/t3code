@@ -1,5 +1,4 @@
 import {
-  ProjectId,
   type ThreadPullRequestLink,
   type ThreadPullRequestSnapshot,
 } from "@t3tools/contracts";
@@ -61,6 +60,25 @@ function link(
 }
 
 describe("threadPullRequestKeysEqual", () => {
+  it("separates custom Azure ports and recovers legacy links from their URLs", () => {
+    const old = link(1, {
+      host: "code.example",
+      repository: "collection/project/_git/repo",
+      url: "http://code.example:8080/collection/project/_git/repo/pullrequest/1",
+    });
+    expect(legacyThreadPullRequestKey(old)).toEqual({
+      host: "code.example:8080",
+      repository: old.repository,
+      number: 1,
+    });
+    expect(threadPullRequestKeysEqual(old, { ...old, host: "code.example:8080" })).toBe(true);
+    expect(
+      threadPullRequestKeysEqual(old, {
+        ...old,
+        url: "http://code.example:8081/collection/project/_git/repo/pullrequest/1",
+      }),
+    ).toBe(false);
+  });
   it("recovers Forgejo ports from old stored URLs and keeps separate servers distinct", () => {
     const old = link(1, {
       host: "forge.example",
