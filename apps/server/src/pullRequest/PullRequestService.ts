@@ -115,6 +115,25 @@ function supersedesReading(current: PullRequestReading | undefined, next: PullRe
   return (next.observedAt ?? -Infinity) >= (current.observedAt ?? -Infinity);
 }
 
+function isEditorConfigSnapshot(input: PullRequestDiffFileContentsInput): boolean {
+  if (
+    input.changeType !== "new" ||
+    input.commit === undefined ||
+    (input.commit.length !== 40 && input.commit.length !== 64) ||
+    /[^0-9a-f]/i.test(input.commit) ||
+    input.oldPath !== input.newPath ||
+    // Azure's Windows CLI passes these paths through cmd.exe more than once.
+    /[\\:"%&|<>^!\p{Cc}]/u.test(input.newPath)
+  ) {
+    return false;
+  }
+  const segments = input.newPath.split("/");
+  return (
+    segments.at(-1) === ".editorconfig" &&
+    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..")
+  );
+}
+
 /**
  * 99 and not 100, because every provider asks its host for one row over this to probe for a next
  * page: 99 requests 100, which is exactly what a page of GitHub's API serves — GraphQL refuses
@@ -3377,11 +3396,10 @@ export const make = Effect.gen(function* () {
         );
     return walk(undefined);
   };
-  // Only the files the change request itself changes: these are read with the project's own
-  // credential, and a reader who may look at the change request may not thereby read the rest of
-  // the repository.
+  // Pinned display configuration is the only unchanged-file exception: PR read access
+  // must not grant general repository reads through the project's own credential.
   const diffFileContents: PullRequestService["Service"]["diffFileContents"] = (input) =>
-    changesFile(input).pipe(
+    (isEditorConfigSnapshot(input) ? Effect.succeed(true) : changesFile(input)).pipe(
       Effect.flatMap((changed) =>
         changed
           ? readDiffFileContents(input)
