@@ -95,9 +95,12 @@ const unitTestProject = {
 // in headless Chromium through the same plugins as the app, so it exercises compiled code.
 // Vitest's fixed browser API port (63315) collides when two checkouts run
 // browser tests at once, and `server.strictPort` above is inherited, so the
-// second run fails instead of moving on. Hash the checkout path like
-// scripts/dev-runner.ts does, into 61000-64999 (above Linux's ephemeral range).
-const browserTestApiPort = 61_000 + ((Hash.string(import.meta.dirname) >>> 0) % 4_000);
+// second run fails instead of moving on. Windows reserves blocks in its ephemeral
+// range, which fail with EACCES rather than triggering Vite's occupied-port fallback.
+// Keep Windows below that range and other platforms above Linux's ephemeral range.
+const browserTestApiPort =
+  (process.platform === "win32" ? 20_000 : 61_000) +
+  ((Hash.string(import.meta.dirname) >>> 0) % 4_000);
 
 const browserTestProject = {
   extends: true,
