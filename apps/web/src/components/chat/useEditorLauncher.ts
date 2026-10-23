@@ -24,6 +24,7 @@ import {
   TraeIcon,
   VisualStudioCode,
   VisualStudioCodeInsiders,
+  VisualStudioIcon,
   VSCodium,
   Zed,
 } from "../Icons";
@@ -61,6 +62,7 @@ const resolveOpenInOptions = (platform: string, availableEditors: ReadonlyArray<
     { Icon: VisualStudioCode, value: "vscode", kind: "brand" },
     { Icon: VisualStudioCodeInsiders, value: "vscode-insiders", kind: "brand" },
     { Icon: VSCodium, value: "vscodium", kind: "brand" },
+    { Icon: VisualStudioIcon, value: "visual-studio", kind: "brand" },
     { Icon: Zed, value: "zed", kind: "brand" },
     { Icon: AntigravityIcon, value: "antigravity", kind: "brand" },
     { Icon: IntelliJIdeaIcon, value: "idea", kind: "brand" },
