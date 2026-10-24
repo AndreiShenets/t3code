@@ -284,12 +284,14 @@ it.effect(
         cwd: source,
         args: ["rev-parse", "HEAD"],
       })).stdout.trim();
-      yield* git.run({
+      const cloned = yield* git.run({
         operation: "test.setup",
         command: "git",
         cwd: root,
         args: ["clone", source, cwd],
+        allowNonZeroExit: true,
       });
+      assert.strictEqual(cloned.exitCode, 0, cloned.stderr);
       yield* fs.writeFileString(path.join(source, "feature.txt"), "pull request change\n");
       for (const args of [
         ["add", "feature.txt"],
