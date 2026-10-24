@@ -1920,6 +1920,155 @@ it.effect("requires an explicit host for a non-repository project's linked PR", 
   }),
 );
 
+it.effect("forwards draft snapshots and partial review progress without losing either", () =>
+  Effect.gen(function* () {
+    const comments = [
+      {
+        path: "a.ts",
+        position: { kind: "added" as const, newLine: 2 },
+        body: "feedback",
+        headSha: "rendered-head",
+        baseSha: "rendered-base",
+      },
+    ];
+    const partial = {
+      status: "partial" as const,
+      postedCommentIndexes: [0],
+      summaryPosted: true,
+      outcomeUnknown: false,
+      message: "Vote failed",
+    };
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+      ],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          submitReview: (input) => {
+            assert.deepStrictEqual(input.comments, comments);
+            return Effect.succeed(partial);
+          },
+          getDiff: () =>
+            Effect.succeed({
+              patch: "diff",
+              truncated: false,
+              nextCursor: null,
+              headSha: "snapshot-head",
+              baseSha: "snapshot-base",
+            }),
+        }),
+      ],
+    });
+    assert.deepStrictEqual(
+      yield* service.submitReview({
+        projectId: "p1" as ProjectId,
+        repository: "pingdotgg/t3code",
+        number: 1,
+        verdict: "approve",
+        body: "summary",
+        comments,
+      }),
+      partial,
+    );
+    const diff = yield* service.diff({
+      projectId: "p1" as ProjectId,
+      repository: "pingdotgg/t3code",
+      number: 1,
+    });
+    assert.strictEqual(diff.headSha, "snapshot-head");
+    assert.strictEqual(diff.baseSha, "snapshot-base");
+  }),
+);
+
+it.effect("allows an empty verdict retry after feedback was confirmed posted", () =>
+  Effect.gen(function* () {
+    const provider = fakeProvider(SourceControlProviderKind.make("github"));
+    const submitted: Array<{ readonly body: string; readonly comments: ReadonlyArray<unknown> }> =
+      [];
+    const partial = {
+      status: "partial" as const,
+      postedCommentIndexes: [],
+      summaryPosted: true,
+      outcomeUnknown: false,
+      message: "Vote rejected",
+    };
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+      ],
+      providers: [
+        {
+          ...provider,
+          capabilities: {
+            ...provider.capabilities,
+            review: { ...provider.capabilities.review, verdictOnly: true },
+          },
+          submitReview: (input) => {
+            submitted.push(input);
+            return submitted.length === 1 ? Effect.succeed(partial) : Effect.void;
+          },
+        },
+      ],
+    });
+    const input = {
+      projectId: "p1" as ProjectId,
+      repository: "pingdotgg/t3code",
+      number: 1,
+      verdict: "request-changes" as const,
+      comments: [],
+    };
+    assert.deepStrictEqual(yield* service.submitReview({ ...input, body: "Feedback" }), partial);
+    yield* service.submitReview({ ...input, body: "" });
+    assert.deepStrictEqual(
+      submitted.map(({ body, comments }) => ({ body, comments })),
+      [
+        { body: "Feedback", comments: [] },
+        { body: "", comments: [] },
+      ],
+    );
+  }),
+);
+
+it.effect("rejects unsupported reaction contents and description targets before writes", () =>
+  Effect.gen(function* () {
+    let writes = 0;
+    const provider = fakeProvider(SourceControlProviderKind.make("github"));
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+      ],
+      providers: [
+        {
+          ...provider,
+          capabilities: {
+            ...provider.capabilities,
+            reactions: true,
+            reactionContents: ["thumbs-up"],
+            descriptionReactions: false,
+          },
+          setReaction: () => {
+            writes++;
+            return Effect.void;
+          },
+        },
+      ],
+    });
+    const reference = {
+      projectId: "p1" as ProjectId,
+      repository: "pingdotgg/t3code",
+      number: 1,
+      reacted: true,
+    };
+    yield* Effect.flip(
+      service.setReaction({ ...reference, subjectId: "comment", content: "heart" }),
+    );
+    yield* Effect.flip(service.setReaction({ ...reference, content: "thumbs-up" }));
+    assert.strictEqual(writes, 0);
+    yield* service.setReaction({ ...reference, subjectId: "comment", content: "thumbs-up" });
+    assert.strictEqual(writes, 1);
+  }),
+);
+
 it.effect("refuses a review request this viewer may not make, and says what access it takes", () =>
   Effect.gen(function* () {
     let sent = false;

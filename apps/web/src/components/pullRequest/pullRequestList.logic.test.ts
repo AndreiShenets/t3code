@@ -28,6 +28,8 @@ import {
   selectedPullRequestAuthor,
   pullRequestLabelChoices,
   rankPullRequestMatches,
+  matchesPullRequestQuery,
+  scorePullRequestMatch,
   rankPullRequestsBlockedOnAuthor,
   rankPullRequestsByMergeReadiness,
   sortPullRequestGroups,
@@ -159,6 +161,20 @@ describe("pull request involvement filtering", () => {
 });
 
 describe("ranking what a search found", () => {
+  it("finds and ranks authors by their displayed name as well as their login", () => {
+    const row = entry({
+      number: 1,
+      author: {
+        login: "64d61648-5e0b-4335-bcec-3a3d88963c89",
+        name: "Andrei Shenets",
+        avatarUrl: null,
+      },
+    });
+    expect(matchesPullRequestQuery(row, "ANDREI")).toBe(true);
+    expect(matchesPullRequestQuery(row, "64d61648")).toBe(true);
+    expect(scorePullRequestMatch(row, "andrei")).toBe(50);
+  });
+
   const row = (overrides: Partial<PullRequestListEntry> & { number?: number }) =>
     entry({ number: 1, ...overrides });
 

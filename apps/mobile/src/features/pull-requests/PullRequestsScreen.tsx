@@ -180,6 +180,10 @@ export function PullRequestsScreen(
     setKnownFacets((previous) => ({
       source: facets,
       environmentId,
+      authorNames: {
+        ...(previous.environmentId === environmentId ? previous.authorNames : {}),
+        ...facets.authorNames,
+      },
       authors: [
         ...new Set([
           ...(previous.environmentId === environmentId ? previous.authors : []),
@@ -315,6 +319,11 @@ export function PullRequestsScreen(
               }}
               authors={
                 knownFacets.environmentId === environmentId ? knownFacets.authors : facets.authors
+              }
+              authorNames={
+                knownFacets.environmentId === environmentId
+                  ? knownFacets.authorNames
+                  : facets.authorNames
               }
               labels={
                 knownFacets.environmentId === environmentId ? knownFacets.labels : facets.labels

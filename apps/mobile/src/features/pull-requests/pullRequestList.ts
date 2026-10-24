@@ -8,6 +8,7 @@ import {
   type PullRequestListResult,
 } from "@t3tools/contracts";
 import type { PullRequestListControls } from "../../persistence/mobile-preferences";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 
 export const PR_LIST_PAGE_SIZE = 30;
 export type { PullRequestListControls } from "../../persistence/mobile-preferences";
@@ -69,6 +70,7 @@ export function pullRequestListRowsAreEqual(
       previous.reviewDecision === next.reviewDecision &&
       previous.viewerReviewRequested === next.viewerReviewRequested &&
       previous.author?.login === next.author?.login &&
+      previous.author?.name === next.author?.name &&
       previous.author?.avatarUrl === next.author?.avatarUrl &&
       previous.stack?.position === next.stack?.position &&
       previous.stack?.size === next.stack?.size &&
@@ -217,6 +219,11 @@ export function pullRequestFilterChoices(input: {
 
 export function pullRequestListFacets(entries: readonly PullRequestListEntry[]) {
   return {
+    authorNames: Object.fromEntries(
+      entries.flatMap((entry) =>
+        entry.author ? [[entry.author.login, getPullRequestActorName(entry.author)]] : [],
+      ),
+    ),
     authors: [
       ...new Set(entries.flatMap((entry) => (entry.author ? [entry.author.login] : []))),
     ].sort((a, b) => a.localeCompare(b)),
@@ -283,7 +290,7 @@ export function filterPullRequestList<
     if (filters.excludedLabels?.some((label) => labels.has(normalize(label)))) return false;
     if (words.length && localSearchHosts.has(viewerKey)) {
       const text =
-        `${entry.repository} #${entry.number} ${entry.title} ${entry.author?.login ?? ""} ${entry.headBranch} ${entry.baseBranch} ${entry.labels.map((label) => label.name).join(" ")}`.toLowerCase();
+        `${entry.repository} #${entry.number} ${entry.title} ${entry.author?.login ?? ""} ${entry.author?.name ?? ""} ${entry.headBranch} ${entry.baseBranch} ${entry.labels.map((label) => label.name).join(" ")}`.toLowerCase();
       if (!words.every((word) => text.includes(word))) return false;
     }
     return true;
