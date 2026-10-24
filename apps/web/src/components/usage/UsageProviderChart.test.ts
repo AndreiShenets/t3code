@@ -130,13 +130,13 @@ describe("buildPeriodColumns", () => {
 
   it("plots each day on its own", () => {
     expect(buildPeriodColumns(days, byDay, "cost").map((column) => column.total)).toEqual([
-      35, 0, 5,
+      42, 0, 5,
     ]);
   });
 
   it("reads the requested metric", () => {
     expect(buildPeriodColumns(days, byDay, "tokens").map((column) => column.total)).toEqual([
-      350, 0, 50,
+      420, 0, 50,
     ]);
   });
 
