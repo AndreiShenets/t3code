@@ -1,4 +1,3 @@
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { threadPullRequestsOf } from "@t3tools/shared/threadPullRequests";
 import type {
   ThreadLinkedPullRequest,
@@ -209,14 +208,9 @@ function terminalRunStatus(status: OrchestrationV2RunStatus): boolean {
   );
 }
 
-// Only work that wakes the agent holds it: commands it left running, such as a
-// dev server, present the run's own status (#14872). The server suppresses the
-// roster while an interruptible activity run exists, so a remaining roster is
-// stronger than checkpoint-oriented waiting.
+// Background commands keep the display active without holding run completion or notifications.
 function shellRuntime(thread: OrchestrationV2ThreadShell): ThreadRuntimeSummary | null {
-  const parkAtIdle =
-    backgroundWorkHoldsCompletion(thread.pendingBackgroundTasks ?? []) &&
-    thread.status !== "failed";
+  const parkAtIdle = (thread.pendingBackgroundTasks?.length ?? 0) > 0 && thread.status !== "failed";
   if (thread.latestRunId === null && thread.activeProviderThreadId === null && !parkAtIdle) {
     return null;
   }
