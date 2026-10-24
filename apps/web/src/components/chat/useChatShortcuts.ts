@@ -75,6 +75,14 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
       context: shortcutContext,
     });
     if (!command) return;
+    // A focused diff owns find; its handler may run after this capture listener.
+    if (
+      command === "chat.find" &&
+      event
+        .composedPath()
+        .some((node) => node instanceof Element && node.hasAttribute("data-diff-search-scope"))
+    )
+      return;
     const run =
       input.commands[command] ??
       composerShortcutCommands(input.composerRef, input.branchToolbarRef)[command] ??
