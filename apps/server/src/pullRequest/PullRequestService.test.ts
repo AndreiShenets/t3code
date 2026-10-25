@@ -4130,6 +4130,108 @@ it.effect("pauses uncached activity on a host after one activity read is rate li
   }),
 );
 
+it.effect("reads unchanged EditorConfig files at the reviewed revision", () =>
+  Effect.gen(function* () {
+    const read: Array<string> = [];
+    const commit = "a".repeat(40);
+    let diffReads = 0;
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+      ],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          getDiff: () =>
+            Effect.sync(() => {
+              diffReads += 1;
+              return {
+                patch:
+                  "diff --git a/test.cs b/test.cs\n--- a/test.cs\n+++ b/test.cs\n@@ -1 +1 @@\n-old\n+new\n",
+                truncated: false,
+                nextCursor: null,
+              };
+            }),
+          getDiffFileContents: (input) =>
+            Effect.sync(() => {
+              read.push(`${input.commit}:${input.newPath}`);
+              return { oldContents: "", newContents: "root = true\n[*.cs]\nindent_size = 4" };
+            }),
+        }),
+      ],
+    });
+    const ref = { projectId: "p1" as ProjectId, repository: "pingdotgg/t3code", number: 1 };
+    for (const path of [".editorconfig", "src/.editorconfig"]) {
+      const result = yield* service.diffFileContents({
+        ...ref,
+        commit,
+        changeType: "new",
+        oldPath: path,
+        newPath: path,
+      });
+      assert.strictEqual(result.newContents, "root = true\n[*.cs]\nindent_size = 4");
+    }
+    const configRead = {
+      ...ref,
+      commit,
+      changeType: "new" as const,
+      oldPath: ".editorconfig",
+      newPath: ".editorconfig",
+    };
+    for (const commit of ["B".repeat(40), "c".repeat(64)]) {
+      const result = yield* service.diffFileContents({ ...configRead, commit });
+      assert.strictEqual(result.newContents, "root = true\n[*.cs]\nindent_size = 4");
+    }
+    assert.strictEqual(diffReads, 0);
+    for (const path of [
+      ".env",
+      ".EDITORCONFIG",
+      "../.editorconfig",
+      "src/../.editorconfig",
+      "/.editorconfig",
+      "C:/.editorconfig",
+      "src\\.editorconfig",
+      "src//.editorconfig",
+      "src/./.editorconfig",
+      ".editorconfig/.env",
+      "src\n/.editorconfig",
+      "src\u0000/.editorconfig",
+      'a"&echo INJECTED&"b/.editorconfig',
+      "a&b/.editorconfig",
+      "a|b/.editorconfig",
+      "a%b/.editorconfig",
+      "a^b/.editorconfig",
+      "a<b/.editorconfig",
+      "a>b/.editorconfig",
+      "a!b/.editorconfig",
+    ]) {
+      const error = yield* service
+        .diffFileContents({ ...configRead, oldPath: path, newPath: path })
+        .pipe(Effect.flip);
+      assert.strictEqual(error._tag, "PullRequestOperationError");
+    }
+    for (const input of [
+      { ...ref, changeType: "new" as const, oldPath: ".editorconfig", newPath: ".editorconfig" },
+      { ...configRead, commit: "" },
+      { ...configRead, commit: " " },
+      { ...configRead, commit: "main" },
+      { ...configRead, commit: "a".repeat(39) },
+      { ...configRead, commit: `${commit}\n` },
+      { ...configRead, commit: `${commit}&path=/.env` },
+      { ...configRead, changeType: "change" as const },
+      { ...configRead, oldPath: ".env" },
+    ]) {
+      const error = yield* service.diffFileContents(input).pipe(Effect.flip);
+      assert.strictEqual(error._tag, "PullRequestOperationError");
+    }
+    assert.deepStrictEqual(read, [
+      `${commit}:.editorconfig`,
+      `${commit}:src/.editorconfig`,
+      `${"B".repeat(40)}:.editorconfig`,
+      `${"c".repeat(64)}:.editorconfig`,
+    ]);
+  }),
+);
+
 it.effect("authorizes cold source reads with paginated paths without fetching patch hunks", () =>
   Effect.gen(function* () {
     const pages: Array<string | undefined> = [];
