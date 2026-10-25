@@ -1,4 +1,5 @@
 import * as AzureDevOps from "@t3tools/source-control-azure-devops/shared/definition";
+import * as AzureDevOpsServer from "@t3tools/source-control-azure-devops/shared/customDefinition";
 import * as Bitbucket from "@t3tools/source-control-bitbucket/shared/definition";
 import { makeSourceControlDefinitionRegistry } from "@t3tools/source-control-core/shared/definition";
 import * as Forgejo from "@t3tools/source-control-forgejo/shared/definition";
@@ -21,10 +22,12 @@ export const builtInSourceControlDefinitions = makeSourceControlDefinitionRegist
     Forgejo.definition,
     Bitbucket.definition,
     AzureDevOps.definition,
+    AzureDevOpsServer.definition,
   ],
   {
-    claimChangeRequestUrlsFirst: [GitCafe.definition.kind],
+    claimChangeRequestUrlsFirst: [AzureDevOpsServer.definition.kind, GitCafe.definition.kind],
     recognizeRemotesIn: [
+      AzureDevOpsServer.definition.kind,
       GitCafe.definition.kind,
       Forgejo.definition.kind,
       GitHub.definition.kind,

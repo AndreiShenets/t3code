@@ -3,12 +3,18 @@ import { makeProviderSettingsSchema, ProviderDriverKind, TrimmedString } from "@
 import * as Schema from "effect/Schema";
 
 import { providerClients } from "./providerDriverMeta";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   deriveProviderSettingsFields,
   nextProviderConfigWithFieldValue,
 } from "./ProviderSettingsForm";
 
 describe("ProviderSettingsForm helpers", () => {
+  it("offers only a collection and optional PAT, with no authentication selector", () => {
+    const definition = sourceControlClients.find("azure-devops-custom-server")!;
+    const fields = deriveProviderSettingsFields({ settingsSchema: definition.settings! });
+    expect(fields.map((field) => field.key)).toEqual(["collectionUrl", "personalAccessToken"]);
+  });
   it("keeps every masked field as a stored secret", () => {
     const settingsSchema = makeProviderSettingsSchema({
       token: TrimmedString.pipe(
