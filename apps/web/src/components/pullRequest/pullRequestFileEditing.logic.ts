@@ -4,8 +4,8 @@ import type {
   RepositoryIdentity,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import { canonicalRepositoryKey } from "@t3tools/shared/sourceControl";
-import { legacyThreadPullRequestKey } from "@t3tools/shared/threadPullRequests";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { legacyThreadPullRequestKey } from "@t3tools/client-runtime/thread-pull-requests";
 
 interface FileProject {
   readonly id: ProjectId;
@@ -30,7 +30,9 @@ export function resolvePullRequestFileWorkspace({
   } | null;
 }) {
   const key = legacyThreadPullRequestKey(reference);
-  const repositoryKey = canonicalRepositoryKey(`${key.host}/${key.repository}`);
+  const repositoryKey = sourceControlClients.canonicalRepositoryKey(
+    `${key.host}/${key.repository}`,
+  );
   const matches = projects.filter((project) => {
     if (project.environmentId !== environmentId || !project.workspaceRoot) return false;
     const identity = project.repositoryIdentity;
@@ -40,7 +42,7 @@ export function resolvePullRequestFileWorkspace({
       [identity.canonicalKey, identity.origin?.canonicalKey].some(
         (candidate) =>
           candidate !== undefined &&
-          canonicalRepositoryKey(candidate.toLowerCase()) === repositoryKey,
+          sourceControlClients.canonicalRepositoryKey(candidate.toLowerCase()) === repositoryKey,
       )
     );
   });
