@@ -1902,7 +1902,7 @@ it.effect("forwards draft snapshots and partial review progress without losing e
         project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
       ],
       providers: [
-        fakeProvider(SourceControlProviderKind.make("github"), {
+        fakePullRequestProvider(SourceControlProviderKind.make("github"), {
           submitReview: (input) => {
             assert.deepStrictEqual(input.comments, comments);
             return Effect.succeed(partial);
@@ -1941,7 +1941,7 @@ it.effect("forwards draft snapshots and partial review progress without losing e
 
 it.effect("allows an empty verdict retry after feedback was confirmed posted", () =>
   Effect.gen(function* () {
-    const provider = fakeProvider(SourceControlProviderKind.make("github"));
+    const provider = fakePullRequestProvider(SourceControlProviderKind.make("github"));
     const submitted: Array<{ readonly body: string; readonly comments: ReadonlyArray<unknown> }> =
       [];
     const partial = {
@@ -1991,7 +1991,7 @@ it.effect("allows an empty verdict retry after feedback was confirmed posted", (
 it.effect("rejects unsupported reaction contents and description targets before writes", () =>
   Effect.gen(function* () {
     let writes = 0;
-    const provider = fakeProvider(SourceControlProviderKind.make("github"));
+    const provider = fakePullRequestProvider(SourceControlProviderKind.make("github"));
     const service = yield* makeService({
       projects: [
         project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
@@ -4140,7 +4140,7 @@ it.effect("reads unchanged EditorConfig files at the reviewed revision", () =>
         project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
       ],
       providers: [
-        fakeProvider(SourceControlProviderKind.make("github"), {
+        fakePullRequestProvider(SourceControlProviderKind.make("github"), {
           getDiff: () =>
             Effect.sync(() => {
               diffReads += 1;

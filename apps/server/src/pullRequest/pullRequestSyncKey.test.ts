@@ -6,7 +6,7 @@ import { pullRequestSyncKey } from "./pullRequestSyncKey.ts";
 describe("pullRequestSyncKey", () => {
   it("expands custom Azure repository names without dropping collection paths or ports", () => {
     const identity = {
-      provider: "azure-devops-custom-server",
+      provider: SourceControlProviderKind.make("azure-devops-custom-server"),
       name: "Web",
       canonicalKey: "code.example:8080/tfs/default%20collection/project/_git/web",
       locator: {
