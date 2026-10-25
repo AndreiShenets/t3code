@@ -3991,7 +3991,7 @@ it.effect("reads unchanged EditorConfig files at the reviewed revision", () =>
         project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
       ],
       providers: [
-        fakeProvider(SourceControlProviderKind.make("github"), {
+        fakePullRequestProvider(SourceControlProviderKind.make("github"), {
           getDiff: () =>
             Effect.sync(() => {
               diffReads += 1;
