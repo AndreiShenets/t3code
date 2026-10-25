@@ -3813,6 +3813,7 @@ export default function ChatView(props: ChatViewProps) {
                 )
               }
               gitCwd={gitCwd}
+              mcpProvider={activeProviderStatus}
               isGitRepo={isGitRepo}
               envLocked={envLocked}
               availableEnvironments={logicalProjectEnvironments}
