@@ -23,6 +23,8 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { cn } from "~/lib/utils";
+import { announce } from "~/lib/announce";
+import { editorLabelForPlatform } from "../../editorLabels";
 import {
   THREAD_DETAILS_PANEL_CHEVRON_CLASS,
   THREAD_DETAILS_PANEL_ICON_CLASS,
@@ -93,7 +95,10 @@ export const OpenInPicker = memo(function OpenInPicker({
         return;
 
       e.preventDefault();
-      void openInEditor(preferredEditor);
+      const label = editorLabelForPlatform(preferredEditor, navigator.platform);
+      void openInEditor(preferredEditor).then((opened) => {
+        if (opened) announce(`Opened in ${label}`);
+      });
     };
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);

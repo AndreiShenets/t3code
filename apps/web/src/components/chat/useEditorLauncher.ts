@@ -113,23 +113,22 @@ export function useEditorLauncher(
   const effectiveEditors = remote.mode === "local-exec" ? availableEditors : remoteCapableEditors;
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
 
-  const open = (editorId: EditorId | null, path: string | null, isFile = false) => {
-    if (!path || environmentId === null) return;
+  const open = async (editorId: EditorId | null, path: string | null, isFile = false) => {
+    if (!path || environmentId === null) return false;
     const editor = editorId ?? preferredEditor;
-    if (!editor || remote.mode === "remote-unavailable") return;
+    if (!editor || remote.mode === "remote-unavailable") return false;
     if (remote.mode === "remote-links") {
       const url = buildRemoteOpenUrl({ editor, ...remote.host, absolutePath: path, isFile });
-      if (url === undefined) return;
+      if (url === undefined) return false;
       // Only record hint-seen/preferred when the shell actually accepted
       // the URL (an older desktop build can refuse the editor scheme).
-      void openRemoteEditorUrl(url).then((opened) => {
-        if (!opened) return;
-        markRemoteHintSeen();
-        setPreferredEditor(editor);
-      });
-      return;
+      const opened = await openRemoteEditorUrl(url);
+      if (!opened) return false;
+      markRemoteHintSeen();
+      setPreferredEditor(editor);
+      return true;
     }
-    if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return;
+    if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
     const result = openInEditorMutation({
       environmentId,
       input: {
@@ -139,7 +138,7 @@ export function useEditorLauncher(
       },
     });
     setPreferredEditor(editor);
-    return result;
+    return (await result)._tag === "Success";
   };
 
   const options = resolveOpenInOptions(navigator.platform, effectiveEditors);
