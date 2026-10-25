@@ -14,6 +14,7 @@ export interface PullRequestDraftAnchor {
   readonly path: string;
   readonly oldPath: string | null;
   readonly position: PullRequestReviewPosition;
+  readonly startPosition?: PullRequestReviewPosition;
   readonly range: SelectedLineRange;
 }
 
