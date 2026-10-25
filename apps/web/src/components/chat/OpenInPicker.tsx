@@ -1,7 +1,6 @@
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import {
   AuthOrchestrationOperateScope,
-  buildRemoteOpenUrl,
   EditorId,
   type EnvironmentId,
   type ResolvedKeybindingsConfig,
@@ -9,16 +8,8 @@ import {
 import { memo, use, useEffect, useRef } from "react";
 import { BackgroundThreadContext } from "./backgroundThread";
 import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../keybindings";
-import { usePreferredEditor } from "../../editorPreferences";
-import { editorLabelForPlatform } from "../../editorLabels";
-import {
-  openRemoteEditorUrl,
-  useRemoteCapableEditors,
-  useRemoteOpenHint,
-  useRemoteOpenState,
-} from "../../remoteOpen";
 import { useEnvironment } from "../../state/environments";
-import { ChevronDownIcon, FolderClosedIcon, SquareArrowOutUpRightIcon } from "lucide-react";
+import { ChevronDownIcon, SquareArrowOutUpRightIcon } from "lucide-react";
 
 import { Group, GroupSeparator } from "../ui/group";
 import {
@@ -32,37 +23,9 @@ import {
   MenuSubPopup,
   MenuTrigger,
 } from "../ui/menu";
-import {
-  AntigravityIcon,
-  CursorIcon,
-  FileExplorerIcon,
-  FinderIcon,
-  Icon,
-  KiroIcon,
-  TraeIcon,
-  VisualStudioCode,
-  VisualStudioCodeInsiders,
-  VSCodium,
-  Zed,
-} from "../Icons";
-import {
-  AquaIcon,
-  CLionIcon,
-  DataGripIcon,
-  DataSpellIcon,
-  GoLandIcon,
-  IntelliJIdeaIcon,
-  PhpStormIcon,
-  PyCharmIcon,
-  RiderIcon,
-  RubyMineIcon,
-  RustRoverIcon,
-  WebStormIcon,
-} from "../JetBrainsIcons";
+import { cn } from "~/lib/utils";
 import { announce } from "~/lib/announce";
-import { cn, isMacPlatform, isWindowsPlatform } from "~/lib/utils";
-import { shellEnvironment } from "~/state/shell";
-import { useAtomCommand } from "~/state/use-atom-command";
+import { editorLabelForPlatform } from "../../editorLabels";
 import {
   THREAD_DETAILS_PANEL_CHEVRON_CLASS,
   THREAD_DETAILS_PANEL_ICON_CLASS,
@@ -70,137 +33,9 @@ import {
   THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
   THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
 } from "./threadDetailsPanelStyles";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+import { readEnvironmentScope } from "~/state/session";
 import { useComposerMenuState } from "./useComposerMenuState";
-
-type OpenInOption = {
-  label: string;
-  Icon: Icon;
-  value: EditorId;
-  kind: "brand" | "generic";
-};
-
-const resolveOpenInOptions = (platform: string, availableEditors: ReadonlyArray<EditorId>) => {
-  const baseOptions: ReadonlyArray<Omit<OpenInOption, "label">> = [
-    {
-      Icon: CursorIcon,
-      value: "cursor",
-      kind: "brand",
-    },
-    {
-      Icon: TraeIcon,
-      value: "trae",
-      kind: "brand",
-    },
-    {
-      Icon: KiroIcon,
-      value: "kiro",
-      kind: "brand",
-    },
-    {
-      Icon: VisualStudioCode,
-      value: "vscode",
-      kind: "brand",
-    },
-    {
-      Icon: VisualStudioCodeInsiders,
-      value: "vscode-insiders",
-      kind: "brand",
-    },
-    {
-      Icon: VSCodium,
-      value: "vscodium",
-      kind: "brand",
-    },
-    {
-      Icon: Zed,
-      value: "zed",
-      kind: "brand",
-    },
-    {
-      Icon: AntigravityIcon,
-      value: "antigravity",
-      kind: "brand",
-    },
-    {
-      Icon: IntelliJIdeaIcon,
-      value: "idea",
-      kind: "brand",
-    },
-    {
-      Icon: AquaIcon,
-      value: "aqua",
-      kind: "brand",
-    },
-    {
-      Icon: CLionIcon,
-      value: "clion",
-      kind: "brand",
-    },
-    {
-      Icon: DataGripIcon,
-      value: "datagrip",
-      kind: "brand",
-    },
-    {
-      Icon: DataSpellIcon,
-      value: "dataspell",
-      kind: "brand",
-    },
-    {
-      Icon: GoLandIcon,
-      value: "goland",
-      kind: "brand",
-    },
-    {
-      Icon: PhpStormIcon,
-      value: "phpstorm",
-      kind: "brand",
-    },
-    {
-      Icon: PyCharmIcon,
-      value: "pycharm",
-      kind: "brand",
-    },
-    {
-      Icon: RiderIcon,
-      value: "rider",
-      kind: "brand",
-    },
-    {
-      Icon: RubyMineIcon,
-      value: "rubymine",
-      kind: "brand",
-    },
-    {
-      Icon: RustRoverIcon,
-      value: "rustrover",
-      kind: "brand",
-    },
-    {
-      Icon: WebStormIcon,
-      value: "webstorm",
-      kind: "brand",
-    },
-    {
-      Icon: isMacPlatform(platform)
-        ? FinderIcon
-        : isWindowsPlatform(platform)
-          ? FileExplorerIcon
-          : FolderClosedIcon,
-      value: "file-manager",
-      kind: isMacPlatform(platform) || isWindowsPlatform(platform) ? "brand" : "generic",
-    },
-  ];
-  const availableEditorSet = new Set(availableEditors);
-  return baseOptions
-    .filter((option) => availableEditorSet.has(option.value))
-    .map((option) => ({ ...option, label: editorLabelForPlatform(option.value, platform) }));
-};
-
-function getOpenInIconClass(kind: OpenInOption["kind"]) {
-  return cn(kind === "brand" ? "text-foreground opacity-100" : "text-muted-foreground");
-}
+import { getOpenInIconClass, useEditorLauncher } from "./useEditorLauncher";
 
 export const OpenInPicker = memo(function OpenInPicker({
   environmentId,
@@ -228,52 +63,20 @@ export const OpenInPicker = memo(function OpenInPicker({
   const isPanel = displayMode === "panel";
   const ActionGroup = isPanel ? "div" : Group;
   const panelAnchorRef = useRef<HTMLDivElement | null>(null);
-  const openInEditorMutation = useAtomCommand(shellEnvironment.openInEditor, "open in editor");
-  const remote = useRemoteOpenState(environmentId);
-  const canOperateHost = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
-  const isHostEditorDenied = remote.mode === "local-exec" && !canOperateHost;
-  const canOpenEditor = remote.mode !== "remote-unavailable" && !isHostEditorDenied;
+  const {
+    remote,
+    remoteHintSeen,
+    isHostEditorDenied,
+    canOpenEditor,
+    preferredEditor,
+    setPreferredEditor,
+    options,
+    primaryOption,
+    open,
+  } = useEditorLauncher(environmentId, availableEditors, revealFileManager);
   const [menuOpen, setMenuOpen] = useComposerMenuState(isHostEditorDenied);
-  const remoteCapableEditors = useRemoteCapableEditors();
-  const [remoteHintSeen, markRemoteHintSeen] = useRemoteOpenHint();
   const environmentLabel = useEnvironment(environmentId)?.label ?? "this machine";
-  // Remote editors run on the viewing machine; only desktop can probe that PATH.
-  const effectiveEditors = remote.mode === "local-exec" ? availableEditors : remoteCapableEditors;
-  const [preferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
-
-  const openInEditor = async (editorId: EditorId | null): Promise<boolean> => {
-    if (!openInCwd) return false;
-    const editor = editorId ?? preferredEditor;
-    if (!editor) return false;
-    if (remote.mode === "remote-unavailable") return false;
-    if (remote.mode === "remote-links") {
-      const url = buildRemoteOpenUrl({
-        editor,
-        ...remote.host,
-        absolutePath: openInCwd,
-        isFile: openInCwdIsFile,
-      });
-      if (url === undefined) return false;
-      // Only record hint-seen/preferred when the shell actually accepted
-      // the URL (an older desktop build can refuse the editor scheme).
-      const opened = await openRemoteEditorUrl(url);
-      if (!opened) return false;
-      markRemoteHintSeen();
-      setPreferredEditor(editor);
-      return true;
-    }
-    if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
-    const result = openInEditorMutation({
-      environmentId,
-      input: {
-        cwd: openInCwd,
-        editor,
-        ...(revealFileManager && editor === "file-manager" ? { reveal: true } : {}),
-      },
-    });
-    setPreferredEditor(editor);
-    return (await result)._tag === "Success";
-  };
+  const openInEditor = (editorId: EditorId | null) => open(editorId, openInCwd, openInCwdIsFile);
 
   const openFavoriteEditorShortcutLabel = shortcutLabelForCommand(
     keybindings,
@@ -312,9 +115,6 @@ export const OpenInPicker = memo(function OpenInPicker({
     preferredEditor,
     remote.mode,
   ]);
-  // Derive after the shortcut effect to preserve the editor list's compiler cache.
-  const options = resolveOpenInOptions(navigator.platform, effectiveEditors);
-  const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
   const primaryLabel = isPanel ? `Open in ${primaryOption?.label ?? "editor"}` : "Open";
 
   const editorItems = (
