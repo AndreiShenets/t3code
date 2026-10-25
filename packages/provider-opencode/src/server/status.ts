@@ -455,11 +455,7 @@ export interface OpenCode2Model extends OpenCodeRelease {
   readonly variants: ReadonlyArray<{ readonly id: string }>;
 }
 
-/**
- * One OpenCode instance fronts several providers, and their catalogues overlap:
- * OpenCode Zen and OpenCode Go both list Step 5 Preview Free. Naming the
- * sub-provider is what tells two such rows apart.
- */
+// Sub-provider names distinguish overlapping catalog entries.
 function subProviderLabelFor(input: {
   readonly providerID: string;
   readonly providerName?: string;
