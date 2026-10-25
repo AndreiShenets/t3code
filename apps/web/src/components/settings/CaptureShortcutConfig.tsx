@@ -12,6 +12,7 @@ import * as Cause from "effect/Cause";
 import { useState } from "react";
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
+import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import { useRenderedAppearance } from "../../hooks/useTheme";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useCodeDisplay } from "../../hooks/useCodeDisplay";
@@ -78,6 +79,7 @@ export function CaptureShortcutConfig({
     diffStyle: "unified",
     theme: resolveDiffThemeName(resolvedTheme),
     overflow: "wrap",
+    preferredHighlighter: PREFERRED_HIGHLIGHTER,
     unsafeCSS: CODE_WHITESPACE_UNSAFE_CSS,
     onPostRender: (container, _instance, phase) => onCodePostRender(container, "", phase),
   };
