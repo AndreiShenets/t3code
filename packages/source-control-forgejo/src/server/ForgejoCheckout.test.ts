@@ -33,8 +33,9 @@ it.effect(
       ])
         yield* git.run({ operation: "test.setup", command: "git", cwd: source, args });
       yield* fs.writeFileString(path.join(source, "base.txt"), "base\n");
+      yield* fs.writeFileString(path.join(source, ".gitattributes"), "*.txt -text\n");
       for (const args of [
-        ["add", "base.txt"],
+        ["add", "base.txt", ".gitattributes"],
         ["commit", "-m", "base"],
       ])
         yield* git.run({ operation: "test.setup", command: "git", cwd: source, args });
