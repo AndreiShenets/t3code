@@ -55,6 +55,7 @@ export function useComposerMenuItems({
   pullRequestRepository,
   threadPullRequests,
   planModeUiEnabled,
+  mcpAvailable,
   compactSlashCommandAvailable,
   selectedProvider,
   selectedProviderSkills,
@@ -69,6 +70,7 @@ export function useComposerMenuItems({
   readonly pullRequestRepository: string | null;
   readonly threadPullRequests: ReadonlyArray<ThreadPullRequestLink> | undefined;
   readonly planModeUiEnabled: boolean;
+  readonly mcpAvailable: boolean;
   readonly compactSlashCommandAvailable: boolean;
   readonly selectedProvider: ProviderDriverKind;
   readonly selectedProviderSkills: ServerProvider["skills"];
@@ -180,6 +182,17 @@ export function useComposerMenuItems({
     }
     if (composerTrigger.kind === "slash-command") {
       const builtInSlashCommandItems = [
+        ...(mcpAvailable
+          ? [
+              {
+                id: "slash:mcp",
+                type: "slash-command" as const,
+                command: "mcp" as const,
+                label: "/mcp",
+                description: "Manage MCP connections for this workspace",
+              },
+            ]
+          : []),
         {
           id: "slash:model",
           type: "slash-command",
