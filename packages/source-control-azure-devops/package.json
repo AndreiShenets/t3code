@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./client/customDefinition": {
-      "types": "./src/client/customDefinition.ts",
-      "import": "./src/client/customDefinition.ts"
+    "./shared/customDefinition": {
+      "types": "./src/shared/customDefinition.ts",
+      "import": "./src/shared/customDefinition.ts"
     },
     "./server/customDriver": {
       "types": "./src/server/customDriver.ts",
@@ -23,37 +23,9 @@
       "types": "./src/server/AzureDevOpsServerSourceControlProvider.ts",
       "import": "./src/server/AzureDevOpsServerSourceControlProvider.ts"
     },
-    "./client/definition": {
-      "types": "./src/client/definition.ts",
-      "import": "./src/client/definition.ts"
-    },
-    "./server/AzureDevOpsCli": {
-      "types": "./src/server/AzureDevOpsCli.ts",
-      "import": "./src/server/AzureDevOpsCli.ts"
-    },
-    "./server/azureDevOpsDiff": {
-      "types": "./src/server/azureDevOpsDiff.ts",
-      "import": "./src/server/azureDevOpsDiff.ts"
-    },
-    "./server/AzureDevOpsPullRequestCli": {
-      "types": "./src/server/AzureDevOpsPullRequestCli.ts",
-      "import": "./src/server/AzureDevOpsPullRequestCli.ts"
-    },
-    "./server/azureDevOpsPullRequestJson": {
-      "types": "./src/server/azureDevOpsPullRequestJson.ts",
-      "import": "./src/server/azureDevOpsPullRequestJson.ts"
-    },
-    "./server/AzureDevOpsPullRequestProvider": {
-      "types": "./src/server/AzureDevOpsPullRequestProvider.ts",
-      "import": "./src/server/AzureDevOpsPullRequestProvider.ts"
-    },
-    "./server/azureDevOpsPullRequests": {
-      "types": "./src/server/azureDevOpsPullRequests.ts",
-      "import": "./src/server/azureDevOpsPullRequests.ts"
-    },
-    "./server/AzureDevOpsSourceControlProvider": {
-      "types": "./src/server/AzureDevOpsSourceControlProvider.ts",
-      "import": "./src/server/AzureDevOpsSourceControlProvider.ts"
+    "./shared/definition": {
+      "types": "./src/shared/definition.ts",
+      "import": "./src/shared/definition.ts"
     },
     "./server/driver": {
       "types": "./src/server/driver.ts",

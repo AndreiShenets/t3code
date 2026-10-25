@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
-import { settings as serverSettings } from "../client/customDefinition.ts";
+import { settings as serverSettings } from "../shared/customDefinition.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 export interface AzureDevOpsServerContext {
