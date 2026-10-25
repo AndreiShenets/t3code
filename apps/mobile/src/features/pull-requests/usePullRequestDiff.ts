@@ -140,7 +140,7 @@ export function usePullRequestDiff(
     patch,
     snapshotForPath: (path: string) => {
       const page = pages.find((page) => {
-        const parsed = parseCache.get(page.result);
+        const parsed = getCachedPullRequestDiffPages([page], key, terminology);
         return parsed?.kind === "files" && parsed.files.some((file) => file.path === path);
       });
       return page?.result;

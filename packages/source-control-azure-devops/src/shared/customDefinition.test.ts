@@ -39,16 +39,16 @@ describe("Azure DevOps Server client", () => {
   it("recognizes branded servers without claiming cloud URLs or trusting another collection", () => {
     const url = `${remoteUrl}/pullrequest/7`;
     expect(definition.isChangeRequestReference(url)).toBe(true);
-    expect(
-      isChangeRequestUrl("https://dev.azure.com/org/project/_git/repo/pullrequest/7"),
-    ).toBe(false);
-    expect(
-      isChangeRequestUrl("https://org.visualstudio.com/project/_git/repo/pullrequest/7"),
-    ).toBe(false);
+    expect(isChangeRequestUrl("https://dev.azure.com/org/project/_git/repo/pullrequest/7")).toBe(
+      false,
+    );
+    expect(isChangeRequestUrl("https://org.visualstudio.com/project/_git/repo/pullrequest/7")).toBe(
+      false,
+    );
     expect(isChangeRequestUrl("https://code.example/project/pullrequest/7")).toBe(false);
-    expect(
-      isChangeRequestUrl("javascript://code.example/project/_git/repo/pullrequest/7"),
-    ).toBe(false);
+    expect(isChangeRequestUrl("javascript://code.example/project/_git/repo/pullrequest/7")).toBe(
+      false,
+    );
     const link = parseChangeRequestUrl(url)!;
     expect(definition.isChangeRequestInRepository(identity, link)).toBe(true);
     expect(

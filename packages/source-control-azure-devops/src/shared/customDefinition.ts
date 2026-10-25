@@ -86,7 +86,8 @@ export const definition = defineSourceControl({
       const url = new URL(remoteUrl);
       return (url.protocol === "http:" || url.protocol === "https:") &&
         /\/_git\/[^/]+(?:\.git)?\/?$/iu.test(url.pathname) &&
-        cloudDefinition.recognizeRemote({ remoteUrl, host: url.host, hostname: url.hostname }) === null
+        cloudDefinition.recognizeRemote({ remoteUrl, host: url.host, hostname: url.hostname }) ===
+          null
         ? `${url.host.toLowerCase()}/${key.split("/").slice(1).join("/")}`
         : null;
     } catch {
@@ -94,8 +95,7 @@ export const definition = defineSourceControl({
     }
   },
   canonicalRepositoryKey: (key) =>
-    /^[^/]+\/(?:[^/]+\/)+_git\/[^/]+$/iu.test(key) &&
-    !cloudDefinition.canonicalRepositoryKey(key)
+    /^[^/]+\/(?:[^/]+\/)+_git\/[^/]+$/iu.test(key) && !cloudDefinition.canonicalRepositoryKey(key)
       ? key
       : null,
   changeRequestHost: (identity) => {

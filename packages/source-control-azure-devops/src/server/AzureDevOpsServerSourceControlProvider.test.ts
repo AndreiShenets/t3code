@@ -88,7 +88,7 @@ it.effect.each([
       resolveContext: () => Effect.die("Unexpected registry lookup"),
       identity: {
         canonicalKey: "ado.example/collection/project/_git/repo",
-        provider: "unknown",
+        provider: SourceControlProviderKind.make("unknown"),
         rootPath: "/repo",
         locator: { source: "git-remote", remoteName: "origin", remoteUrl },
       },
