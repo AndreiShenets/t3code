@@ -296,6 +296,13 @@ describe("diff file reconciliation", () => {
     expect(before?.kind).toBe("files");
     expect(after?.kind).toBe("files");
     if (before?.kind !== "files" || after?.kind !== "files") return;
+    expect(after.files).toHaveLength(2);
+    const withoutNewline = getRenderablePatch(patch.trimEnd(), "new-file-before");
+    expect(withoutNewline?.kind).toBe("files");
+    if (withoutNewline?.kind !== "files") return;
+    expect(buildFileDiffRenderKey(withoutNewline.files[0]!)).not.toBe(
+      buildFileDiffRenderKey(before.files[0]!),
+    );
     expect(buildFileDiffContentVersion(after.files[0]!)).toBe(
       buildFileDiffContentVersion(before.files[0]!),
     );
