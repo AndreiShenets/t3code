@@ -78,6 +78,9 @@ import { DiffPanelLoadingState } from "../DiffPanelShell";
 import { useDiffWorkerPool } from "../DiffWorkerPoolProvider";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { DiffFileTree } from "../diffs/DiffFileTree";
+import { DiffFileHeaderActions } from "../diffs/DiffFileHeaderActions";
+import { useDiffEditorAction } from "../diffs/useDiffEditorAction";
+import { diffHeaderTogglePath } from "../diffs/diffHeaderInteraction";
 import { useCodeViewFileReveal } from "../diffs/useCodeViewFileReveal";
 import { diffFileTreeEntries } from "../diffs/diffFileTree.logic";
 import { StyledDiffCodeView } from "../diffs/StyledDiffCodeView";
@@ -264,6 +267,8 @@ function PullRequestCodeTab({
   refreshToken = 0,
   backgroundRefreshToken = 0,
   revealRequest = null,
+  onOpenFile,
+  fileWorkspace,
 }: {
   scrollerRef: (node: HTMLDivElement | null) => void;
   environmentId: EnvironmentId;
@@ -279,7 +284,14 @@ function PullRequestCodeTab({
   refreshToken?: number;
   backgroundRefreshToken?: number;
   revealRequest?: { readonly path: string; readonly nonce: number } | null;
+  onOpenFile?: ((path: string) => void) | undefined;
+  fileWorkspace?: { workspaceRoot: string; repositoryRoot: string | undefined } | null | undefined;
 }) {
+  const getEditorAction = useDiffEditorAction(
+    environmentId,
+    fileWorkspace?.workspaceRoot,
+    fileWorkspace?.repositoryRoot,
+  );
   const resolvedTheme = useRenderedAppearance();
   // Initialize the shared tokenizer and workers while the diff request is still pending.
   useDiffWorkerPool();
@@ -1423,25 +1435,13 @@ function PullRequestCodeTab({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           className="relative min-h-0 min-w-0 flex-1"
-          // Headers live in shadow DOM; composedPath crosses that boundary.
           onClickCapture={(event) => {
-            const composedPath = event.nativeEvent.composedPath?.() ?? [];
-            for (const node of composedPath) {
-              if (!(node instanceof HTMLElement)) continue;
-              if (node instanceof HTMLButtonElement || node instanceof HTMLAnchorElement) {
-                return;
-              }
-              if (node.hasAttribute("data-viewed-toggle")) return;
-              if (node.hasAttribute("data-diffs-header")) {
-                const filePath = node.querySelector("[data-title]")?.textContent?.trim();
-                if (filePath === undefined || filePath === "") return;
-                const item = items.find(
-                  (candidate) => resolveFileDiffPath(candidate.fileDiff) === filePath,
-                );
-                if (item !== undefined) toggleFile(item.id);
-                return;
-              }
-            }
+            const filePath = diffHeaderTogglePath(event.nativeEvent);
+            if (!filePath) return;
+            const item = items.find(
+              (candidate) => resolveFileDiffPath(candidate.fileDiff) === filePath,
+            );
+            if (item !== undefined) toggleFile(item.id);
           }}
         >
           {/* The viewer must own its scroll element to position virtual rows within it. */}
@@ -1456,6 +1456,15 @@ function PullRequestCodeTab({
               options={diffViewOptions}
               renderCodeViewFooter={renderCodeViewFooter}
               renderHeaderPrefix={renderHeaderPrefix}
+              renderHeaderFilenameSuffix={(item) =>
+                item.type === "diff" ? (
+                  <DiffFileHeaderActions
+                    filePath={resolveFileDiffPath(item.fileDiff)}
+                    onOpenFile={onOpenFile}
+                    editorAction={getEditorAction(resolveFileDiffPath(item.fileDiff))}
+                  />
+                ) : null
+              }
               renderHeaderMetadata={renderHeaderMetadata}
               renderAnnotation={renderAnnotation}
               // Find may repeat requests before render; only unfold, never toggle.
