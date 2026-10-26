@@ -8,7 +8,7 @@ import {
 import { Editor, EditStateManager, type EditorFactory } from "@pierre/diffs/edit";
 import { EditProvider, File as ReactFile } from "@pierre/diffs/react";
 import { createElement, type CSSProperties } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { act, render } from "../../test/render";
 
