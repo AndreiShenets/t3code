@@ -50,7 +50,7 @@ const decodeProperties = Schema.decodeUnknownSync(
 function fixture(
   options: {
     readonly hashes?: Readonly<Record<string, number>>;
-    readonly changes?: ReadonlyArray<Json.Change>;
+    readonly changes?: ReadonlyArray<typeof Json.Change.Encoded>;
     readonly nativeResponse?: unknown;
     readonly nativeWriteResponse?: unknown;
     readonly failModification?: number;
@@ -161,6 +161,26 @@ function fixture(
 }
 
 describe("Azure native viewed files", () => {
+  it.effect("keeps viewed-file reads available when a deleted item has a null path", () =>
+    Effect.gen(function* () {
+      const { read } = yield* fixture({
+        changes: [
+          one,
+          {
+            changeType: "delete",
+            originalPath: "/deleted.ts",
+            item: { path: null, originalObjectId: "c".repeat(40) },
+          },
+        ],
+      });
+
+      const result = yield* read();
+
+      expect(result.files).toEqual([{ path: "one.ts", state: "unviewed" }]);
+      expect(result.truncated).toBe(true);
+    }),
+  );
+
   it.effect("keeps empty batches as no-ops and refuses absent project metadata", () =>
     Effect.gen(function* () {
       const empty = yield* fixture();

@@ -44,6 +44,12 @@ const CHANGE = {
   changeType: "edit",
   item: { path: "/file.ts", objectId: "blob" },
 };
+const DELETED_CHANGE = {
+  changeTrackingId: 15,
+  originalPath: "/Auth.Mcp/Authorization/McpAccessRightRequirement.cs",
+  item: { path: null, originalObjectId: "deleted-blob" },
+  changeType: "delete",
+};
 const DRAFT = {
   path: "file.ts",
   body: "Please adjust",
@@ -438,6 +444,85 @@ describe("Azure DevOps Server reviews", () => {
       expect(diff).toMatchObject({ baseSha: "base", headSha: "head" });
       expect(diff.patch).toContain("+new");
       expect(diff.patch).toContain("-old");
+    }),
+  );
+
+  it.effect("keeps deleted files whose item path is null in the diff and PR details", () =>
+    Effect.gen(function* () {
+      const { provider, reads } = yield* fixture({
+        response: (url) =>
+          url.pathname.endsWith("/changes")
+            ? {
+                changeEntries: [CHANGE, DELETED_CHANGE],
+              }
+            : undefined,
+      });
+
+      const diff = yield* provider.getDiff(INPUT);
+      const detail = yield* provider.getChangeRequest(INPUT);
+
+      expect(diff.patch).toContain("+new");
+      expect(diff.patch).toContain(
+        "--- a/Auth.Mcp/Authorization/McpAccessRightRequirement.cs\n+++ /dev/null",
+      );
+      expect(diff.patch).toContain("-old");
+      expect(detail.changedFiles).toBe(2);
+      const deletedFileReads = reads
+        .map((read) => new URL(read.url))
+        .filter(
+          (url) =>
+            url.pathname.endsWith("/items") &&
+            url.searchParams.get("path") === "/Auth.Mcp/Authorization/McpAccessRightRequirement.cs",
+        );
+      expect(deletedFileReads).toHaveLength(1);
+      expect(deletedFileReads[0]?.searchParams.get("versionDescriptor.version")).toBe("base");
+    }),
+  );
+
+  it.effect("anchors left-side comments on deleted files whose item path is null", () =>
+    Effect.gen(function* () {
+      const { provider, writes } = yield* fixture({
+        response: (url) =>
+          url.pathname.endsWith("/changes") ? { changeEntries: [DELETED_CHANGE] } : undefined,
+      });
+
+      yield* provider.submitReview({
+        ...INPUT,
+        verdict: "comment",
+        body: "",
+        comments: [
+          {
+            ...DRAFT,
+            path: "Auth.Mcp/Authorization/McpAccessRightRequirement.cs",
+            position: { kind: "deleted", oldLine: 1 },
+          },
+        ],
+      });
+
+      expect(writes).toHaveLength(1);
+      expect(writes[0]?.body).toMatchObject({
+        threadContext: {
+          filePath: "/Auth.Mcp/Authorization/McpAccessRightRequirement.cs",
+          leftFileStart: { line: 1 },
+        },
+        pullRequestThreadContext: { changeTrackingId: 15 },
+      });
+    }),
+  );
+
+  it.effect("rejects changes without any usable path before reading file contents", () =>
+    Effect.gen(function* () {
+      const { provider, reads } = yield* fixture({
+        response: (url) =>
+          url.pathname.endsWith("/changes")
+            ? { changeEntries: [{ changeType: "delete", item: { path: null } }] }
+            : undefined,
+      });
+
+      const error = yield* provider.getDiff(INPUT).pipe(Effect.flip);
+
+      expect(error.operation).toBe("decode");
+      expect(reads.some((read) => new URL(read.url).pathname.endsWith("/items"))).toBe(false);
     }),
   );
 });
