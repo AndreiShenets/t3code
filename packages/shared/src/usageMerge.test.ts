@@ -11,8 +11,15 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import { isModelCostUnknown, mergeUsage, type EnvironmentUsage } from "./usageMerge.ts";
+import {
+  usageModelKey,
+  usageSeriesKey,
+  usageSeriesTotals,
+  usageSeriesValue,
+} from "./usageSeries.ts";
 
 const decodeSummary = Schema.decodeUnknownSync(UsageSummary);
+const encodeSummary = Schema.encodeSync(UsageSummary);
 
 function bucket(overrides: Partial<UsageBucket> = {}): UsageBucket {
   return {
@@ -78,6 +85,66 @@ function environment(id: string, usageSummary: UsageSummary): EnvironmentUsage {
 }
 
 describe("mergeUsage", () => {
+  it("splits upstream model rows and daily/hourly series without double counting sessions or sources", () => {
+    const makeBucket = (upstreamProvider?: string) =>
+      bucket({
+        provider: "opencode",
+        model: "gpt-6.1-sol",
+        hourStart: "2026-08-07T00:00:00Z",
+        ...(upstreamProvider === undefined ? {} : { upstreamProvider }),
+      });
+    const input = summary(
+      [makeBucket("openai"), makeBucket("github-copilot"), makeBucket()],
+      [{ provider: "opencode", hostId: "pc", homePath: "/opencode", distinctSessions: 1 }],
+    );
+    const decoded = decodeSummary(encodeSummary(input));
+    expect(decoded.buckets.map((bucket) => bucket.upstreamProvider)).toEqual([
+      "openai",
+      "github-copilot",
+      undefined,
+    ]);
+    const merged = mergeUsage(
+      [environment("a", decoded), environment("b", decoded)],
+      USAGE_CONTRACT_VERSION,
+    );
+    expect(merged.models).toHaveLength(3);
+    expect(new Set(merged.models.map(usageModelKey)).size).toBe(3);
+    expect(merged.costUsd).toBe(30);
+    expect(merged.sessions).toBe(1);
+    expect(merged.providers).toHaveLength(1);
+    expect(merged.providers[0]?.sessions).toBe(1);
+    const series = usageSeriesTotals(merged);
+    expect(new Set(series.map(usageSeriesKey)).size).toBe(3);
+    for (const entry of series) {
+      expect(entry.costUsd).toBe(10);
+      expect(usageSeriesValue(merged.daily[0], entry)?.costUsd).toBe(10);
+      expect(usageSeriesValue(merged.hourly[0], entry)?.costUsd).toBe(10);
+    }
+  });
+
+  it("keeps an absent upstream cell from a newer partial scan", () => {
+    const source = { provider: "opencode" as const, hostId: "pc", homePath: "/opencode" };
+    const complete = summary(
+      [bucket({ provider: "opencode", upstreamProvider: "openai" })],
+      [source],
+    );
+    const partial = {
+      ...summary([bucket({ provider: "opencode", upstreamProvider: "github-copilot" })], [source]),
+      readAt: "2026-08-07T01:00:00Z",
+      sources: complete.sources.map((source) => ({ ...source, status: "partial" as const })),
+    };
+    const merged = mergeUsage(
+      [environment("a", complete), environment("b", partial)],
+      USAGE_CONTRACT_VERSION,
+    );
+    expect(merged.models.map((model) => model.upstreamProvider).sort()).toEqual([
+      "github-copilot",
+      "openai",
+    ]);
+    expect(merged.costUsd).toBe(20);
+    expect(merged.sessions).toBe(1);
+  });
+
   it("counts a Cursor account once across servers while retaining each server's other providers", () => {
     const account = {
       provider: "cursor" as const,
