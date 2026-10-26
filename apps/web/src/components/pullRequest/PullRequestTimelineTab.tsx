@@ -5,6 +5,7 @@ import {
 import { useAtomCommand } from "~/state/use-atom-command";
 import type {
   EnvironmentId,
+  PullRequestCapabilities,
   PullRequestActor,
   PullRequestComment,
   PullRequestDetailView,
@@ -20,6 +21,7 @@ import {
   MessageSquareIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
@@ -58,6 +60,7 @@ import {
 import { PullRequestGlyph } from "./pullRequestIcons";
 
 interface ReactionSurface {
+  readonly capabilities: PullRequestCapabilities;
   readonly canReact: boolean;
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef | null;
@@ -95,7 +98,7 @@ function TimelineBody({
 }
 
 function ActorName({ actor }: { actor: PullRequestActor | null }) {
-  return <span className="font-semibold text-foreground">{actor?.login ?? "ghost"}</span>;
+  return <span className="font-semibold text-foreground">{getPullRequestActorName(actor)}</span>;
 }
 
 function TimelineMarker({
@@ -246,6 +249,7 @@ function ConversationCard({
               className="ml-auto justify-end"
               reactions={event.reactions}
               canReact={reactions.canReact}
+              capabilities={reactions.capabilities}
               subjectId={event.id}
               environmentId={reactions.environmentId}
               reference={reactions.reference}
@@ -413,7 +417,7 @@ function ReviewThreadEvent({
         {thread.isOutdated ? <span className="shrink-0 font-medium">Outdated</span> : null}
         {expanded ? null : (
           <span className="shrink-0">
-            · {event.actor?.login ?? "ghost"}
+            · {getPullRequestActorName(event.actor)}
             {replyCount > 0 ? (
               <>
                 {" "}
@@ -603,6 +607,7 @@ function ReviewVerdictEvent({
             className="ml-auto justify-end"
             reactions={event.reactions}
             canReact={reactions.canReact}
+            capabilities={reactions.capabilities}
             subjectId={event.id}
             environmentId={reactions.environmentId}
             reference={reactions.reference}
@@ -647,6 +652,7 @@ export function PullRequestTimelineTab({
   const term = sourceControlClients.get(detail.provider).changeRequest.singular;
   const newestCommitAt = newestPullRequestCommitAt(detail.commits);
   const reactions: ReactionSurface = {
+    capabilities: detail.capabilities,
     canReact: detail.capabilities.reactions === true,
     environmentId,
     threadRef,
