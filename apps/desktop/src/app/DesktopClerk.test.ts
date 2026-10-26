@@ -51,6 +51,7 @@ const layerDesktopClerk = (
     exists: () => Effect.succeed(false),
   }),
   shell: ElectronShell.ElectronShell["Service"] = {
+    openPath: () => Effect.succeed(false),
     openExternal: () => Effect.succeed(true),
     openSystemSettings: () => Effect.succeed(false),
     copyText: () => Effect.void,
@@ -359,6 +360,7 @@ it.effect.each(["startup", "open-url", "early-second-instance"] as const)(
       const link = codexAuthHandoffUrl(request, true);
       const delivered = Promise.withResolvers<string>();
       const shell = ElectronShell.ElectronShell.of({
+        openPath: () => Effect.succeed(false),
         openExternal: (value) =>
           Effect.promise(async () => {
             const url = new URL(String(value));
