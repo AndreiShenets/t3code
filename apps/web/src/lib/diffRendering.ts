@@ -169,7 +169,7 @@ export function getRenderablePatch(
   options: RenderablePatchOptions = {},
 ): RenderablePatch | null {
   if (!patch) return null;
-  const normalizedPatch = patch.trim();
+  const normalizedPatch = patch.trimStart();
   if (normalizedPatch.length === 0) return null;
 
   try {

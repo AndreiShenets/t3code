@@ -217,15 +217,9 @@ describe("Pierre whitespace decoration", () => {
   it.each([2, 8])("uses native editing commands at %s-column tab stops", async (width) => {
     using host = await setup();
     const { element, root, options } = host;
+    element.style.setProperty("--diffs-tab-size", String(width));
     const viewer = new File(options);
     const editor = new Editor("file");
-    const computedStyle = window.getComputedStyle.bind(window);
-    using _styleSpy = vi.spyOn(window, "getComputedStyle").mockImplementation((node) => {
-      const style = computedStyle(node);
-      // jsdom cannot resolve the shadow stylesheet's --diffs-tab-size variable.
-      if (node.matches("[data-content]")) style.tabSize = String(width);
-      return style;
-    });
     try {
       viewer.render({
         file: { name: "notes.txt", contents: "        value\n" },
@@ -321,6 +315,7 @@ describe("Pierre whitespace decoration", () => {
       });
       const container = screen.container.querySelector<HTMLElement>("diffs-container")!;
       const content = container.shadowRoot!.querySelector("[data-content]")!;
+      currentEditor!.focus();
       currentEditor!.setSelections([
         { start: { line: 0, character: 7 }, end: { line: 0, character: 7 }, direction: "none" },
       ]);

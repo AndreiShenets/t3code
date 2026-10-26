@@ -168,7 +168,7 @@ async function setup() {
 }
 
 function mockDate(date: Date) {
-  const timers = fakeTimers();
+  const timers = fakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(date);
   return timers;
 }
