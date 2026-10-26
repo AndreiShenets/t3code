@@ -8,7 +8,10 @@ import type {
   ProviderChangeRequest,
   ProviderChangeRequestActivity,
 } from "@t3tools/source-control-core/server/PullRequestProvider";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
+import * as SchemaIssue from "effect/SchemaIssue";
 
 import type { AzureDevOpsServerContext } from "./AzureDevOpsServerClient.ts";
 import type { AzureDevOpsChangeEntry } from "./azureDevOpsPullRequestJson.ts";
@@ -99,7 +102,7 @@ export const Thread = Schema.Struct({
 });
 export type Thread = typeof Thread.Type;
 
-export const Change = Schema.Struct({
+const ChangeWithPath = Schema.Struct({
   changeTrackingId: Schema.optional(Schema.Int),
   changeType: Schema.optional(Schema.String),
   sourceServerItem: Schema.optional(Schema.String),
@@ -112,6 +115,24 @@ export const Change = Schema.Struct({
     gitObjectType: Schema.optional(Schema.String),
   }),
 });
+export const Change = ChangeWithPath.mapFields((fields) => ({
+  ...fields,
+  item: fields.item.mapFields((itemFields) => ({
+    ...itemFields,
+    path: Schema.NullOr(Schema.String),
+  })),
+})).pipe(
+  Schema.decodeTo(ChangeWithPath, {
+    decode: SchemaGetter.transformEffect((raw) => {
+      // Azure DevOps Server returns null item paths for deletions, with the name in originalPath.
+      const path = raw.item.path ?? raw.sourceServerItem ?? raw.originalPath;
+      return path === undefined
+        ? Effect.fail(new SchemaIssue.InvalidValue({ message: "A changed item must have a path." }))
+        : Effect.succeed({ ...raw, item: { ...raw.item, path } });
+    }),
+    encode: SchemaGetter.passthrough(),
+  }),
+);
 export type Change = typeof Change.Type;
 
 export function actor(identity: typeof Identity.Type): PullRequestActor {
