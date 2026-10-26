@@ -51,6 +51,7 @@ export function ComposerMcpSheet(props: {
     void run(next);
   };
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Load workspace MCP state on mount and invalidate pending responses on unmount.
   useEffect(() => {
     void run(command);
     return () => {
