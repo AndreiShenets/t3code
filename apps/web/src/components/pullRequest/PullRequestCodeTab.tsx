@@ -134,6 +134,8 @@ const COMMIT_PAGE_SIZE = 10;
 const PULL_REQUEST_FILE_TREE_STORAGE_KEY = "t3code.pullRequestFileTreeOpen";
 
 interface DiffSlice {
+  readonly headSha: string | undefined;
+  readonly baseSha: string | undefined;
   readonly source: PullRequestDiffResult;
   readonly cursor: string | null;
   readonly patch: string;
@@ -232,6 +234,8 @@ interface MutableAnnotationGroup {
 }
 
 interface DraftAnchor {
+  readonly headSha: string | undefined;
+  readonly baseSha: string | undefined;
   readonly fileKey: string;
   readonly path: string;
   readonly oldPath: string | null;
@@ -360,6 +364,8 @@ function PullRequestCodeTab({
     setSliceState((previous) => {
       const slices = previous.key === scopeKey ? previous.slices : NO_SLICES;
       const next = {
+        headSha: data.headSha,
+        baseSha: data.baseSha,
         source: data,
         cursor,
         patch: data.patch,
@@ -375,6 +381,8 @@ function PullRequestCodeTab({
       if (
         existing !== undefined &&
         existing.patch === next.patch &&
+        existing.headSha === next.headSha &&
+        existing.baseSha === next.baseSha &&
         existing.truncated === next.truncated &&
         existing.nextCursor === next.nextCursor &&
         existing.omittedFileStats.length === next.omittedFileStats.length &&
@@ -726,7 +734,15 @@ function PullRequestCodeTab({
       (sourceFile && resolveDiffReviewAnchor(sourceFile, range, rangeComments)) ??
       resolveDiffReviewAnchor(file, range, rangeComments);
     if (anchor === null) return;
+    const sliceIndex = parsedSlices.findIndex(
+      (slice) =>
+        slice?.kind === "files" &&
+        slice.sourceFiles.some((candidate) => resolveFileDiffPath(candidate) === path),
+    );
+    const snapshot = loadedSlices[sliceIndex];
     setDraft({
+      headSha: snapshot?.headSha,
+      baseSha: snapshot?.baseSha,
       fileKey: item.id,
       path,
       oldPath: previousPath === path ? null : previousPath,
@@ -860,6 +876,7 @@ function PullRequestCodeTab({
       canReply={review.reply}
       canResolve={review.resolve && canResolvePullRequestThread(detail, thread)}
       canReact={detail.capabilities.reactions === true}
+      capabilities={detail.capabilities}
       environmentId={environmentId}
       reference={reference}
       pending={threadPending}
@@ -956,6 +973,8 @@ function PullRequestCodeTab({
               return;
             }
             addComment(reviewKey, {
+              ...(draft.headSha === undefined ? {} : { headSha: draft.headSha }),
+              ...(draft.baseSha === undefined ? {} : { baseSha: draft.baseSha }),
               id: nextPendingReviewCommentId(),
               path: draft.path,
               ...(draft.oldPath === null ? {} : { oldPath: draft.oldPath }),
