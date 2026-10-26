@@ -712,6 +712,7 @@ function EditableFileSurface({
   // Pierre caches tab metrics for an editor's lifetime. Retain the draft across
   // width-only remounts, but never restore it over an external file replacement.
   const editStateKey = `${surfaceId}:${sourceVersion}`;
+  // oxlint-disable-next-line t3code/react-effect-budget -- Release Pierre's external edit-state cache when its file surface or source version leaves.
   useEffect(
     () => () => {
       EditStateManager.clear("file", editStateKey);
