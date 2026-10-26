@@ -776,6 +776,57 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect.each([
+    { arch: "x64" as const, component: "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" },
+    { arch: "x64" as const, component: "Microsoft.VisualStudio.Component.VC.14.51.x86.x64" },
+    { arch: "arm64" as const, component: "Microsoft.VisualStudio.Component.VC.Tools.ARM64" },
+    { arch: "arm64" as const, component: "Microsoft.VisualStudio.Component.VC.14.51.ARM64" },
+  ])("accepts the installed Windows C++ component $component", ({ arch, component }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-versioned-msvc-" });
+        const pythonPath = path.join(tempDir, "python.exe");
+        yield* fs.writeFileString(pythonPath, "python");
+        yield* fs.writeFileString(
+          path.join(tempDir, "libstd-fixture.rlib"),
+          "rust standard library",
+        );
+        const spawner = Layer.succeed(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make((command) => {
+            const childProcess = command as unknown as {
+              readonly command: string;
+              readonly args: ReadonlyArray<string>;
+            };
+            if (childProcess.command === "rustc") {
+              return Effect.succeed(mockProcess(0, `${tempDir}\n`));
+            }
+            if (childProcess.command !== "powershell.exe") return Effect.succeed(mockProcess(0));
+            const script = childProcess.args.at(-1) ?? "";
+            const requiredComponent = /-requires (\S+) -property/.exec(script)?.[1];
+            return Effect.succeed(
+              mockProcess(
+                requiredComponent && NodePath.matchesGlob(component, requiredComponent) ? 0 : 1,
+              ),
+            );
+          }),
+        );
+        yield* preflightWindowsDesktopBuild({ arch, bundlesWslRuntime: true }).pipe(
+          Effect.provide(
+            Layer.merge(
+              spawner,
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({ env: { npm_config_python: pythonPath } }),
+              ),
+            ),
+          ),
+        );
+      }),
+    ),
+  );
+
   it.effect("does not require MSVC when reusing a prebuilt Windows resource monitor", () =>
     Effect.scoped(
       Effect.gen(function* () {
