@@ -127,6 +127,7 @@ describe("PullRequestCapabilities", () => {
       closedAt: null,
       reviewers: [],
       checks: [],
+      checksIncomplete: true,
       mergeCapabilities: { merge: true, squash: true, rebase: true },
       capabilities: {
         ...base,
@@ -155,6 +156,7 @@ describe("PullRequestCapabilities", () => {
       requestReviewers: true,
     });
     expect(decoded.title).toBe(detail.title);
+    expect(decoded.checksIncomplete).toBe(true);
   });
 });
 

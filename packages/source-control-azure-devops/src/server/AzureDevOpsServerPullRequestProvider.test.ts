@@ -30,7 +30,7 @@ const PR: typeof Json.PullRequest.Type = {
   status: "active",
   creationDate: "2026-10-01T00:00:00Z",
   createdBy: { id: "author" },
-  repository: { id: "repository-id", name: "Repository" },
+  repository: { id: "repository-id", name: "Repository", project: { id: "project-id" } },
   lastMergeSourceCommit: { commitId: "head" },
   reviewers: [{ ...IDENTITY, vote: -5 }],
 };
@@ -61,6 +61,11 @@ function fixture(
     readonly threads?: ReadonlyArray<Json.Thread>;
     readonly changes?: ReadonlyArray<Json.Change>;
     readonly pr?: typeof Json.PullRequest.Type;
+    readonly statuses?: ReadonlyArray<unknown>;
+    readonly policies?: ReadonlyArray<unknown>;
+    readonly failChecks?: "failed" | "rate-limited";
+    readonly failRead?: (url: URL) => boolean;
+    readonly response?: (url: URL) => unknown;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -86,6 +91,27 @@ function fixture(
             }
             reads.push(input);
             const url = new URL(input.url);
+            if (options.failRead?.(url))
+              return Effect.fail(
+                new Client.AzureDevOpsServerError({ operation: "request", reason: "failed" }),
+              );
+            const response = options.response?.(url);
+            if (response !== undefined) return Effect.succeed(response);
+            if (url.pathname.endsWith("/statuses") || url.pathname.endsWith("/evaluations")) {
+              if (options.failChecks)
+                return Effect.fail(
+                  new Client.AzureDevOpsServerError({
+                    operation: "request",
+                    reason: options.failChecks,
+                  }),
+                );
+              const rows = url.pathname.endsWith("/statuses")
+                ? (options.statuses ?? [])
+                : (options.policies ?? []);
+              const skip = Number(url.searchParams.get("$skip") ?? 0);
+              const top = Number(url.searchParams.get("$top") ?? rows.length);
+              return Effect.succeed({ value: rows.slice(skip, skip + top) });
+            }
             if (url.pathname.endsWith("/connectionData"))
               return Effect.succeed({ authenticatedUser: IDENTITY });
             if (url.pathname.endsWith("/iterations"))
@@ -416,7 +442,403 @@ describe("Azure DevOps Server reviews", () => {
   );
 });
 
+describe("Azure DevOps Server watch data", () => {
+  const buildPolicy = (overrides: Record<string, unknown> = {}) => ({
+    evaluationId: "build",
+    status: "approved",
+    configuration: {
+      id: 10,
+      isEnabled: true,
+      isBlocking: true,
+      type: { id: "0609b952-1397-4640-95ec-e00a01b2c241", displayName: "Build" },
+    },
+    context: { lastMergeSourceCommitId: "head", buildDefinitionName: "Tests", buildId: 42 },
+    ...overrides,
+  });
+
+  it.effect("marks unavailable checks for retry without making the PR unreadable", () =>
+    Effect.gen(function* () {
+      const { provider } = yield* fixture({ failChecks: "failed" });
+
+      expect(yield* provider.getChangeRequest(INPUT)).toMatchObject({
+        checks: [],
+        checksIncomplete: true,
+        state: "open",
+      });
+      expect(yield* provider.getChangeRequestWatchFingerprint!(INPUT)).toMatchObject({
+        remarks: "[]",
+      });
+    }),
+  );
+
+  it.effect("preserves rate limits in watch fingerprints so the shared reactor pauses", () =>
+    Effect.gen(function* () {
+      const { provider } = yield* fixture({ failChecks: "rate-limited" });
+
+      const error = yield* provider.getChangeRequestWatchFingerprint!(INPUT).pipe(Effect.flip);
+
+      expect(error.reason).toBe("rate-limited");
+    }),
+  );
+
+  it.effect(
+    "returns current statuses and blocking build policy failures instead of an empty list",
+    () =>
+      Effect.gen(function* () {
+        const { provider, reads } = yield* fixture({
+          statuses: [
+            { id: 1, context: { genre: "ci", name: "lint" }, iterationId: 3, state: "succeeded" },
+            { id: 2, context: { genre: "ci", name: "lint" }, iterationId: 3, state: "failed" },
+            { id: 3, context: { name: "old" }, iterationId: 2, state: "succeeded" },
+          ],
+          policies: [
+            {
+              evaluationId: "build",
+              status: "rejected",
+              configuration: {
+                id: 10,
+                isEnabled: true,
+                isBlocking: true,
+                type: { id: "0609b952-1397-4640-95ec-e00a01b2c241", displayName: "Build" },
+              },
+              context: {
+                lastMergeSourceCommitId: "head",
+                buildDefinitionName: "Tests",
+                buildId: 42,
+              },
+            },
+          ],
+        });
+        const detail = yield* provider.getChangeRequest(INPUT);
+        expect(detail.checks).toMatchObject([
+          { name: "Policy: Tests (#10)", status: "failure", required: true },
+          { name: "Status: ci/lint", status: "failure", required: false },
+        ]);
+        const url = new URL(reads.find((read) => read.url.includes("/evaluations"))!.url);
+        expect(url.searchParams.get("api-version")).toBe("7.0-preview.1");
+        expect(url.searchParams.get("artifactId")).toBe(
+          "vstfs:///CodeReview/CodeReviewId/project-id/12",
+        );
+      }),
+  );
+
+  it.effect.each([
+    ["succeeded", "success"],
+    ["failed", "failure"],
+    ["error", "failure"],
+    ["pending", "pending"],
+    ["notSet", "pending"],
+    ["future-value", "pending"],
+  ])("maps posted %s to %s", ([state, status]) =>
+    Effect.gen(function* () {
+      const { provider } = yield* fixture({
+        statuses: [{ id: 1, state, iterationId: 3, context: { name: "test" } }],
+      });
+      expect((yield* provider.getChangeRequest(INPUT)).checks).toMatchObject([{ status }]);
+    }),
+  );
+
+  it.effect.each([
+    ["approved", "success"],
+    ["rejected", "failure"],
+    ["broken", "failure"],
+    ["running", "pending"],
+    ["queued", "pending"],
+    ["future-value", "pending"],
+  ])("maps build policy %s to %s", ([state, status]) =>
+    Effect.gen(function* () {
+      const { provider } = yield* fixture({ policies: [buildPolicy({ status: state })] });
+      expect((yield* provider.getChangeRequest(INPUT)).checks).toMatchObject([
+        { status, required: true },
+      ]);
+    }),
+  );
+
+  it.effect(
+    "never treats empty, not-applicable, disabled or human-policy approvals as passed CI",
+    () =>
+      Effect.gen(function* () {
+        const { provider } = yield* fixture({
+          statuses: [{ id: 1, state: "notApplicable", iterationId: 3, context: { name: "skip" } }],
+          policies: [
+            buildPolicy({ status: "notApplicable" }),
+            buildPolicy({
+              evaluationId: "disabled",
+              configuration: { ...buildPolicy().configuration, isEnabled: false },
+            }),
+            buildPolicy({
+              evaluationId: "human",
+              configuration: {
+                ...buildPolicy().configuration,
+                type: { id: "human", displayName: "Reviewers" },
+              },
+            }),
+          ],
+        });
+        expect((yield* provider.getChangeRequest(INPUT)).checks).toEqual([]);
+        expect((yield* (yield* fixture()).provider.getChangeRequest(INPUT)).checks).toEqual([]);
+        expect(provider.capabilities.checksAlwaysReport).toBeUndefined();
+      }),
+  );
+
+  it.effect.each([
+    [{ lastMergeSourceCommitId: "old" }, "pending"],
+    [{ lastMergeSourceCommitId: "old", isExpired: true }, "pending"],
+    [{}, "pending"],
+    [{ lastMergeSourceCommitId: "head", isExpired: true }, "action-required"],
+    [{ lastMergeSourceCommitId: "head", buildIsNotCurrent: true }, "action-required"],
+  ])("does not pass stale or unverifiable build context %j", ([context, status]) =>
+    Effect.gen(function* () {
+      const { provider } = yield* fixture({ policies: [buildPolicy({ context })] });
+      expect((yield* provider.getChangeRequest(INPUT)).checks).toMatchObject([{ status }]);
+    }),
+  );
+
+  it.effect("does not trust PR-level success or a mismatched iteration after a push", () =>
+    Effect.gen(function* () {
+      const { provider } = yield* fixture({
+        statuses: [{ id: 1, state: "succeeded", context: { name: "global" } }],
+      });
+      expect((yield* provider.getChangeRequest(INPUT)).checks).toMatchObject([
+        { status: "pending" },
+      ]);
+      const moved = yield* fixture({
+        iteration: { ...ITERATION, sourceRefCommit: { commitId: "new-head" } },
+        policies: [buildPolicy()],
+      });
+      expect(yield* moved.provider.getChangeRequest(INPUT)).toMatchObject({
+        headSha: "new-head",
+        checks: [],
+        checksIncomplete: true,
+      });
+    }),
+  );
+
+  it.effect("keeps a queued build pending even when its previous run expired", () =>
+    Effect.gen(function* () {
+      const { provider } = yield* fixture({
+        policies: [
+          buildPolicy({
+            status: "queued",
+            context: { lastMergeSourceCommitId: "head", isExpired: true },
+          }),
+        ],
+      });
+      expect((yield* provider.getChangeRequest(INPUT)).checks).toMatchObject([
+        { status: "pending" },
+      ]);
+    }),
+  );
+
+  it.effect("does not repeat a PR-wide failure predating the latest push", () =>
+    Effect.gen(function* () {
+      const posted = {
+        id: 1,
+        state: "failed",
+        context: { name: "global" },
+        updatedDate: "2026-10-02T00:00:00Z",
+      };
+      const old = yield* fixture({
+        statuses: [posted],
+        iteration: { ...ITERATION, createdDate: "2026-10-01T00:00:00Z" },
+      });
+      const pushed = yield* fixture({
+        statuses: [posted],
+        iteration: { ...ITERATION, createdDate: "2026-10-03T00:00:00Z" },
+      });
+      expect((yield* old.provider.getChangeRequest(INPUT)).checks).toMatchObject([
+        { status: "failure" },
+      ]);
+      expect((yield* pushed.provider.getChangeRequest(INPUT)).checks).toMatchObject([
+        { status: "pending" },
+      ]);
+    }),
+  );
+
+  it.effect("requires a current-iteration status to confirm an approved status policy", () =>
+    Effect.gen(function* () {
+      const policy = buildPolicy({
+        configuration: {
+          id: 11,
+          isEnabled: true,
+          isBlocking: true,
+          type: { id: "cbdc66da-9728-4af8-aada-9a5a32e4a226", displayName: "Status" },
+          settings: { statusGenre: "ci", statusName: "lint" },
+        },
+      });
+      const raw = { id: 1, state: "succeeded", context: { genre: "ci", name: "lint" } };
+      const old = yield* fixture({ policies: [policy], statuses: [raw] });
+      const current = yield* fixture({
+        policies: [policy],
+        statuses: [{ ...raw, iterationId: 3 }],
+      });
+      expect((yield* old.provider.getChangeRequest(INPUT)).checks).toMatchObject([
+        { required: true, status: "pending" },
+        { status: "pending" },
+      ]);
+      expect((yield* current.provider.getChangeRequest(INPUT)).checks).toMatchObject([
+        { required: true, status: "success" },
+        { status: "success" },
+      ]);
+    }),
+  );
+
+  it.effect(
+    "reads all policy pages and reports non-CI policy failures with stable configuration ids",
+    () =>
+      Effect.gen(function* () {
+        const policies = Array.from({ length: 101 }, (_, id) =>
+          buildPolicy({
+            evaluationId: String(id),
+            configuration: {
+              ...buildPolicy().configuration,
+              id,
+              type: { id: "human", displayName: "Reviewers" },
+            },
+            status: id === 100 ? "rejected" : "approved",
+            context: null,
+          }),
+        );
+        const { provider, reads } = yield* fixture({ policies });
+        expect((yield* provider.getChangeRequest(INPUT)).checks).toMatchObject([
+          { name: "Policy: Reviewers (#100)", status: "failure" },
+        ]);
+        expect(
+          reads
+            .filter((read) => read.url.includes("/evaluations"))
+            .map((read) => new URL(read.url).searchParams.get("$skip")),
+        ).toEqual(["0", "100"]);
+      }),
+  );
+
+  it.effect.each([
+    "policy-page",
+    "repeated-page",
+    "malformed-status",
+    "status-count",
+    "missing-project",
+    "page-limit",
+  ])("does not report partial success after %s", (mode) =>
+    Effect.gen(function* () {
+      const page = Array.from({ length: 100 }, (_, id) =>
+        buildPolicy({ evaluationId: String(id) }),
+      );
+      const { provider } = yield* fixture({
+        statuses: [{ id: 1, state: "succeeded", iterationId: 3, context: { name: "test" } }],
+        policies: page,
+        ...(mode === "missing-project"
+          ? { pr: { ...PR, repository: { id: "repository-id", name: "Repository" } } }
+          : {}),
+        failRead: (url) => mode === "policy-page" && url.searchParams.get("$skip") === "100",
+        response: (url) => {
+          if (url.pathname.endsWith("/statuses")) {
+            if (mode === "malformed-status") return { value: [{}] };
+            if (mode === "status-count") return { value: [], count: 1 };
+          }
+          if (url.pathname.endsWith("/evaluations")) {
+            if (mode === "repeated-page") return { value: page };
+            if (mode === "page-limit")
+              return {
+                value: page.map((row) => ({
+                  ...row,
+                  evaluationId: `${url.searchParams.get("$skip")}:${row.evaluationId}`,
+                })),
+              };
+          }
+          return undefined;
+        },
+      });
+      expect((yield* provider.getChangeRequest(INPUT)).checks).toEqual([]);
+    }),
+  );
+
+  it.effect("fingerprints same-head check and discussion changes", () =>
+    Effect.gen(function* () {
+      const quiet = yield* fixture();
+      const failed = yield* fixture({
+        statuses: [{ id: 1, context: { name: "test" }, iterationId: 3, state: "failed" }],
+      });
+      const commented = yield* fixture({
+        threads: [
+          {
+            id: 1,
+            comments: [
+              {
+                id: 1,
+                author: { id: "other" },
+                content: "Feedback",
+                publishedDate: "2026-10-02T00:00:00Z",
+              },
+            ],
+          },
+        ],
+      });
+      if (
+        !quiet.provider.getChangeRequestWatchFingerprint ||
+        !failed.provider.getChangeRequestWatchFingerprint ||
+        !commented.provider.getChangeRequestWatchFingerprint
+      )
+        return yield* Effect.die("Watch fingerprints are missing");
+      const initial = yield* quiet.provider.getChangeRequestWatchFingerprint(INPUT);
+      expect((yield* failed.provider.getChangeRequestWatchFingerprint(INPUT))?.status).not.toBe(
+        initial?.status,
+      );
+      expect((yield* commented.provider.getChangeRequestWatchFingerprint(INPUT))?.remarks).not.toBe(
+        initial?.remarks,
+      );
+    }),
+  );
+});
+
 describe("Azure discussion normalization", () => {
+  it.each([
+    ["10", "approved"],
+    [5, "approved"],
+    ["-5", "changes-requested"],
+    [-10, "changes-requested"],
+  ])("turns a native vote %s into a timestamped review", (vote, reviewState) => {
+    const thread = {
+      id: 12,
+      properties: {
+        CodeReviewThreadType: { $value: "VoteUpdate" },
+        CodeReviewVoteResult: { $value: vote },
+        CodeReviewVotedByIdentity: { $value: "1" },
+      },
+      identities: { "1": { id: "reviewer", displayName: "Reviewer" } },
+      comments: [
+        {
+          id: 1,
+          author: IDENTITY,
+          content: "Reviewer voted",
+          commentType: "system",
+          publishedDate: "2026-10-02T00:00:00Z",
+        },
+      ],
+    };
+    expect(Json.discussion([thread], "viewer").comments).toMatchObject([
+      {
+        id: "12:1",
+        kind: "review",
+        author: { login: "reviewer" },
+        reviewState,
+        createdAt: "2026-10-02T00:00:00Z",
+        canEdit: false,
+      },
+    ]);
+    expect(Json.discussion([{ ...thread, isDeleted: true }], "viewer").comments).toEqual([]);
+    expect(
+      Json.discussion(
+        [
+          {
+            ...thread,
+            properties: { ...thread.properties, CodeReviewVoteResult: { $value: "0" } },
+          },
+        ],
+        "viewer",
+      ).comments,
+    ).toEqual([]);
+  });
+
   it("preserves tracked anchors, native resolutions, authorship and comment-only likes", () => {
     const result = Json.discussion(
       [

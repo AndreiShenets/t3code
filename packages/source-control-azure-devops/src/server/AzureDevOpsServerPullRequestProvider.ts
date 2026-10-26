@@ -16,6 +16,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as Client from "./AzureDevOpsServerClient.ts";
 import * as Json from "./azureDevOpsServerJson.ts";
+import * as Checks from "./azureDevOpsServerChecks.ts";
 import * as Viewed from "./azureDevOpsServerViewedFiles.ts";
 import {
   azureDevOpsFilePatch,
@@ -77,6 +78,7 @@ const Changes = Schema.Struct({
 const Viewer = Schema.Struct({ authenticatedUser: Json.Identity });
 const encode = encodeURIComponent;
 const isServerError = Schema.is(Client.AzureDevOpsServerError);
+const fingerprint = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 type Request = ProviderRepositoryRef & { readonly number: number };
 
 function failure(operation: string, detail: string) {
@@ -175,6 +177,73 @@ export const make = Effect.gen(function* () {
       Client.serverApiUrl(context, `${prPath(context, input.number)}/iterations`),
       Schema.Struct({ value: Schema.Array(Json.Iteration) }),
     ).pipe(Effect.map((data) => data.value.toSorted((a, b) => a.id - b.id)));
+  const threads = (input: Request, context: Client.AzureDevOpsServerContext) =>
+    read(
+      input.cwd,
+      Client.serverApiUrl(context, `${prPath(context, input.number)}/threads`),
+      Schema.Struct({ value: Schema.Array(Json.Thread) }),
+    ).pipe(Effect.map((data) => data.value));
+  const checks = Effect.fn("AzureDevOpsServerPullRequestProvider.checks")(function* (
+    input: Request,
+    context: Client.AzureDevOpsServerContext,
+    raw: typeof Json.PullRequest.Type,
+    latest: Json.Iteration | undefined,
+  ) {
+    if (raw.status !== "active") return [];
+    const projectId = raw.repository.project?.id;
+    if (!projectId)
+      return yield* failure(
+        "checks",
+        "Azure DevOps Server omitted the project identity needed to read policies.",
+      );
+    if (!latest || raw.lastMergeSourceCommit?.commitId !== latest.sourceRefCommit.commitId)
+      return yield* failure(
+        "checks",
+        "Azure DevOps Server has not supplied a consistent current PR iteration.",
+      );
+    const statuses = yield* read(
+      input.cwd,
+      Client.serverApiUrl(context, `${prPath(context, input.number)}/statuses`),
+      Schema.Struct({ value: Schema.Array(Checks.Status), count: Schema.optional(Schema.Int) }),
+    );
+    if (statuses.count !== undefined && statuses.count !== statuses.value.length)
+      return yield* failure("checks", "Azure DevOps Server returned an incomplete status list.");
+    const policies: Array<typeof Checks.Policy.Type> = [];
+    const seen = new Set<string>();
+    for (let skip = 0; skip < 1000; skip += 100) {
+      const url = new URL(
+        Client.serverApiUrl(context, "policy/evaluations", {
+          artifactId: `vstfs:///CodeReview/CodeReviewId/${projectId}/${input.number}`,
+          includeNotApplicable: true,
+          $top: 100,
+          $skip: skip,
+        }),
+      );
+      url.searchParams.set("api-version", "7.0-preview.1");
+      const page = yield* read(
+        input.cwd,
+        url.href,
+        Schema.Struct({ value: Schema.Array(Checks.Policy), count: Schema.optional(Schema.Int) }),
+      );
+      if (page.count !== undefined && page.count !== page.value.length)
+        return yield* failure("checks", "Azure DevOps Server returned an incomplete policy page.");
+      for (const policy of page.value) {
+        if (seen.has(policy.evaluationId))
+          return yield* failure(
+            "checks",
+            "Azure DevOps Server repeated a policy page; check coverage is incomplete.",
+          );
+        seen.add(policy.evaluationId);
+        policies.push(policy);
+      }
+      if (page.value.length < 100)
+        return Checks.checks(statuses.value, policies, latest, context, input.number);
+    }
+    return yield* failure(
+      "checks",
+      "Azure DevOps Server policy retrieval exceeded its page limit.",
+    );
+  });
   const changes = Effect.fn("AzureDevOpsServerPullRequestProvider.changes")(function* (
     input: Request,
     context: Client.AzureDevOpsServerContext,
@@ -395,12 +464,59 @@ export const make = Effect.gen(function* () {
     ),
     getChangeRequestSummary: (input) =>
       readPr(input).pipe(Effect.map(({ context, raw }) => Json.changeRequest(raw, context))),
+    getChangeRequestWatchFingerprint: Effect.fn(
+      "AzureDevOpsServerPullRequestProvider.getChangeRequestWatchFingerprint",
+    )(function* (input) {
+      const { context, raw } = yield* readPr(input);
+      if (raw.status !== "active") return { status: raw.status, remarks: "" };
+      const latest = (yield* iterations(input, context)).at(-1);
+      const [results, discussion] = yield* Effect.all(
+        [
+          Effect.matchEffect(checks(input, context, raw, latest), {
+            onFailure: (error) =>
+              error.reason === "rate-limited" ? Effect.fail(error) : Effect.succeed(null),
+            onSuccess: Effect.succeed,
+          }),
+          threads(input, context),
+        ],
+        { concurrency: 2 },
+      );
+      const activity = Json.discussion(discussion, "");
+      const remarks = [
+        ...activity.comments,
+        ...activity.reviewThreads.flatMap((thread) => thread.comments),
+      ];
+      return {
+        status: fingerprint([
+          raw.status,
+          raw.isDraft,
+          raw.mergeStatus,
+          raw.lastMergeSourceCommit,
+          latest?.sourceRefCommit,
+          results,
+          (raw.reviewers ?? []).map((reviewer) => [reviewer.id, reviewer.vote]).toSorted(),
+        ]),
+        remarks: fingerprint(
+          remarks
+            .toSorted((a, b) => a.id.localeCompare(b.id))
+            .map((remark) => [remark.id, remark.createdAt, remark.editedAt]),
+        ),
+      };
+    }),
     getChangeRequest: Effect.fn("AzureDevOpsServerPullRequestProvider.getChangeRequest")(
       function* (input) {
         const { context, raw } = yield* readPr(input);
         const latest = (yield* iterations(input, context)).at(-1);
         const listed =
           latest === undefined ? { entries: [] } : yield* changes(input, context, latest);
+        const results = yield* checks(input, context, raw, latest).pipe(
+          Effect.catchTags({
+            PullRequestProviderError: (error) =>
+              Effect.logDebug("Azure DevOps Server checks unavailable", {
+                reason: error.reason,
+              }).pipe(Effect.as(null)),
+          }),
+        );
         return {
           ...Json.changeRequest(raw, context),
           body: raw.description ?? "",
@@ -409,7 +525,8 @@ export const make = Effect.gen(function* () {
           closedAt: raw.status === "abandoned" ? (raw.closedDate ?? null) : null,
           mergedAt: raw.status === "completed" ? (raw.closedDate ?? null) : null,
           reviewers: (raw.reviewers ?? []).map(Json.actor),
-          checks: [],
+          checks: results ?? [],
+          checksIncomplete: results === null,
           mergeCapabilities: { merge: true, squash: true, rebase: false },
           viewerPermissions: PERMISSIONS,
           autoMergeEnabled: raw.autoCompleteSetBy != null,
@@ -430,13 +547,9 @@ export const make = Effect.gen(function* () {
     )(function* (input) {
       const { context, raw } = yield* readPr(input);
       const id = yield* viewer(input.cwd, context);
-      const data = yield* read(
-        input.cwd,
-        Client.serverApiUrl(context, `${prPath(context, input.number)}/threads`),
-        Schema.Struct({ value: Schema.Array(Json.Thread) }),
-      );
+      const data = yield* threads(input, context);
       return {
-        ...Json.discussion(data.value, id),
+        ...Json.discussion(data, id),
         reviewers: (raw.reviewers ?? []).map(Json.actor),
       };
     }),

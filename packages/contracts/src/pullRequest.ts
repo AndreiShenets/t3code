@@ -587,6 +587,8 @@ export const PullRequestDetail = Schema.Struct({
   reviewers: Schema.Array(PullRequestActor),
   labels: Schema.Array(PullRequestLabel),
   checks: Schema.Array(PullRequestCheck),
+  /** A partial or failed check read must be retried without inferring success. */
+  checksIncomplete: Schema.optional(Schema.Boolean),
   mergeCapabilities: PullRequestMergeCapabilities,
   viewer: Schema.optional(TrimmedNonEmptyString),
   baseComparison: Schema.optional(PullRequestBaseComparison),
