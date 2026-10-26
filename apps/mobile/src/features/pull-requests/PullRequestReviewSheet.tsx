@@ -69,7 +69,7 @@ export function PullRequestReviewSheet({
   const result = useEnvironmentQuery(composerPullRequests.detail(target));
   const { refresh: refreshDetail } = result;
   const refreshActivity = useAtomRefresh(composerPullRequests.activity(target));
-  useFocusEffect(() => refreshDetail());
+  useFocusEffect(refreshDetail);
   const permissions = usePullRequestPermissions(params, result.data);
   const submission = useActionSubmission(params);
   const review = useAtomCommand(composerPullRequests.submitReview, { reportFailure: false });
