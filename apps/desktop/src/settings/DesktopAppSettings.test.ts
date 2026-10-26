@@ -4,6 +4,7 @@ import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as DesktopConfig from "../app/DesktopConfig.ts";
@@ -211,7 +212,8 @@ describe("DesktopSettings", () => {
           const dotfiles = yield* fileSystem.makeTempDirectoryScoped({
             prefix: "t3-desktop-settings-dotfiles-",
           });
-          const linkedSettingsPath = `${dotfiles}/desktop-settings.json`;
+          const path = yield* Path.Path;
+          const linkedSettingsPath = path.join(dotfiles, "desktop-settings.json");
           yield* fileSystem.writeFileString(linkedSettingsPath, "{}\n");
           yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
           yield* fileSystem.symlink(linkedSettingsPath, environment.desktopSettingsPath);
