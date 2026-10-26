@@ -57,6 +57,7 @@ import {
 } from "../../state/queries";
 import type { ComposerCommandItem } from "./ComposerCommandPopover";
 import { matchesSlashSkillQuery } from "./composerSlashSkillSearch";
+import { supportsMcpManagement } from "@t3tools/client-runtime/mcpCommands";
 
 const WORKSPACE_SNAPSHOT_RETRY_COOLDOWN_MS = 10_000;
 // A cwd that never scans, such as a deleted worktree, would otherwise retry forever.
@@ -73,15 +74,26 @@ export function buildComposerSlashCommandItems(input: {
   readonly hasCompactableConversation?: boolean;
   readonly offersUsageLimits?: boolean;
   readonly allowInteractionMode: boolean;
-  readonly selectedProviderStatus: Pick<
-    ServerProvider,
-    "driver" | "slashCommands" | "showInteractionModeToggle"
-  > | null;
+  readonly selectedProviderStatus:
+    | (Pick<ServerProvider, "driver" | "slashCommands" | "showInteractionModeToggle"> &
+        Partial<Pick<ServerProvider, "version" | "enabled">>)
+    | null;
 }): ComposerCommandItem[] {
   const query = input.query.toLowerCase();
   const allowInteractionMode =
     input.allowInteractionMode && input.selectedProviderStatus?.showInteractionModeToggle !== false;
   const builtIn = [
+    ...(supportsMcpManagement(input.selectedProviderStatus)
+      ? [
+          {
+            id: "cmd:mcp",
+            type: "slash-command" as const,
+            command: "mcp",
+            label: "/mcp",
+            description: "Manage MCP connections for this workspace",
+          },
+        ]
+      : []),
     {
       id: "cmd:model",
       type: "slash-command",
@@ -105,7 +117,9 @@ export function buildComposerSlashCommandItems(input: {
     },
   ] satisfies ComposerCommandItem[];
   const items: ComposerCommandItem[] = builtIn.filter(
-    (item) => item.command.includes(query) && (item.command === "model" || allowInteractionMode),
+    (item) =>
+      item.command.includes(query) &&
+      (item.command === "model" || item.command === "mcp" || allowInteractionMode),
   );
 
   // Providers expand commands only at the start of a message. T3 commands
@@ -191,6 +205,7 @@ export function useComposerCommandMenu({
   onChangeDraftMessage,
   onUpdateInteractionMode,
   onUsageLimits,
+  onMcp,
 }: {
   readonly draftMessage: string;
   readonly ownerKey: string | null;
@@ -209,6 +224,7 @@ export function useComposerCommandMenu({
   readonly onChangeDraftMessage: (value: string) => void;
   readonly onUpdateInteractionMode?: (mode: ProviderInteractionMode) => void;
   readonly onUsageLimits?: () => void;
+  readonly onMcp?: () => void;
 }) {
   const [selection, setSelection] = useState(() => composerSelectionAtEnd(draftMessage));
   // Thread mentions rank by recency as of when the composer mounted.
@@ -619,6 +635,14 @@ export function useComposerCommandMenu({
       setSelection({ start: cleared.cursor, end: cleared.cursor });
       onChangeDraftMessage(cleared.text);
       onUsageLimits();
+      return;
+    }
+
+    if (item.type === "slash-command" && item.command === "mcp" && onMcp) {
+      const cleared = replaceTextRange(draftMessage, trigger.rangeStart, trigger.rangeEnd, "");
+      setSelection({ start: cleared.cursor, end: cleared.cursor });
+      onChangeDraftMessage(cleared.text);
+      onMcp();
       return;
     }
 
