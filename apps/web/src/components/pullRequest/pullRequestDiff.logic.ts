@@ -1,5 +1,9 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
-import type { PullRequestDiffSide, PullRequestOmittedFileStat } from "@t3tools/contracts";
+import type {
+  PullRequestDiffResult,
+  PullRequestDiffSide,
+  PullRequestOmittedFileStat,
+} from "@t3tools/contracts";
 
 /** Only rendered hunks can anchor comments; list others off-diff. */
 export function isLineInFileDiff(
@@ -41,6 +45,7 @@ export function toggleFileDiffFoldForViewed(
 }
 
 export interface DiffSlice {
+  readonly source: PullRequestDiffResult;
   readonly headSha?: string | undefined;
   readonly baseSha?: string | undefined;
   readonly cursor: string | null;

@@ -43,6 +43,7 @@ describe("isLineInFileDiff", () => {
 
 describe("reconcileDiffSlices", () => {
   const slice = (cursor: string | null, patch: string, nextCursor: string | null): DiffSlice => ({
+    source: { patch, truncated: false, nextCursor: null },
     cursor,
     patch,
     truncated: false,
