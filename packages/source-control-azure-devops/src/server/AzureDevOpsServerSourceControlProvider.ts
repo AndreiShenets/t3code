@@ -149,7 +149,9 @@ export const make = Effect.gen(function* () {
   });
   return SourceControlProvider.SourceControlProvider.of({
     kind,
-    refineRepositoryIdentity: ({ identity }) => {
+    refineRepositoryIdentity: Effect.fn(
+      "AzureDevOpsServerSourceControlProvider.refineRepositoryIdentity",
+    )(function ({ identity }) {
       if (
         !identity.rootPath ||
         (identity.provider !== undefined &&
@@ -168,7 +170,7 @@ export const make = Effect.gen(function* () {
         Effect.map((context) => ({ ...identity, provider: kind, webUrl: context.repositoryUrl })),
         Effect.orElseSucceed(() => identity),
       );
-    },
+    }),
     listChangeRequests: Effect.fn("AzureDevOpsServerSourceControlProvider.listChangeRequests")(
       function* (input) {
         const context = yield* contextFor(input);
@@ -196,11 +198,14 @@ export const make = Effect.gen(function* () {
       },
       (effect, input) => effect.pipe(Effect.mapError(mapError("listChangeRequests", input.cwd))),
     ),
-    getChangeRequest: (input) =>
-      read(input).pipe(
+    getChangeRequest: Effect.fn("AzureDevOpsServerSourceControlProvider.getChangeRequest")(function (
+      input,
+    ) {
+      return read(input).pipe(
         Effect.map(({ context, pr }) => changeRequest(pr, context)),
         Effect.mapError(mapError("getChangeRequest", input.cwd)),
-      ),
+      );
+    }),
     createChangeRequest: Effect.fn("AzureDevOpsServerSourceControlProvider.createChangeRequest")(
       function* (input) {
         const context = yield* contextFor(input);
@@ -256,15 +261,18 @@ export const make = Effect.gen(function* () {
       (effect, input) =>
         effect.pipe(Effect.mapError(mapError("getRepositoryCloneUrls", input.cwd))),
     ),
-    createRepository: (input) =>
-      Effect.fail(
+    createRepository: Effect.fn("AzureDevOpsServerSourceControlProvider.createRepository")(function (
+      input,
+    ) {
+      return Effect.fail(
         new SourceControlProviderError({
           provider: kind,
           operation: "createRepository",
           cwd: input.cwd,
           detail: "Publishing repositories to Azure DevOps Server is not supported.",
         }),
-      ),
+      );
+    }),
     getDefaultBranch: Effect.fn("AzureDevOpsServerSourceControlProvider.getDefaultBranch")(
       function* (input) {
         const context = yield* contextFor(input);
