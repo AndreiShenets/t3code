@@ -53,6 +53,7 @@ export function useGuideDiffFiles({
   const cursor = current.cursor;
   const pageKey = JSON.stringify([key, cursor]);
   const { refresh, isPending, isSuccess } = query;
+  // oxlint-disable-next-line t3code/react-effect-budget -- Revalidate cached server pages before retaining their asynchronously loaded guide contents.
   useEffect(() => {
     if (!loading) {
       refreshedPage.current = null;
