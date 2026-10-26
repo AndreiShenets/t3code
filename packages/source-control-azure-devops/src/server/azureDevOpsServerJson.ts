@@ -52,6 +52,7 @@ export const PullRequest = Schema.Struct({
 
 export const Iteration = Schema.Struct({
   id: Schema.Int,
+  createdDate: Schema.optional(Schema.String),
   sourceRefCommit: Schema.Struct({ commitId: Schema.String }),
   commonRefCommit: Schema.Struct({ commitId: Schema.String }),
 });
@@ -60,6 +61,15 @@ export type Iteration = typeof Iteration.Type;
 const Position = Schema.Struct({ line: Schema.Int, offset: Schema.optional(Schema.Int) });
 export const Thread = Schema.Struct({
   id: Schema.Int,
+  properties: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        $value: Schema.Unknown,
+      }),
+    ),
+  ),
+  identities: Schema.optional(Schema.Record(Schema.String, Identity)),
   isDeleted: Schema.optional(Schema.Boolean),
   status: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
   threadContext: Schema.optional(
@@ -195,6 +205,33 @@ export function discussion(
   const reviewThreads: PullRequestReviewThread[] = [];
   for (const thread of threads) {
     if (thread.isDeleted) continue;
+    if (thread.properties?.CodeReviewThreadType?.$value === "VoteUpdate") {
+      const vote = Number(thread.properties.CodeReviewVoteResult?.$value);
+      const state =
+        vote === 10 || vote === 5
+          ? "approved"
+          : vote === -5 || vote === -10
+            ? "changes-requested"
+            : null;
+      const comment = thread.comments?.find(
+        (entry) => !entry.isDeleted && (entry.commentType === "system" || entry.commentType === 3),
+      );
+      const voterKey = thread.properties.CodeReviewVotedByIdentity?.$value;
+      const voter = typeof voterKey === "string" ? thread.identities?.[voterKey] : undefined;
+      if (state && comment)
+        comments.push({
+          id: `${thread.id}:${comment.id}`,
+          kind: "review",
+          author: actor(voter ?? comment.author),
+          body: "",
+          createdAt: comment.publishedDate,
+          editedAt: null,
+          url: null,
+          path: null,
+          reviewState: state,
+          canEdit: false,
+        });
+    }
     const path = thread.threadContext?.filePath?.replace(/^\//, "") || null;
     const entries = (thread.comments ?? [])
       .filter(

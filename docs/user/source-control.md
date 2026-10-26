@@ -118,6 +118,14 @@ changes while you draft inline comments, re-check them against the refreshed dif
 is only partly submitted, T3 keeps the unposted drafts; check the PR before retrying any write
 whose result is uncertain.
 
+Ask the agent to watch a PR to receive updates on build and status checks, policy failures,
+comments, review votes, and merge conflicts. Watching uses the same collection and credentials;
+no Azure CLI is needed. CI must report a current-iteration status or a build policy result tied
+to the current head before T3 reports success. PR-wide statuses without an iteration remain
+unverified, and missing, inaccessible, or incomplete check data never means CI passed. Pipelines
+that report neither a PR status nor a build policy are not monitored. Review-vote updates depend
+on Azure's native vote-event history. Merging, abandoning, or explicitly unwatching stops the watch.
+
 ### GitCafe
 
 Install the GitCafe CLI and sign in:

@@ -116,6 +116,36 @@ function hostedChangeRequest(body: string, additions = 1) {
   };
 }
 
+it.effect("preserves incomplete-check metadata when mapping provider details", () =>
+  Effect.gen(function* () {
+    for (const checksIncomplete of [undefined, true, false]) {
+      const service = yield* makeService({
+        projects: [
+          project({ id: "p1", title: "web", workspaceRoot: "/w", repository: "acme/web" }),
+        ],
+        providers: [
+          fakePullRequestProvider(SourceControlProviderKind.make("github"), {
+            getChangeRequest: () =>
+              Effect.succeed({
+                ...hostedChangeRequest("Description"),
+                ...(checksIncomplete === undefined ? {} : { checksIncomplete }),
+              }),
+          }),
+        ],
+      });
+
+      const detail = yield* service.detail({
+        projectId: "p1" as ProjectId,
+        repository: "acme/web",
+        number: 1,
+      });
+
+      assert.strictEqual(detail.checksIncomplete, checksIncomplete);
+      assert.deepStrictEqual(detail.checks, []);
+    }
+  }),
+);
+
 it.effect("does not wait for an in-flight detail read to display a preview", () =>
   Effect.gen(function* () {
     const detailStarted = yield* Deferred.make<void>();
