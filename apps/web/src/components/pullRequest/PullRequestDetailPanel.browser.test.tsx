@@ -261,6 +261,7 @@ function setupInlineReview() {
 }
 
 async function beginInlineComment() {
+  await page.getByRole("button", { name: "Expand diff", exact: true }).click();
   const line = page.getByText("const reviewMe = 1;", { exact: true });
   await expect.element(line).toBeVisible();
   const root = line.element().getRootNode() as ShadowRoot;
@@ -374,6 +375,7 @@ it("does not restore an inline draft into another pull request", async () => {
   const other = { ...detail, number: 2 };
   codeTest.detail = other;
   await screen.rerender(panel({ viewState, initialTab: "code", reference: other }));
+  await page.getByRole("button", { name: "Expand diff", exact: true }).click();
   await expect.element(page.getByText("const reviewMe = 1;", { exact: true })).toBeVisible();
   await expect
     .element(page.getByRole("textbox", { name: "Comment on lines review.ts:1" }))
