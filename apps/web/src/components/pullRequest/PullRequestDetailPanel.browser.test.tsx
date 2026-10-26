@@ -409,7 +409,7 @@ it.each([
       condensedByTab: { code: true },
       code: {
         scopeKey: JSON.stringify([threadRef.environmentId, pullRequestReviewKey(detail), null]),
-        slices: [{ ...result, cursor: null }],
+        slices: [{ ...result, source: result, cursor: null }],
         toggledFiles: new Set(),
         foldOverride,
         visibleCommitCount: 10,
@@ -511,8 +511,8 @@ it("keeps loaded pages during background reads and restores them after returning
     code: {
       scopeKey: JSON.stringify([threadRef.environmentId, pullRequestReviewKey(detail), null]),
       slices: [
-        { ...first, cursor: null },
-        { ...second, cursor: "second" },
+        { ...first, source: first, cursor: null },
+        { ...second, source: second, cursor: "second" },
       ],
       toggledFiles: new Set(),
       foldOverride: "expanded",
@@ -599,7 +599,6 @@ it("uses the owning surface's tab selection across thread and panel switches", a
         onCloseSurface={() => {}}
         terminal={{
           launchContext: null,
-          focusRequestId: 0,
           keybindings: [],
           onAddTerminalContext: () => {},
           onSplitTerminal: () => {},
