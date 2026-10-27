@@ -1,5 +1,4 @@
 import { File, type FileOptions, Virtualizer } from "@pierre/diffs/react";
-import type { EnvironmentId } from "@t3tools/contracts";
 
 import { DiffWorkerPoolProvider } from "~/components/DiffWorkerPoolProvider";
 import { useCodeDisplay, type CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";

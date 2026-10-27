@@ -1303,7 +1303,10 @@ export function PullRequestDetailPanel({
   }
 
   return (
-    <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
+    <div
+      className="relative flex h-full min-h-0 w-full flex-col bg-background"
+      data-diff-search-scope
+    >
       {threadPickerOpen && detail ? (
         <PullRequestThreadLinks
           key={`${environmentId}:${detail.url}`}

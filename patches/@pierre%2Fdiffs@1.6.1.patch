@@ -21,7 +21,7 @@ index 234ec4baa4..274ff5e32b 100644
    getItem(itemId: string): CodeViewItem<LAnnotation> | undefined;
 +  /**
 +   * Open the find panel, or refocus it when open. It searches every diff
-+   * item's lines (including folded files and virtualized rows), and is also
++   * item's paths and lines (including folded files and virtualized rows), and is also
 +   * opened by the primary-modifier+F shortcut while focus is in the viewer.
 +   */
 +  openSearch(): void;
@@ -84,7 +84,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  		this.root?.style.removeProperty("overflow-anchor");
  		this.container?.remove();
  		this.stickyOffset.remove();
-@@ -629,6 +638,137 @@ var CodeView = class CodeView {
+@@ -629,6 +638,147 @@ var CodeView = class CodeView {
  	getItem(itemId) {
  		return this.idToItem.get(itemId)?.item;
  	}
@@ -108,7 +108,7 @@ index ee5c91c5ab..7d0a2901e4 100644
 +			const entry = entries[index];
 +			if (entry.itemIndex < itemIndex) continue;
 +			if (entry.itemIndex > itemIndex) return index;
-+			const position = this.getLineScrollPosition(item, entry);
++			const position = entry.headerField != null ? { top: 0 } : this.getLineScrollPosition(item, entry);
 +			if (position == null || item.top + position.top >= visibleTop) return index;
 +		}
 +		return 0;
@@ -121,6 +121,11 @@ index ee5c91c5ab..7d0a2901e4 100644
 +	revealSearchMatch(match, afterUnfold = false) {
 +		const item = this.idToItem.get(match.id);
 +		if (item == null || item.type !== "diff") return;
++		if (match.headerField != null) {
++			this.cancelSearchReveal();
++			this.scrollTo({ type: "item", id: match.id, align: "start", offset: -SEARCH_PANEL_RESERVED_HEIGHT });
++			return;
++		}
 +		if (item.item.collapsed === true) {
 +			if (this.options.onRevealSearchMatch == null) {
 +				this.scrollTo({
@@ -207,6 +212,11 @@ index ee5c91c5ab..7d0a2901e4 100644
 +				lines.set(`${column}:${unifiedIndex}`, element);
 +			}
 +			for (const entry of itemEntries) {
++				if (entry.headerField != null) {
++					const element = shadowRoot.querySelector(entry.headerField === "name" ? "[data-title]" : "[data-prev-name]");
++					if (element != null) mounted.push({ entry, element });
++					continue;
++				}
 +				// Split view draws unchanged context in both columns, so paint each copy.
 +				const additions = lines.get(`additions:${entry.unifiedLineIndex}`);
 +				const deletions = lines.get(`deletions:${entry.unifiedLineIndex}`);
@@ -222,7 +232,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  	/**
  	* Returns the editor while this item is being edited. Partial diffs get an
  	* editor after their files load; scrolling away or collapsing keeps it.
-@@ -648,6 +788,7 @@ var CodeView = class CodeView {
+@@ -648,6 +798,7 @@ var CodeView = class CodeView {
  		this.render();
  		this.syncItemEditors();
  		this.syncSelection();
@@ -230,7 +240,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  		return true;
  	}
  	updateItemId(oldId, newId) {
-@@ -681,6 +822,7 @@ var CodeView = class CodeView {
+@@ -681,6 +832,7 @@ var CodeView = class CodeView {
  		this.renamePendingScrollTarget(oldId, newId);
  		this.renamePendingLayoutAnchor(oldId, newId);
  		this.render();
@@ -238,7 +248,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  		return true;
  	}
  	addItem(input) {
-@@ -690,6 +832,7 @@ var CodeView = class CodeView {
+@@ -690,6 +842,7 @@ var CodeView = class CodeView {
  		this.appendItemsInternal(inputs);
  		this.syncItemEditors();
  		this.syncSelection();
@@ -246,7 +256,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  	}
  	removeItem(itemId) {
  		const item = this.idToItem.get(itemId);
-@@ -712,6 +855,7 @@ var CodeView = class CodeView {
+@@ -712,6 +865,7 @@ var CodeView = class CodeView {
  			for (const removedItem of removedItemsById?.values() ?? []) removedItem.instance.cleanUp();
  		}
  		this.syncSelection();
@@ -254,7 +264,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  	}
  	/**
  	* Append new records to the viewer while preserving existing layout state.
-@@ -1334,6 +1478,10 @@ var CodeView = class CodeView {
+@@ -1334,6 +1488,10 @@ var CodeView = class CodeView {
  		item.item = nextItem;
  		item.version = nextItem.version;
  		item.renderedOptionsRevision = -1;
@@ -265,7 +275,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  		return true;
  	}
  	getMaxScrollTopForHeight(scrollHeight) {
-@@ -1714,6 +1862,10 @@ var CodeView = class CodeView {
+@@ -1714,6 +1872,10 @@ var CodeView = class CodeView {
  		this.updateStickyPositioning();
  		this.validateStickyContainerHeight();
  		this.fixContainerFocus();
@@ -276,7 +286,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  		if (fitPerfectly || this.scrollAnimation != null) this.render();
  	};
  	flushManagers(updatedItems) {
-@@ -1808,7 +1960,8 @@ var CodeView = class CodeView {
+@@ -1808,7 +1970,8 @@ var CodeView = class CodeView {
  		this.notifyScroll();
  		this.render();
  	};
@@ -286,7 +296,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  		this.pendingScrollTarget = void 0;
  		this.pendingLayoutAnchor = void 0;
  		this.scrollAnimation = void 0;
-@@ -2071,7 +2224,12 @@ var CodeView = class CodeView {
+@@ -2071,7 +2234,12 @@ var CodeView = class CodeView {
  			const item = this.items[index];
  			if (item == null) throw new Error("CodeView.recomputeLayout: invalid item index");
  			item.top = runningTop;
@@ -300,7 +310,7 @@ index ee5c91c5ab..7d0a2901e4 100644
  			else item.height = item.instance.updateCodeViewLayout(item.item.file, runningTop, reset, item.item.annotations ?? []);
  			runningTop += item.height;
  			if (index < this.items.length - 1) runningTop += layout.gap;
-@@ -2091,6 +2249,27 @@ var CodeView = class CodeView {
+@@ -2091,6 +2259,27 @@ var CodeView = class CodeView {
  		return this.getLayout().gap + this.itemMetricsCache.diffHeaderHeight;
  	}
  };
@@ -333,7 +343,7 @@ new file mode 100644
 index 0000000000..29370adf88
 --- /dev/null
 +++ b/dist/components/CodeViewSearch.js
-@@ -0,0 +1,360 @@
+@@ -0,0 +1,369 @@
 +import { isPrimaryModifier } from "../editor/platform.js";
 +import { resolveFindAgainShortcut } from "../editor/command.js";
 +import { SearchPanelWidget } from "../editor/searchPanel.js";
@@ -365,7 +375,7 @@ index 0000000000..29370adf88
 +}`;
 +let sharedHighlights;
 +/**
-+* Find-in-diff for a CodeView. It searches every diff item's line data rather
++* Find-in-diff for a CodeView. It searches every diff item's paths and line data rather
 +* than the rendered rows, so matches in virtualized rows, expanded context, and
 +* folded files are all found, and navigating to one reveals it.
 +*
@@ -577,6 +587,31 @@ index 0000000000..29370adf88
 +		const item = items[itemIndex];
 +		if (item.type !== "diff") continue;
 +		const { fileDiff } = item;
++		const collectText = (text, target) => {
++			pattern.lastIndex = 0;
++			let match;
++			while (entries.length < MAX_SEARCH_MATCHES && (match = pattern.exec(text)) !== null) {
++				const length = match[0].length;
++				if (length === 0) {
++					pattern.lastIndex++;
++					continue;
++				}
++				if (params.wholeWord && !isWholeWord(text, match.index, length)) continue;
++				entries.push({
++					id: item.id,
++					itemIndex,
++					...target,
++					start: match.index,
++					end: match.index + length,
++					range: [offset + match.index, offset + match.index + length]
++				});
++			}
++			offset += text.length + 1;
++		};
++		// Renames display both paths; unchanged paths appear only once in the header.
++		if (fileDiff.prevName != null && fileDiff.prevName !== fileDiff.name) collectText(fileDiff.prevName, { headerField: "prevName" });
++		collectText(fileDiff.name, { headerField: "name" });
++		if (entries.length >= MAX_SEARCH_MATCHES) break;
 +		iterateOverDiff({
 +			diff: fileDiff,
 +			diffStyle: "unified",
@@ -585,29 +620,13 @@ index 0000000000..29370adf88
 +				const isDeletion = type === "change" && deletionLine != null;
 +				const line = isDeletion ? deletionLine : additionLine;
 +				const text = trimLineBreak((isDeletion ? fileDiff.deletionLines : fileDiff.additionLines)[line.lineIndex] ?? "");
-+				pattern.lastIndex = 0;
-+				let match;
-+				while ((match = pattern.exec(text)) !== null) {
-+					const length = match[0].length;
-+					if (length === 0) {
-+						pattern.lastIndex++;
-+						continue;
-+					}
-+					if (params.wholeWord && !isWholeWord(text, match.index, length)) continue;
-+					entries.push({
-+						id: item.id,
-+						itemIndex,
-+						side: isDeletion ? "deletions" : "additions",
-+						isContext: type !== "change",
-+						lineNumber: line.lineNumber,
-+						unifiedLineIndex: line.unifiedLineIndex,
-+						start: match.index,
-+						end: match.index + length,
-+						range: [offset + match.index, offset + match.index + length]
-+					});
-+					if (entries.length >= MAX_SEARCH_MATCHES) return true;
-+				}
-+				offset += text.length + 1;
++				collectText(text, {
++					side: isDeletion ? "deletions" : "additions",
++					isContext: type !== "change",
++					lineNumber: line.lineNumber,
++					unifiedLineIndex: line.unifiedLineIndex
++				});
++				if (entries.length >= MAX_SEARCH_MATCHES) return true;
 +			}
 +		});
 +	}
@@ -626,7 +645,7 @@ index 0000000000..29370adf88
 +	return byItem;
 +}
 +function findSameMatch(entries, previous) {
-+	const index = entries.findIndex((entry) => entry.id === previous.id && entry.side === previous.side && entry.lineNumber === previous.lineNumber && entry.start === previous.start);
++	const index = entries.findIndex((entry) => entry.id === previous.id && entry.headerField === previous.headerField && entry.side === previous.side && entry.lineNumber === previous.lineNumber && entry.start === previous.start);
 +	return index === -1 ? void 0 : index;
 +}
 +function createTextRange(lineElement, start, end) {
@@ -1060,6 +1079,69 @@ index 39fe30e47b..600442e3eb 100644
  			properties: { "data-additions-count": "" }
  		}));
  	}
+diff --git a/dist/editor/platform.js b/dist/editor/platform.js
+--- a/dist/editor/platform.js
++++ b/dist/editor/platform.js
+@@ -22,5 +22,9 @@ function isMoveCursorShortcut(e) {
+ 		else if (e.key === "End") return "end";
+ 	}
++	if (isMac && e.altKey && !e.ctrlKey && !e.metaKey) {
++		if (e.key === "ArrowLeft") return "wordLeft";
++		else if (e.key === "ArrowRight") return "wordRight";
++	}
+ 	if (!e.altKey && isPrimaryModifier(e, isMac)) {
+ 		if (e.key === "ArrowLeft") return isMac ? "textStart" : "wordLeft";
+ 		else if (e.key === "ArrowRight") return isMac ? "end" : "wordRight";
+diff --git a/dist/editor/selection.js b/dist/editor/selection.js
+--- a/dist/editor/selection.js
++++ b/dist/editor/selection.js
+@@ -101,8 +101,12 @@ function resolveIndentEdits(textDocument, selection, tabSize, outdent) {
+ function mapCursorMove(textDocument, selections, shortcut, options = {}) {
+ 	const lineCount = textDocument.lineCount;
+ 	return selections.map((selection) => {
+ 		let { line, character } = shortcut === "up" || shortcut === "left" || shortcut === "wordLeft" ? selection.start : selection.end;
+-		if (shortcut === "textStart" || shortcut === "start" || shortcut === "end") {
++		if (shortcut === "wordLeft" || shortcut === "wordRight") {
++			const moved = moveByWord(textDocument, line, character, shortcut === "wordRight", options);
++			line = moved.line;
++			character = moved.character;
++		} else if (shortcut === "textStart" || shortcut === "start" || shortcut === "end") {
+ 			const caret = getCaretPosition(selection);
+ 			line = caret.line;
+ 			character = caret.character;
+@@ -159,6 +163,32 @@ function mapCursorMove(textDocument, selections, shortcut, options = {}) {
+ 		};
+ 	});
+ }
++function moveByWord(textDocument, line, character, forward, options) {
++	const lineText = textDocument.getLineText(line);
++	character = Math.max(0, Math.min(character, lineText.length));
++	if (forward ? character === lineText.length : character === 0) {
++		const nextLine = line + (forward ? 1 : -1);
++		if (nextLine < 0 || nextLine >= textDocument.lineCount) return { line, character };
++		const targetLine = options.resolveRenderableLine == null ? nextLine : options.resolveRenderableLine(nextLine, forward ? "down" : "up");
++		if (targetLine === void 0) return { line, character };
++		line = Math.max(0, Math.min(targetLine, textDocument.lineCount - 1));
++		return { line, character: forward ? 0 : textDocument.getLineLength(line) };
++	}
++	// Use the same grapheme and character classes as word deletion, not browser-native selection.
++	const graphemeStarts = getLineGraphemeStarts(lineText);
++	let match;
++	for (let index = forward ? 0 : graphemeStarts.length - 1; index >= 0 && index < graphemeStarts.length; index += forward ? 1 : -1) {
++		const start = graphemeStarts[index];
++		const end = graphemeStarts[index + 1] ?? lineText.length;
++		if (forward ? end <= character : start >= character) continue;
++		const cluster = lineText.slice(start, end);
++		const nextMatch = !/\S/.test(cluster) ? 0 : /\p{Alphabetic}|\p{Number}|_/u.test(cluster) ? 1 : 2;
++		if (match !== void 0 && nextMatch !== match) break;
++		if (nextMatch !== 0) match = nextMatch;
++		character = forward ? end : start;
++	}
++	return { line, character };
++}
+ function moveBySoftLine(textDocument, line, character, direction, options) {
+ 	if (options.getSoftLineOffsets === void 0) return;
+ 	const current = getSoftLineInfo(textDocument, line, character, options);
 diff --git a/package.json b/package.json
 index 0cc43c4a7d..60b7d17d61 100644
 --- a/package.json
