@@ -110,6 +110,19 @@ it("reuses the parsed snapshot when a new route reads the same query result", as
   expect(screen.requests).toHaveLength(1);
 });
 
+it("resolves comment snapshots from the page containing the requested file", async () => {
+  using screen = setup();
+  const first = { ...patch("first.ts", "next"), headSha: "head", baseSha: "base" };
+  await screen.succeed(0, first);
+  act(() => screen.current.loadMore());
+  const second = { ...patch("second.ts"), headSha: "head", baseSha: "base" };
+  await screen.succeed(1, second);
+
+  expect(screen.current.snapshotForPath("first.ts")).toBe(first);
+  expect(screen.current.snapshotForPath("second.ts")).toBe(second);
+  expect(screen.current.snapshotForPath("missing.ts")).toBeUndefined();
+});
+
 function setupEntry() {
   vi.useFakeTimers();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

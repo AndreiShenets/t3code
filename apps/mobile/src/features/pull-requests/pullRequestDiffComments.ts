@@ -1,4 +1,5 @@
 import type { PullRequestReviewPosition, PullRequestReviewThread } from "@t3tools/contracts";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import type { NativeReviewDiffRow } from "../diffs/nativeReviewDiffSurface";
 import type { NativeReviewDiffData } from "../review/nativeReviewDiffAdapter";
 import type { PendingReviewComment } from "./pullRequestReviewDrafts";
@@ -79,7 +80,7 @@ export function annotatePullRequestDiff(
     attach(
       anchor,
       `discussion:${thread.id}`,
-      `${first?.author?.login ?? "Discussion"}${thread.isResolved ? " · Resolved" : ""}\n${first?.body ?? ""}\n${thread.commentCount ?? thread.comments.length} comments · Tap to open`,
+      `${getPullRequestActorName(first?.author, "Discussion")}${thread.isResolved ? " · Resolved" : ""}\n${first?.body ?? ""}\n${thread.commentCount ?? thread.comments.length} comments · Tap to open`,
       thread.line === null ? "file" : String(thread.line),
     );
   }
