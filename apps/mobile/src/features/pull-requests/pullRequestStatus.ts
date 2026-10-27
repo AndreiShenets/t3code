@@ -7,6 +7,7 @@ import type {
   PullRequestMergeability,
 } from "@t3tools/contracts";
 import type { AppSymbolName } from "../../components/ui/AppSymbol";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import { PullRequestGlyph } from "./pullRequestGlyphs";
 
 const STATES = {
@@ -180,7 +181,7 @@ export function pullRequestReviewSummary(
     return {
       title:
         approved.length === 1 && approved[0]?.author
-          ? `Approved by ${approved[0].author.login}`
+          ? `Approved by ${getPullRequestActorName(approved[0].author)}`
           : "Reviews approved",
       count: `${approved.length} approved`,
       icon: "checkmark.circle",
