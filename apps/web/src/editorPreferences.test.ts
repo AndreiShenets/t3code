@@ -67,3 +67,44 @@ it("checks revocation and regrant when a retained editor callback is invoked", a
   });
   expect(state.setPreference).toHaveBeenCalledTimes(1);
 });
+
+it("keeps the stored available editor for an authorized launch", async () => {
+  state.allowed.add(secondary);
+  state.getPreference.mockReturnValue("cursor");
+  const open = useOpenInPreferredEditor(secondary, ["vscode", "cursor"]);
+  expect(await open("/work")).toMatchObject({ _tag: "Success", value: "cursor" });
+  expect(state.run).toHaveBeenCalledExactlyOnceWith({
+    environmentId: secondary,
+    input: { cwd: "/work", editor: "cursor" },
+  });
+  expect(state.setPreference).not.toHaveBeenCalled();
+});
+
+it("returns the existing failures for a missing environment or editor", async () => {
+  state.allowed.add(secondary);
+  expect((await useOpenInPreferredEditor(null, ["vscode"])("/work"))._tag).toBe("Failure");
+  expect((await useOpenInPreferredEditor(secondary, [])("/work"))._tag).toBe("Failure");
+  expect(state.run).not.toHaveBeenCalled();
+});
+
+it("does not displace an existing IDE with Visual Studio when no preference is saved", async () => {
+  state.allowed.add(secondary);
+  expect(
+    await useOpenInPreferredEditor(secondary, ["visual-studio", "rider", "vscode"])("/work"),
+  ).toMatchObject({ _tag: "Success", value: "vscode" });
+});
+
+it("uses a saved Visual Studio preference for file opens", async () => {
+  state.allowed.add(secondary);
+  state.getPreference.mockReturnValue("visual-studio");
+  const open = useOpenInPreferredEditor(secondary, ["vscode", "visual-studio"]);
+  expect(await open("C:\\work\\file.cs:5")).toMatchObject({
+    _tag: "Success",
+    value: "visual-studio",
+  });
+  expect(state.run).toHaveBeenCalledExactlyOnceWith({
+    environmentId: secondary,
+    input: { cwd: "C:\\work\\file.cs:5", editor: "visual-studio" },
+  });
+  expect(state.setPreference).not.toHaveBeenCalled();
+});
