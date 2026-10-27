@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide";
 import * as Schema from "effect/Schema";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
 import { useDiffSearchShortcut } from "./diffs/useDiffSearchShortcut";
 import { useFilesystemReadAccess } from "~/state/filesystem";
@@ -537,13 +537,10 @@ export default function DiffPanel({
   const diffLineStat = sourceLineStat ?? getDiffLineStat(renderableFiles);
   const fileTreeEntries = diffFileTreeEntries(renderableFiles);
   const codeViewReveal = useCodeViewFileReveal();
-  const attachCodeView = useCallback(
-    (viewer: AnnotatableCodeViewHandle | null) => {
-      codeViewReveal.attach(viewer);
-      setCodeView(viewer);
-    },
-    [codeViewReveal],
-  );
+  const attachCodeView = useStableCallback((viewer: AnnotatableCodeViewHandle | null) => {
+    codeViewReveal.attach(viewer);
+    setCodeView(viewer);
+  });
   const revealDiffFile = (filePath: string) => {
     const index = renderableFileEntries.findIndex(
       (candidate) => resolveFileDiffPath(candidate.fileDiff) === filePath,

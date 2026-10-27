@@ -38,12 +38,12 @@ import {
   useEffectEvent,
   useRef,
   useState,
-  useCallback,
   type ReactNode,
 } from "react";
 
 import { observeIntersection } from "~/lib/observeIntersection";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
 import { useRenderedAppearance } from "~/hooks/useTheme";
 import { areAllDiffFilesCollapsed } from "~/lib/diffCollapse";
@@ -457,12 +457,11 @@ function PullRequestCodeTab({
   }, [backgroundRefreshToken, refreshFirstDiffPage, refreshFilesViewed]);
 
   const codeViewReveal = useCodeViewFileReveal();
-  const attachViewer = useCallback(
+  const attachViewer = useStableCallback(
     (next: CodeViewHandle<ReviewAnnotationGroup, undefined> | null) => {
       codeViewReveal.attach(next);
       setViewer(next);
     },
-    [codeViewReveal],
   );
   const answeredRevealNonce = useRef<number | null>(null);
 
