@@ -1331,6 +1331,19 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
       },
     }),
+    listMcpServers: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:mcp:list",
+      tag: WS_METHODS.providerMcpList,
+    }),
+    setMcpEnabled: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:mcp:set-enabled",
+      tag: WS_METHODS.providerMcpSetEnabled,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) =>
+          JSON.stringify([environmentId, input.instanceId, input.cwd]),
+      },
+    }),
     refreshProviders: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-providers",
       tag: WS_METHODS.serverRefreshProviders,

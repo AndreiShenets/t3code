@@ -62,6 +62,31 @@ describe("resolveComposerMenuSelection", () => {
 });
 
 describe("mobile slash commands", () => {
+  it("offers MCP management for OpenCode V2 without requiring plan-mode controls", () => {
+    const input = {
+      query: "mcp",
+      atMessageStart: true,
+      hasThread: true,
+      allowInteractionMode: false,
+    };
+    const provider = {
+      driver: ProviderDriverKind.make("opencode"),
+      slashCommands: [],
+      enabled: true,
+      version: "2.0.28",
+    };
+    expect(
+      buildComposerSlashCommandItems({ ...input, selectedProviderStatus: provider }).map(
+        (item) => item.label,
+      ),
+    ).toEqual(["/mcp"]);
+    expect(
+      buildComposerSlashCommandItems({
+        ...input,
+        selectedProviderStatus: { ...provider, version: "1.14.19" },
+      }),
+    ).toEqual([]);
+  });
   const antigravity = {
     driver: ProviderDriverKind.make("antigravity"),
     showInteractionModeToggle: false,
