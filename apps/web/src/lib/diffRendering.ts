@@ -38,7 +38,7 @@ export function fnv1a32(
 }
 
 function buildPatchCacheKey(patch: string, scope = "diff-panel"): string {
-  const normalizedPatch = patch.trim();
+  const normalizedPatch = patch.trimStart();
   const primary = fnv1a32(normalizedPatch, FNV_OFFSET_BASIS_32, FNV_PRIME_32).toString(36);
   const secondary = fnv1a32(
     normalizedPatch,
@@ -169,7 +169,7 @@ export function getRenderablePatch(
   options: RenderablePatchOptions = {},
 ): RenderablePatch | null {
   if (!patch) return null;
-  const normalizedPatch = patch.trim();
+  const normalizedPatch = patch.trimStart();
   if (normalizedPatch.length === 0) return null;
 
   try {

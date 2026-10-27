@@ -271,6 +271,43 @@ describe("diff file reconciliation", () => {
     expect(new Set(parsed.files.map(buildFileDiffIdentityKey)).size).toBe(parsed.files.length);
   });
 
+  it("keeps new-file versions stable when another file appears", () => {
+    const patch = [
+      "diff --git a/review.ts b/review.ts",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/review.ts",
+      "@@ -0,0 +1,2 @@",
+      "+const reviewMe = 1;",
+      "+export { reviewMe };",
+      "",
+    ].join("\n");
+    const extra = [
+      "diff --git a/unrelated.ts b/unrelated.ts",
+      "--- a/unrelated.ts",
+      "+++ b/unrelated.ts",
+      "@@ -1 +1 @@",
+      "-before",
+      "+after",
+      "",
+    ].join("\n");
+    const before = getRenderablePatch(patch, "new-file-before");
+    const after = getRenderablePatch(patch + extra, "new-file-after");
+    expect(before?.kind).toBe("files");
+    expect(after?.kind).toBe("files");
+    if (before?.kind !== "files" || after?.kind !== "files") return;
+    expect(after.files).toHaveLength(2);
+    const withoutNewline = getRenderablePatch(patch.trimEnd(), "new-file-before");
+    expect(withoutNewline?.kind).toBe("files");
+    if (withoutNewline?.kind !== "files") return;
+    expect(buildFileDiffRenderKey(withoutNewline.files[0]!)).not.toBe(
+      buildFileDiffRenderKey(before.files[0]!),
+    );
+    expect(buildFileDiffContentVersion(after.files[0]!)).toBe(
+      buildFileDiffContentVersion(before.files[0]!),
+    );
+  });
+
   it("keeps identities stable and versions local to the changed file", () => {
     const patch = (secondLine: string) =>
       [
