@@ -21,6 +21,7 @@ import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucid
 import * as Schema from "effect/Schema";
 import { useEffect, useRef, useState } from "react";
 import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
+import { useDiffSearchShortcut } from "./diffs/useDiffSearchShortcut";
 import { useFilesystemReadAccess } from "~/state/filesystem";
 import { useOpenInPreferredEditor } from "../editorPreferences";
 import { useFileContextMenuHandler } from "../fileContextMenu";
@@ -56,7 +57,7 @@ import { useDiffEditorAction } from "./diffs/useDiffEditorAction";
 import { diffHeaderTogglePath } from "./diffs/diffHeaderInteraction";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { DiffStatLabel } from "./chat/DiffStatLabel";
-import { AnnotatableCodeView } from "./diffs/AnnotatableCodeView";
+import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/AnnotatableCodeView";
 import { DiffFileTree } from "./diffs/DiffFileTree";
 import { diffFileTreeEntries } from "./diffs/diffFileTree.logic";
 import { Button } from "./ui/button";
@@ -223,6 +224,8 @@ export default function DiffPanel({
   );
   const [baseRefQuery, setBaseRefQuery] = useState("");
   const [codeViewRevision, setCodeViewRevision] = useState(0);
+  const [codeView, setCodeView] = useState<AnnotatableCodeViewHandle | null>(null);
+  useDiffSearchShortcut(codeView);
 
   const routeThreadRef = useThreadRouteRef();
   const activeThreadId = routeThreadRef?.threadId ?? null;
@@ -546,6 +549,10 @@ export default function DiffPanel({
   const diffLineStat = sourceLineStat ?? getDiffLineStat(renderableFiles);
   const fileTreeEntries = diffFileTreeEntries(renderableFiles);
   const codeViewReveal = useCodeViewFileReveal();
+  const attachCodeView = useStableCallback((viewer: AnnotatableCodeViewHandle | null) => {
+    codeViewReveal.attach(viewer);
+    setCodeView(viewer);
+  });
   const revealDiffFile = (filePath: string) => {
     const index = renderableFileEntries.findIndex(
       (candidate) => resolveFileDiffPath(candidate.fileDiff) === filePath,
@@ -1081,7 +1088,7 @@ export default function DiffPanel({
                           }
                         : null
                     }
-                    viewerRef={codeViewReveal.attach}
+                    viewerRef={attachCodeView}
                     codeViewKey={`${codeViewMountKey}:${lazySource ? filePatchScope : "preview"}`}
                     className="h-full min-h-0 overflow-auto"
                     files={codeViewFiles}

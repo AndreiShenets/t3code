@@ -3,7 +3,7 @@ import {
   sourceControlClients,
 } from "@t3tools/client-runtime/source-control-clients";
 import type { CodeViewItem, DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
-import type { CodeViewAnnotationArgs, CodeViewDiffItem } from "@pierre/diffs/react";
+import type { CodeViewAnnotationArgs, CodeViewDiffItem, CodeViewHandle } from "@pierre/diffs/react";
 import type {
   EnvironmentId,
   PullRequestDetailView,
@@ -43,6 +43,7 @@ import {
 
 import { observeIntersection } from "~/lib/observeIntersection";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
 import { useRenderedAppearance } from "~/hooks/useTheme";
 import { areAllDiffFilesCollapsed } from "~/lib/diffCollapse";
@@ -83,6 +84,7 @@ import { DiffFileHeaderActions } from "../diffs/DiffFileHeaderActions";
 import { useDiffEditorAction } from "../diffs/useDiffEditorAction";
 import { diffHeaderTogglePath } from "../diffs/diffHeaderInteraction";
 import { useCodeViewFileReveal } from "../diffs/useCodeViewFileReveal";
+import { useDiffSearchShortcut } from "../diffs/useDiffSearchShortcut";
 import { diffFileTreeEntries } from "../diffs/diffFileTree.logic";
 import { StyledDiffCodeView } from "../diffs/StyledDiffCodeView";
 import { Button } from "../ui/button";
@@ -328,6 +330,10 @@ function PullRequestCodeTab({
     readonly cursor: string | null;
     readonly slices: ReadonlyArray<DiffSlice>;
   }>({ key: "", cursor: null, slices: NO_SLICES });
+  const [viewer, setViewer] = useState<CodeViewHandle<ReviewAnnotationGroup, undefined> | null>(
+    null,
+  );
+  useDiffSearchShortcut(viewer);
 
   const referenceKey = pullRequestReviewKey(reference);
   const commit = selectedCommitOid;
@@ -471,6 +477,12 @@ function PullRequestCodeTab({
   }, [backgroundRefreshToken, refreshFirstDiffPage, refreshFilesViewed]);
 
   const codeViewReveal = useCodeViewFileReveal();
+  const attachViewer = useStableCallback(
+    (next: CodeViewHandle<ReviewAnnotationGroup, undefined> | null) => {
+      codeViewReveal.attach(next);
+      setViewer(next);
+    },
+  );
   const answeredRevealNonce = useRef<number | null>(null);
 
   const loadDiffFiles = createPullRequestDiffFileContentsLoader(getDiffFileContents, {
@@ -1457,7 +1469,7 @@ function PullRequestCodeTab({
               }}
               className="@container h-full overflow-auto [scrollbar-gutter:stable]"
               containerRef={scrollerRef}
-              viewerRef={codeViewReveal.attach}
+              viewerRef={attachViewer}
               items={items}
               selectedLines={selectedLines}
               onSelectedLinesChange={setSelectedLines}
