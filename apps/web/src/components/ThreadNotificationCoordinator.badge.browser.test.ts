@@ -207,7 +207,7 @@ function setup() {
 }
 
 it.each(["hasPendingApprovals", "hasPendingUserInput"] as const)(
-  "badges %s and clears when notifications are disabled",
+  "badges %s and preserves the badge when notifications are disabled",
   async (flag) => {
     await using app = setup();
     app.start();
@@ -221,10 +221,61 @@ it.each(["hasPendingApprovals", "hasPendingUserInput"] as const)(
     });
     state.mode = "sound";
     app.changeSettings();
-    expect(state.badge).toHaveBeenLastCalledWith(0);
+    expect(state.badge).toHaveBeenLastCalledWith(1);
     expect(notification.close).toHaveBeenCalled();
+    window.dispatchEvent(new Event("focus"));
+    expect(state.badge).toHaveBeenLastCalledWith(0);
   },
 );
+
+it.each(["off", "sound", "notifications", "notifications-and-sound"])(
+  "badges background threads in %s mode without notification permission",
+  async (mode) => {
+    await using app = setup();
+    state.mode = mode;
+    TestNotification.permission = "denied";
+    app.start();
+    state.shells.set("one", shell({ hasPendingApprovals: true }));
+    expect(state.badge).toHaveBeenLastCalledWith(1);
+    state.shells.set("one", shell({ hasPendingUserInput: true }));
+    expect(state.badge).toHaveBeenLastCalledWith(1);
+    state.shells.set("two", shell({ hasPendingUserInput: true }));
+    expect(state.badge).toHaveBeenLastCalledWith(2);
+    expect(TestNotification.sent).toEqual([]);
+    expect(state.sound).toHaveBeenCalledTimes(mode.includes("sound") ? 3 : 0);
+    app.setEnvironmentIds(["two"]);
+    expect(state.badge).toHaveBeenLastCalledWith(1);
+    window.dispatchEvent(new Event("focus"));
+    expect(state.badge).toHaveBeenLastCalledWith(0);
+  },
+);
+
+it("does not badge foreground threads with notifications off", async () => {
+  await using app = setup();
+  state.mode = "off";
+  focused = true;
+  app.start();
+  state.shells.set("one", shell({ hasPendingApprovals: true }));
+  expect(state.badge).not.toHaveBeenCalledWith(1);
+});
+
+it("badges settled completions with notifications off and clears on disposal", async () => {
+  await using app = setup();
+  state.mode = "off";
+  app.start();
+  using _timers = fakeTimers();
+  state.shells.set(
+    "one",
+    shell({
+      latestTurn: { turnId: "turn", state: "completed", completedAt: "2026-09-13T07:00:01.000Z" },
+    }),
+  );
+  await vi.advanceTimersByTimeAsync(WORKING_EXIT_GRACE_MS);
+  expect(state.badge).toHaveBeenLastCalledWith(1);
+  expect(TestNotification.sent).toEqual([]);
+  await app[Symbol.asyncDispose]();
+  expect(state.badge).toHaveBeenLastCalledWith(0);
+});
 
 it("holds a completion through a continuation gap and notifies once it settles", async () => {
   await using app = setup();

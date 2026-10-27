@@ -57,16 +57,18 @@ export function startThreadNotifications(
   registry: AtomRegistry.AtomRegistry,
   router: AnyRouter,
 ): () => void {
-  const pending = new Map<string, { environmentId: EnvironmentId; notification: Notification }>();
+  const pending = new Map<string, { environmentId: EnvironmentId; notification?: Notification }>();
   const watched = new Map<EnvironmentId, WatchedEnvironment>();
 
-  const trackNotification = (environmentId: EnvironmentId, notification: Notification) => {
-    pending.get(notification.tag)?.notification.close();
-    pending.set(notification.tag, { environmentId, notification });
+  const trackNotification = (environmentId: EnvironmentId, tag: string) => {
+    pending.get(tag)?.notification?.close();
+    const entry: { environmentId: EnvironmentId; notification?: Notification } = { environmentId };
+    pending.set(tag, entry);
     setNotificationBadge(pending.size);
+    return entry;
   };
   const clearPending = () => {
-    for (const { notification } of pending.values()) notification.close();
+    for (const { notification } of pending.values()) notification?.close();
     pending.clear();
     setNotificationBadge(0);
   };
@@ -100,6 +102,9 @@ export function startThreadNotifications(
         hasNotificationSound(getClientSettings().notificationMode),
       );
     }
+    const tag = threadNotificationTag(environmentId, thread.id);
+    const background = document.visibilityState !== "visible" || !document.hasFocus();
+    const pendingEntry = background ? trackNotification(environmentId, tag) : undefined;
     if (
       inAppNotificationsEnabled &&
       document.visibilityState === "visible" &&
@@ -146,12 +151,12 @@ export function startThreadNotifications(
     try {
       const notification = new Notification(title, {
         body: thread.title,
-        tag: threadNotificationTag(environmentId, thread.id),
+        tag,
         silent: true,
         // Windows drops clicks after a toast moves into Notification Center.
         requireInteraction: kind === "completion" && isWindowsPlatform(navigator.platform),
       });
-      trackNotification(environmentId, notification);
+      if (pendingEntry) pendingEntry.notification = notification;
       notification.addEventListener("click", () => {
         notification.close();
         window.focus();
@@ -251,9 +256,7 @@ export function startThreadNotifications(
   };
 
   const syncEnvironments = () => {
-    const { notificationMode, inAppNotificationsEnabled } = getClientSettings();
-    const enabled = notificationMode !== "off" || inAppNotificationsEnabled;
-    const environmentIds = enabled ? registry.get(environmentSummaries.environmentIdsAtom) : [];
+    const environmentIds = registry.get(environmentSummaries.environmentIdsAtom);
     const activeIds = new Set(environmentIds);
     for (const [environmentId, entry] of watched) {
       if (activeIds.has(environmentId)) continue;
@@ -270,7 +273,7 @@ export function startThreadNotifications(
     const count = pending.size;
     for (const [tag, entry] of pending) {
       if (activeIds.has(entry.environmentId)) continue;
-      entry.notification.close();
+      entry.notification?.close();
       pending.delete(tag);
     }
     if (count !== pending.size) setNotificationBadge(pending.size);
@@ -284,16 +287,12 @@ export function startThreadNotifications(
     if (nextMode === appliedMode) return;
     appliedMode = nextMode;
     stopModeListeners();
-    clearPending();
     const stops: Array<() => void> = [];
-    if (hasDesktopNotifications(nextMode)) {
-      const unsubscribeBadgeClear = window.desktopBridge?.onNotificationBadgeClear?.(clearPending);
-      window.addEventListener("focus", clearPending);
-      stops.push(() => {
-        unsubscribeBadgeClear?.();
-        window.removeEventListener("focus", clearPending);
-        clearPending();
-      });
+    if (!hasDesktopNotifications(nextMode)) {
+      for (const entry of pending.values()) {
+        entry.notification?.close();
+        delete entry.notification;
+      }
     }
     if (hasNotificationSound(nextMode)) {
       document.addEventListener("pointerdown", unlockNotificationAudio);
@@ -308,6 +307,8 @@ export function startThreadNotifications(
     };
   };
 
+  const unsubscribeBadgeClear = window.desktopBridge?.onNotificationBadgeClear?.(clearPending);
+  window.addEventListener("focus", clearPending);
   const onSettings = () => {
     applyMode();
     syncEnvironments();
@@ -328,5 +329,8 @@ export function startThreadNotifications(
     for (const entry of watched.values()) entry.unsubscribe();
     watched.clear();
     stopModeListeners();
+    unsubscribeBadgeClear?.();
+    window.removeEventListener("focus", clearPending);
+    clearPending();
   };
 }
