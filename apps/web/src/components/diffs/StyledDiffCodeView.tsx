@@ -203,7 +203,7 @@ ${CODE_WHITESPACE_UNSAFE_CSS}
 
 export type StyledDiffCodeViewOptions<LAnnotation> = Omit<
   NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>,
-  "unsafeCSS" | "itemMetrics" | "layout" | "onPostRender"
+  "unsafeCSS" | "itemMetrics" | "layout"
 >;
 
 type StyledDiffCodeViewProps<LAnnotation> = (
@@ -232,12 +232,18 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
   );
   const onPostRender: NonNullable<
     NonNullable<CodeViewProps<LAnnotation, undefined>["options"]>["onPostRender"]
-  > = (container, _instance, phase, { item }) => {
+  > = (container, _instance, phase, context) => {
+    const { item } = context;
     onCodePostRender(
       container,
       item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name,
       phase,
     );
+    if (context.type === "diff") {
+      options?.onPostRender?.(container, context.instance, phase, context);
+    } else {
+      options?.onPostRender?.(container, context.instance, phase, context);
+    }
   };
   return (
     <DiffWorkerPoolProvider>
