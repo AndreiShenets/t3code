@@ -19,8 +19,7 @@ import {
 } from "lucide-react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide";
 import * as Schema from "effect/Schema";
-import * as DateTime from "effect/DateTime";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
 import { useDiffSearchShortcut } from "./diffs/useDiffSearchShortcut";
 import { useFilesystemReadAccess } from "~/state/filesystem";
@@ -29,6 +28,7 @@ import { useFileContextMenuHandler } from "../fileContextMenu";
 import { type DraftId } from "../composerDraftStore";
 import { openDiffFilePrimaryAction } from "../diffFileActions";
 import { useCheckpointDiff } from "~/lib/checkpointDiffState";
+import { revisionedQuery } from "~/state/revisionedQuery";
 import { cn } from "~/lib/utils";
 import {
   selectThreadDiffPanelSelection,
@@ -49,7 +49,7 @@ import {
 } from "../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting";
 import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollapse";
-import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
+import { LIVE_REFRESH_MIN_INTERVAL_MS, useLiveRefresh } from "../hooks/useLiveRefresh";
 import { useProject, useThreadCheckpointSummaries, useQuietThreadShell } from "../state/entities";
 import { useClientSettings, updateClientSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
@@ -324,20 +324,29 @@ export default function DiffPanel({
     },
     { enabled: isGitRepo && selectedTurn !== undefined },
   );
-  const branchDiffPreview = useEnvironmentQuery(
+  const branchDiffPreviewInput =
     canReadFiles && selectedRunId === null && activeThread && activeCwd
-      ? reviewEnvironment.diffPreview({
-          environmentId: activeThread.environmentId,
-          input: {
-            cwd: activeCwd,
-            ...(selectedBaseRef ? { baseRef: selectedBaseRef } : {}),
-            ignoreWhitespace: diffIgnoreWhitespace,
-          },
-        })
-      : null,
-  );
+      ? {
+          cwd: activeCwd,
+          ...(selectedBaseRef ? { baseRef: selectedBaseRef } : {}),
+          ignoreWhitespace: diffIgnoreWhitespace,
+        }
+      : undefined;
   const canRefreshGitDiff =
     isGitRepo && selectedRunId === null && activeThread != null && activeCwd != null;
+  // Read under the workspace mutation id, so each mutation refetches the diff; the panel stays
+  // mounted while hidden, so a mutation made then is already reflected when it shows.
+  const branchDiffPreview = useEnvironmentQuery(
+    branchDiffPreviewInput && activeThread
+      ? revisionedQuery(
+          reviewEnvironment.diffPreview({
+            environmentId: activeThread.environmentId,
+            input: branchDiffPreviewInput,
+          }),
+          canRefreshGitDiff ? workspaceMutationId : undefined,
+        )
+      : null,
+  );
   const activeThreadRefreshKey = routeThreadRef
     ? `${routeThreadRef.environmentId}:${routeThreadRef.threadId}`
     : null;
@@ -460,51 +469,30 @@ export default function DiffPanel({
     baseRef: lazySource?.baseRef ?? selectedBaseRef,
     ignoreWhitespace: diffIgnoreWhitespace,
     theme: resolvedTheme,
-    revision: branchDiffPreview.data
-      ? DateTime.formatIso(branchDiffPreview.data.generatedAt)
-      : undefined,
+    previewInput: branchDiffPreviewInput,
     preview: renderablePatch,
   });
   const refreshBranchDiffPreview = refreshPreviewQuery;
-  const previewOpenHandledRef = useRef(false);
-  const refreshDiffForWorkspaceMutation = useStableCallback(() => {
-    previewOpenHandledRef.current = true;
-    refreshBranchDiffPreview();
-  });
+  const diffRefreshKey = `diff:${activeThreadRefreshKey ?? ""}`;
 
-  // A mutation refresh also satisfies revalidation for the current opening.
-  useWorkspaceMutationRefresh({
-    enabled: canRefreshGitDiff,
-    mutationId: workspaceMutationId,
-    refresh: refreshDiffForWorkspaceMutation,
-    resourceKey: `diff:${activeThreadRefreshKey ?? ""}`,
-  });
-
-  useEffect(() => {
-    if (!visible || !canReadFiles || !canRefreshGitDiff) {
-      previewOpenHandledRef.current = false;
-      return;
-    }
-    if (previewOpenHandledRef.current) return;
-    previewOpenHandledRef.current = true;
-    if (branchDiffPreview.data !== null && !branchDiffPreview.isPending) {
-      refreshBranchDiffPreview();
-    }
-  }, [
-    branchDiffPreview.data,
-    branchDiffPreview.isPending,
-    canReadFiles,
-    canRefreshGitDiff,
-    refreshBranchDiffPreview,
-    visible,
-  ]);
-
-  useEffect(() => {
-    if (!canRefreshGitDiff) return;
-    const refreshOnFocus = () => refreshBranchDiffPreview();
-    window.addEventListener("focus", refreshOnFocus);
-    return () => window.removeEventListener("focus", refreshOnFocus);
-  }, [canRefreshGitDiff, refreshBranchDiffPreview]);
+  // The panel stays mounted while hidden, and edits made outside T3 Code bump no mutation id, so
+  // showing it revalidates the diff; that also stands in for focus events missed while hidden.
+  // A git diff is too costly to repeat on a timer nobody asked for. A diff read within the floor,
+  // such as a mutation's refetch while hidden, already counts as that revalidation.
+  useLiveRefresh(
+    branchDiffPreview.data !== null && !branchDiffPreview.isPending
+      ? () => {
+          if (Date.now() - branchDiffPreview.dataUpdatedAt < LIVE_REFRESH_MIN_INTERVAL_MS) return;
+          refreshBranchDiffPreview();
+        }
+      : null,
+    {
+      enabled: visible && canReadFiles && canRefreshGitDiff,
+      key: diffRefreshKey,
+      intervalMs: null,
+      refreshOnShow: true,
+    },
+  );
 
   const isRefreshingDiff = branchDiffPreview.isPending || areFilePatchesPending;
   const renderableFileEntries = renderableFiles.map(getCachedFileEntry);
@@ -544,13 +532,18 @@ export default function DiffPanel({
       collapsed:
         collapsedDiffFileKeys.has(fileKey) || fileDiff.cacheKey?.endsWith(":pending") === true,
     }));
-  const codeViewFileKeys = codeViewFiles.map((file) => file.fileKey);
   const pendingFiles = renderableFiles.filter((file) => file.cacheKey?.endsWith(":pending"));
   const allDiffFilesCollapsed = areAllDiffFilesCollapsed(diffFileKeys, collapsedDiffFileKeys);
   const diffLineStat = sourceLineStat ?? getDiffLineStat(renderableFiles);
   const fileTreeEntries = diffFileTreeEntries(renderableFiles);
-  const treeRevealScope = { collapseScopeKey, diffSelection };
-  const requestTreeReveal = useCodeViewFileReveal(codeView, treeRevealScope, codeViewFileKeys);
+  const codeViewReveal = useCodeViewFileReveal();
+  const attachCodeView = useCallback(
+    (viewer: AnnotatableCodeViewHandle | null) => {
+      codeViewReveal.attach(viewer);
+      setCodeView(viewer);
+    },
+    [codeViewReveal],
+  );
   const revealDiffFile = (filePath: string) => {
     const index = renderableFileEntries.findIndex(
       (candidate) => resolveFileDiffPath(candidate.fileDiff) === filePath,
@@ -565,10 +558,12 @@ export default function DiffPanel({
     if (lazySource && index >= settledFileCount) {
       requestFile(index);
     }
-    requestTreeReveal(file.fileKey);
+    codeViewReveal.request(file.fileKey);
     return true;
   };
 
+  // A file another view asked to reveal (a chat diff link): retried as the diff loads until it
+  // holds the file, then not again until a new request, so it does not undo what the user did since.
   const externalRevealRef = useRef<string | null>(null);
   useEffect(() => {
     if (!selectedFilePath) {
@@ -1095,7 +1090,7 @@ export default function DiffPanel({
                 >
                   <AnnotatableCodeView
                     key={collapseScopeKey ?? reviewSectionId}
-                    viewerRef={setCodeView}
+                    viewerRef={attachCodeView}
                     codeViewKey={`${codeViewMountKey}:${lazySource ? filePatchScope : "preview"}`}
                     className="h-full min-h-0 overflow-auto"
                     files={codeViewFiles}
@@ -1154,6 +1149,7 @@ export default function DiffPanel({
                       preferredHighlighter: PREFERRED_HIGHLIGHTER,
                       themeType: resolvedTheme as DiffThemeType,
                       stickyHeaders: true,
+                      onPostRender: codeViewReveal.flush,
                       ...(currentLoadDiffFiles ? { loadDiffFiles } : {}),
                     }}
                   />
