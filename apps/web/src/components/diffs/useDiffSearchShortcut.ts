@@ -8,7 +8,7 @@ export function useDiffSearchShortcut(
     getInstance(): Pick<CodeView, "getContainerElement" | "openSearch"> | undefined;
   } | null,
 ) {
-  // oxlint-disable-next-line t3code/react-effect-budget -- Bind the native find shortcut to the mounted diff viewer and release it on detach.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Bind the native find shortcut to the mounted diff viewer and release it on detach.
   useEffect(() => {
     const instance = viewer?.getInstance();
     const container = instance?.getContainerElement();
