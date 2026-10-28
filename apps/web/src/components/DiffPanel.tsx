@@ -1079,7 +1079,7 @@ export default function DiffPanel({
                 >
                   <AnnotatableCodeView
                     key={collapseScopeKey ?? reviewSectionId}
-                      workspace={
+                    workspace={
                       activeThread && activeCwd
                         ? {
                             environmentId: activeThread.environmentId,
@@ -1091,7 +1091,7 @@ export default function DiffPanel({
                           }
                         : null
                     }
-                      viewerRef={attachCodeView}
+                    viewerRef={attachCodeView}
                     codeViewKey={`${codeViewMountKey}:${lazySource ? filePatchScope : "preview"}`}
                     className="h-full min-h-0 overflow-auto"
                     files={codeViewFiles}

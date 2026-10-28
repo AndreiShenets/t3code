@@ -958,7 +958,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
     },
   });
   const CHILD = "ses_f1485c529ffea4URrYruwEg0Ja";
-    const backgroundShell = {
+  const backgroundShell = {
     id: "sh_background",
     status: "running",
     command: "npm test",
@@ -1140,7 +1140,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       assert.equal(yield* runtime.hasPendingBackgroundWorkForThread!(thread), running);
     }).pipe(Effect.scoped),
   );
-    it.effect("does not report subagent session costs as the root session cost", () =>
+  it.effect("does not report subagent session costs as the root session cost", () =>
     Effect.gen(function* () {
       const { runtime, thread } = yield* resumed([
         ...backgroundLaunch(CHILD),

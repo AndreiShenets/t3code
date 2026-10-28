@@ -256,7 +256,7 @@ describe("DesktopSettings", () => {
     ),
   );
 
-    it.effect.skipIf(!symlinksSupported)(
+  it.effect.skipIf(!symlinksSupported)(
     "saves through a symlinked settings file without replacing the link",
     () =>
       withSettings(

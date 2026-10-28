@@ -494,13 +494,13 @@ function PullRequestCodeTab({
     error: diffError,
     refresh: refreshDiffPage,
   } = diffQuery;
-  // oxlint-disable-next-line t3code/react-effect-budget -- Revalidate server diff pages when restoring a retained review snapshot.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Revalidate server diff pages when restoring a retained review snapshot.
   useEffect(() => {
     if (data !== null && !diffPending && diffError === null && dataUpdatedAt < revalidateAfter) {
       refreshDiffPage();
     }
   }, [data, diffPending, diffError, dataUpdatedAt, refreshDiffPage, revalidateAfter]);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Retain the review snapshot in its owning tab's external store before unmount.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Retain the review snapshot in its owning tab's external store before unmount.
   useLayoutEffect(() => {
     viewState?.setState((state) => ({
       code: {
@@ -1397,7 +1397,7 @@ function PullRequestCodeTab({
     </div>
   );
   // Hooks between diff derivations and their readers break compiler caching.
-  // oxlint-disable-next-line t3code/react-effect-budget -- Restore the native viewer scroll after its diff items attach.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Restore the native viewer scroll after its diff items attach.
   useLayoutEffect(() => {
     const position = scrollToRestore.current;
     if (position === null || position.scopeKey !== scopeKey || items.length === 0) return;

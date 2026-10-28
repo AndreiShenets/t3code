@@ -452,7 +452,7 @@ export function PullRequestDetailPanel({
       scrollerByTab.current.code = node;
     },
   }));
-  // oxlint-disable-next-line t3code/react-effect-budget -- Save review navigation to the owning tab's external store before panel unmount.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Save review navigation to the owning tab's external store before panel unmount.
   useLayoutEffect(() => {
     viewState?.setState({ timelineOrder, commitOid: selectedCodeCommitOid, condensedByTab });
   }, [viewState, timelineOrder, selectedCodeCommitOid, condensedByTab]);

@@ -19,7 +19,7 @@ export function useCustomBuildUpdate() {
   const [state, setState] = useState<DesktopCustomBuildState | null>(null);
   const [pending, setPending] = useAtom(pendingAtom);
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- Subscribe to desktop updater IPC and unsubscribe when its bridge changes.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Subscribe to desktop updater IPC and unsubscribe when its bridge changes.
   useEffect(() => {
     if (!act) return;
     let cancelled = false;

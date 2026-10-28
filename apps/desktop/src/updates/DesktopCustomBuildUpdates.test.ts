@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { vi } from "vite-plus/test";
@@ -66,6 +67,9 @@ const harness = (
     );
     const quitting = yield* Ref.make(false);
     const backendReady = yield* Ref.make(true);
+    const primaryBackendStartup = yield* SubscriptionRef.make<DesktopState.PrimaryBackendStartup>({
+      _tag: "Ready",
+    });
     const steps: string[] = [];
     const requests: string[] = [];
     let openedPath: string | null = null;
@@ -80,7 +84,7 @@ const harness = (
         customBuildStamp: options.currentStamp ?? null,
         path,
       } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]),
-      Layer.succeed(DesktopState.DesktopState, { quitting, backendReady }),
+      Layer.succeed(DesktopState.DesktopState, { quitting, backendReady, primaryBackendStartup }),
       Layer.mock(ElectronWindow.ElectronWindow)({ sendAll: () => Effect.void }),
       Layer.mock(ElectronShell.ElectronShell)({
         openPath: (target) =>
