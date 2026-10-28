@@ -4,6 +4,7 @@ import type {
   ProjectId,
   ProjectScript,
   ResolvedKeybindingsConfig,
+  ServerProvider,
   ThreadId,
 } from "@t3tools/contracts";
 
@@ -22,6 +23,7 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { ThreadMcpControl } from "./ThreadMcpControl";
 import { ThreadServersPanel } from "./ThreadServersPanel";
 
 const GitActionsControl = memo(BaseGitActionsControl);
@@ -45,6 +47,7 @@ interface ThreadDetailsPanelProps extends Pick<
   showOpenInPicker: boolean;
   openInShortcutEnabled: boolean;
   gitCwd: string | null;
+  mcpProvider: ServerProvider | null;
   isGitRepo: boolean;
   envLocked: boolean;
   availableEnvironments: readonly EnvironmentOption[];
@@ -154,6 +157,16 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                   onDeleteScript={props.onDeleteProjectScript}
                 />
               ) : null}
+              <ThreadMcpControl
+                key={JSON.stringify([
+                  props.environmentId,
+                  props.mcpProvider?.instanceId,
+                  props.gitCwd,
+                ])}
+                environmentId={props.environmentId}
+                provider={props.mcpProvider}
+                cwd={props.gitCwd}
+              />
             </div>
           </ThreadDetailsSection>
 
