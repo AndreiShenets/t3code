@@ -1,6 +1,8 @@
 import { SourceControlProviderKind } from "@t3tools/contracts";
 import { limitRecoveryCommand } from "./UsageLimitRecoveryWorker.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as AzureClient from "@t3tools/source-control-azure-devops/server/AzureDevOpsServerClient";
+import * as AzurePullRequests from "@t3tools/source-control-azure-devops/server/AzureDevOpsServerPullRequestProvider";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -2832,6 +2834,293 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       });
       assert.isFalse(yield* watched);
     }),
+  );
+
+  it.effect.each(["completed", "abandoned", "unwatch"])(
+    "watches custom Azure PR transitions and stops on %s",
+    (ending) =>
+      Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
+        const threadId = ThreadId.make(`azure-watch-${ending}`);
+        const projectId = ProjectId.make(`azure-watch-project-${ending}`);
+        yield* seedProject({
+          projectId,
+          title: "Azure watch",
+          workspaceRoot: "/workspace/azure-watch",
+          defaultModelSelection: null,
+          createdAt: "2026-10-01T00:00:00.000Z",
+        });
+        yield* orchestrator.dispatch({
+          type: "thread.create",
+          createdBy: "user",
+          creationSource: "web",
+          commandId: CommandId.make(`azure-create-${ending}`),
+          threadId,
+          projectId,
+          title: "Azure watch",
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+        });
+        const context = {
+          origin: "https://azure.example",
+          collectionUrl: "https://azure.example/Collection",
+          projectUrl: "https://azure.example/Collection/Project",
+          project: "Project",
+          repository: "Repo",
+          repositoryPath: "Collection/Project/_git/Repo",
+          repositoryUrl: "https://azure.example/Collection/Project/_git/Repo",
+        };
+        const reference = {
+          cwd: "/workspace/azure-watch",
+          host: "azure.example",
+          repository: context.repositoryPath,
+          number: 12,
+        };
+        const key = { host: reference.host, repository: reference.repository, number: 12 };
+        const watch = (watching: boolean, id: string) =>
+          orchestrator.dispatch({
+            type: "thread.pull-request.watch",
+            commandId: CommandId.make(`azure-${ending}-${id}`),
+            threadId,
+            ...key,
+            watching,
+            link: { url: `${context.repositoryUrl}/pullrequest/12`, source: "agent" },
+          });
+        yield* watch(true, "start");
+        yield* watch(true, "start-again");
+
+        let state = "active";
+        let head = "head-one";
+        let iteration = 1;
+        let policyHead = head;
+        let policyState = "running";
+        let hasPolicy = false;
+        let checksUnavailable = false;
+        let policyReads = 0;
+        let failPolicyRead = -1;
+        let mergeStatus = "succeeded";
+        let discussions: unknown[] = [];
+        let detailReads = 0;
+        const provider = yield* AzurePullRequests.make.pipe(
+          Effect.provide(
+            Layer.mock(AzureClient.AzureDevOpsServerClient)({
+              resolve: () => Effect.succeed(context),
+              request: (input) =>
+                Effect.suspend((): Effect.Effect<unknown, AzureClient.AzureDevOpsServerError> => {
+                  const url = new URL(input.url);
+                  if (url.pathname.endsWith("/iterations"))
+                    return Effect.succeed({
+                      value: [
+                        {
+                          id: iteration,
+                          sourceRefCommit: { commitId: head },
+                          commonRefCommit: { commitId: "base" },
+                        },
+                      ],
+                    });
+                  if (url.pathname.endsWith("/changes"))
+                    return Effect.succeed({ changeEntries: [] });
+                  if (url.pathname.endsWith("/connectionData"))
+                    return Effect.succeed({ authenticatedUser: { id: "viewer" } });
+                  if (url.pathname.endsWith("/threads"))
+                    return Effect.succeed({ value: discussions });
+                  if (url.pathname.endsWith("/statuses")) return Effect.succeed({ value: [] });
+                  if (url.pathname.endsWith("/evaluations")) {
+                    policyReads++;
+                    if (checksUnavailable || policyReads === failPolicyRead)
+                      return Effect.fail(
+                        new AzureClient.AzureDevOpsServerError({
+                          operation: "request",
+                          reason: "failed",
+                          status: 403,
+                        }),
+                      );
+                    return Effect.succeed({
+                      value: hasPolicy
+                        ? [
+                            {
+                              evaluationId: "build",
+                              status: policyState,
+                              configuration: {
+                                id: 1,
+                                isEnabled: true,
+                                isBlocking: true,
+                                type: {
+                                  id: "0609b952-1397-4640-95ec-e00a01b2c241",
+                                  displayName: "Build",
+                                },
+                              },
+                              context: { lastMergeSourceCommitId: policyHead },
+                            },
+                          ]
+                        : [],
+                    });
+                  }
+                  return Effect.succeed({
+                    pullRequestId: 12,
+                    title: "Azure change",
+                    sourceRefName: "refs/heads/change",
+                    targetRefName: "refs/heads/main",
+                    status: state,
+                    mergeStatus,
+                    creationDate: "2026-10-01T00:00:00Z",
+                    createdBy: { id: "author" },
+                    repository: { id: "repo-id", name: "Repo", project: { id: "project-guid" } },
+                    lastMergeSourceCommit: { commitId: head },
+                  });
+                }),
+            }),
+          ),
+        );
+        const host = Layer.mergeAll(
+          NodeServices.layer,
+          Layer.mock(PullRequestService.PullRequestService)({
+            detail: () =>
+              provider.getChangeRequest(reference).pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    detailReads++;
+                  }),
+                ),
+                Effect.map((detail) => ({
+                  ...watchedPullRequestDetail({
+                    projectId,
+                    number: 12,
+                    at: "2026-10-02T12:00:00Z",
+                  }),
+                  ...detail,
+                  headSha: detail.headSha ?? undefined,
+                  provider: provider.kind,
+                  capabilities: provider.capabilities,
+                  viewer: "viewer",
+                })),
+                Effect.orDie,
+              ),
+            activity: () => provider.getChangeRequestActivity(reference).pipe(Effect.orDie),
+            watchFingerprint: () =>
+              provider.getChangeRequestWatchFingerprint!(reference).pipe(Effect.orDie),
+            invalidate: () => Effect.void,
+          }),
+        );
+        let reactor = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
+        const sweep = TestClock.adjust("2 minutes").pipe(
+          Effect.andThen(Effect.suspend(() => reactor.sweep)),
+          Effect.andThen(worker.drain()),
+        );
+        const summaries = Effect.map(
+          orchestrator.getThreadRecords(threadId, ["messages"]),
+          ({ messages }) => messages.flatMap((message) => message.notification?.summary ?? []),
+        );
+        yield* sweep;
+        assert.deepEqual(yield* summaries, []);
+        const quietReads = detailReads;
+        yield* sweep;
+        assert.equal(detailReads, quietReads, "an unchanged quiet fingerprint skips full detail");
+
+        hasPolicy = true;
+        yield* sweep;
+        policyState = "rejected";
+        yield* sweep;
+        assert.deepEqual(yield* summaries, ["#12: checks failed"]);
+        yield* sweep;
+        policyState = "approved";
+        failPolicyRead = policyReads + 2;
+        const beforeFailure = detailReads;
+        yield* sweep;
+        assert.equal(
+          detailReads,
+          beforeFailure + 1,
+          "the detail's check read failed after a successful fingerprint",
+        );
+        assert.deepEqual(
+          yield* summaries,
+          ["#12: checks failed"],
+          "an incomplete read cannot pass",
+        );
+        yield* sweep;
+        assert.deepEqual(yield* summaries, ["#12: checks failed", "#12: checks passed"]);
+        reactor = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
+        yield* sweep;
+        assert.lengthOf(yield* summaries, 2, "a reactor restart does not repeat success");
+
+        discussions = [
+          {
+            id: 1,
+            comments: [
+              {
+                id: 1,
+                author: { id: "other" },
+                content: "Please adjust",
+                publishedDate: "2026-10-03T00:00:00Z",
+              },
+            ],
+          },
+          {
+            id: 2,
+            properties: {
+              CodeReviewThreadType: { $value: "VoteUpdate" },
+              CodeReviewVoteResult: { $value: "-5" },
+              CodeReviewVotedByIdentity: { $value: "1" },
+            },
+            identities: { "1": { id: "reviewer" } },
+            comments: [
+              {
+                id: 1,
+                author: { id: "reviewer" },
+                commentType: "system",
+                publishedDate: "2026-10-03T00:00:00Z",
+              },
+            ],
+          },
+          {
+            id: 3,
+            comments: [
+              {
+                id: 1,
+                author: { id: "viewer" },
+                content: "My own reply",
+                publishedDate: "2026-10-03T00:00:00Z",
+              },
+            ],
+          },
+        ];
+        mergeStatus = "conflicts";
+        checksUnavailable = true;
+        yield* sweep;
+        assert.deepEqual((yield* summaries).slice(2), ["#12: new comments, merge conflict"]);
+        const records = yield* orchestrator.getThreadRecords(threadId, ["messages"]);
+        assert.include(records.messages.at(-1)!.text, "2 new comments");
+        assert.include(records.messages.at(-1)!.text, "changes-requested");
+        yield* sweep;
+        assert.lengthOf(yield* summaries, 3);
+        checksUnavailable = false;
+
+        head = "head-two";
+        iteration = 2;
+        mergeStatus = "succeeded";
+        yield* sweep;
+        assert.lengthOf(yield* summaries, 3, "old build success cannot pass on a new head");
+        policyHead = head;
+        yield* sweep;
+        assert.deepEqual((yield* summaries).slice(3), ["#12: checks passed"]);
+        const linked = (yield* orchestrator.getThreadShell(threadId))?.pullRequests;
+        assert.lengthOf(linked ?? [], 1);
+        assert.equal(linked?.[0]?.watch?.headSha, "head-two");
+
+        if (ending === "unwatch") yield* watch(false, "stop");
+        else state = ending;
+        yield* sweep;
+        const ended = yield* orchestrator.getThreadShell(threadId);
+        assert.isUndefined(ended?.pullRequests?.[0]?.watch);
+        assert.lengthOf(ended?.pullRequests ?? [], 1, "stopping keeps the PR linked");
+        const afterStop = detailReads;
+        yield* sweep;
+        assert.equal(detailReads, afterStop);
+      }).pipe(Effect.provide(Layer.fresh(layerTest))),
   );
 
   it.effect("ends a watch it cannot read, and tells the agent", () =>
