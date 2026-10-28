@@ -208,7 +208,7 @@ function UsageScreen(props: {
     metric,
     sinceDay: window.sinceDay,
     untilDay: window.untilDay,
-    isPast24Hours,
+    isHourly,
     timeZone: window.timeZone,
   };
   const providers = (
