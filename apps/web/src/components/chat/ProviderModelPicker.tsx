@@ -13,7 +13,12 @@ import { cn } from "~/lib/utils";
 import { ModelPickerContent, resolveModelPickerSelectedModel } from "./ModelPickerContent";
 import { ChatGptSharingControl } from "./ChatGptSharingControl";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
-import { ModelEsque, getDisplayModelName, getTriggerDisplayModelName } from "./providerIconUtils";
+import {
+  ModelEsque,
+  getProviderRowLabel,
+  getDisplayModelName,
+  getTriggerDisplayModelName,
+} from "./providerIconUtils";
 import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
 import {
   ComposerControl,
@@ -159,6 +164,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       label: model
         ? `${getTriggerDisplayModelName(model, entry?.driverKind)}${unavailable}`
         : selection.model,
+      providerLabel: entry
+        ? getProviderRowLabel(entry.displayName, model?.subProvider)
+        : selection.instanceId,
       fullLabel: model ? `${getDisplayModelName(model)}${unavailable}` : selection.model,
     };
   });
@@ -171,11 +179,25 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           .join(", ")}${selectedEntries.length > 2 ? `, ${selectedEntries.length - 2} more` : ""}`
     : undefined;
   const allModelNames = selectedEntries
-    ? selectedEntries.map((selection) => selection.fullLabel).join(", ") || "Choose models"
+    ? selectedEntries
+        .map((selection) => `${selection.fullLabel} (${selection.providerLabel})`)
+        .join(", ") || "Choose models"
     : undefined;
+  const providerLabel =
+    props.triggerLabel !== undefined
+      ? undefined
+      : selectedEntries
+        ? [...new Set(selectedEntries.map((selection) => selection.providerLabel))].join(", ")
+        : activeEntry
+          ? getProviderRowLabel(activeEntry.displayName, selectedModel?.subProvider)
+          : undefined;
+  const modelDescription =
+    props.triggerLabel ??
+    allModelNames ??
+    (providerLabel ? `${triggerLabel} (${providerLabel})` : triggerLabel);
   const triggerTooltipContent = shortcutLabel
-    ? `${props.triggerLabel ?? allModelNames ?? triggerLabel} · ${shortcutLabel}`
-    : (props.triggerLabel ?? allModelNames ?? triggerLabel);
+    ? `${modelDescription} · ${shortcutLabel}`
+    : modelDescription;
 
   return (
     <Popover
@@ -191,9 +213,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       <PopoverTrigger
         render={
           <ComposerControl
-            aria-label={
-              props.triggerAriaLabel ?? props.triggerLabel ?? allModelNames ?? triggerLabel
-            }
+            aria-label={props.triggerAriaLabel ?? modelDescription}
             size={size}
             data-chat-provider-model-picker="true"
             className={cn(
@@ -253,12 +273,22 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <TooltipTrigger
               render={
                 <span
-                  className="min-w-0 flex-1 overflow-hidden truncate"
+                  className={cn(
+                    "min-w-0 flex-1 overflow-hidden truncate",
+                    providerLabel && "flex flex-col py-0! text-center [text-box:normal]!",
+                  )}
                   data-chat-provider-model-picker-label="true"
                 />
               }
             >
-              {props.triggerLabel ?? multipleLabel ?? triggerTitle}
+              <span className={cn("truncate", providerLabel && "w-full pb-px leading-none")}>
+                {props.triggerLabel ?? multipleLabel ?? triggerTitle}
+              </span>
+              {providerLabel ? (
+                <span className="w-full truncate pb-px text-6xs font-normal leading-none text-muted-foreground">
+                  {providerLabel}
+                </span>
+              ) : null}
             </TooltipTrigger>
             <TooltipPopup side="top">{triggerTooltipContent}</TooltipPopup>
           </Tooltip>
