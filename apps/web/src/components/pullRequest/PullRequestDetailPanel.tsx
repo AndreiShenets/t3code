@@ -159,6 +159,7 @@ import { PullRequestGuideTab } from "./PullRequestGuideTab";
 import { guideRunKey, useGuideRunStore } from "./guide/guideRunStore";
 import { useReviewGuideWriter } from "./guide/useReviewGuideWriter";
 import { resolvePullRequestFileWorkspace } from "./pullRequestFileEditing.logic";
+import { savePullRequestScroll, type PullRequestViewStateStore } from "./pullRequestViewState";
 
 const actionFailureLabels = (term: string): Record<PullRequestAction, string> => ({
   merge: `Could not merge this ${term}`,
@@ -274,6 +275,7 @@ export function PullRequestDetailPanel({
   onBack,
   onSelectPullRequest,
   onGuideShown,
+  viewState,
   initialTab = "summary",
   onTabChange,
 }: {
@@ -296,6 +298,7 @@ export function PullRequestDetailPanel({
   composerDraftTarget?: ScopedThreadRef | DraftId;
   onBack?: (() => void) | undefined;
   onGuideShown?: (() => void) | undefined;
+  viewState?: PullRequestViewStateStore;
   initialTab?: PullRequestDetailTab;
   onTabChange?: ((tab: PullRequestDetailTab) => void) | undefined;
 }) {
@@ -352,6 +355,7 @@ export function PullRequestDetailPanel({
   useEnvironmentQuery(pullRequestEnvironment.changeBreakdown({ environmentId, input: reference }));
   const [threadPickerOpen, setThreadPickerOpen] = useState(false);
   const [openReviewRequest, setOpenReviewRequest] = useState(0);
+  const savedView = viewState?.getState();
   const {
     canWriteSourceControl,
     detailQuery,
@@ -381,11 +385,13 @@ export function PullRequestDetailPanel({
     else setTab(next);
     onTabChange?.(next);
   };
-  const [timelineOrder, setTimelineOrder] = useState<"newest" | "oldest">("newest");
+  const [timelineOrder, setTimelineOrder] = useState<"newest" | "oldest">(
+    savedView?.timelineOrder ?? "newest",
+  );
   const [codeCommitScope, setCodeCommitScope] = useState<{
     readonly pullRequestKey: string;
     readonly oid: string | null;
-  }>(() => ({ pullRequestKey, oid: null }));
+  }>(() => ({ pullRequestKey, oid: savedView?.commitOid ?? null }));
   const selectedCodeCommitOid =
     codeCommitScope.pullRequestKey === pullRequestKey ? codeCommitScope.oid : null;
   const selectCodeCommit = (oid: string | null) => {
@@ -421,21 +427,35 @@ export function PullRequestDetailPanel({
   // Each tab restores the condensed state its own scrolling left behind.
   const [condensedByTab, setCondensedByTab] = useState<
     Partial<Record<PullRequestDetailTab, boolean>>
-  >({});
+  >(savedView?.condensedByTab ?? {});
   const condensed = condensedByTab[tab] ?? false;
   const scrollerByTab = useRef<Partial<Record<PullRequestDetailTab, HTMLDivElement | null>>>({});
   // Fresh ref callbacks would detach and reattach every scroller on each render.
   const [scrollerRefs] = useState(() => ({
     summary: (node: HTMLDivElement | null) => {
       scrollerByTab.current.summary = node;
+      const scroll = viewState?.getState().scrollByTab.summary;
+      if (node && scroll) {
+        node.scrollTop = scroll.top;
+        node.scrollLeft = scroll.left;
+      }
     },
     timeline: (node: HTMLDivElement | null) => {
       scrollerByTab.current.timeline = node;
+      const scroll = viewState?.getState().scrollByTab.timeline;
+      if (node && scroll) {
+        node.scrollTop = scroll.top;
+        node.scrollLeft = scroll.left;
+      }
     },
     code: (node: HTMLDivElement | null) => {
       scrollerByTab.current.code = node;
     },
   }));
+  // oxlint-disable-next-line t3code/react-effect-budget -- Save review navigation to the owning tab's external store before panel unmount.
+  useLayoutEffect(() => {
+    viewState?.setState({ timelineOrder, commitOid: selectedCodeCommitOid, condensedByTab });
+  }, [viewState, timelineOrder, selectedCodeCommitOid, condensedByTab]);
   const foldRef = useRef<HTMLDivElement | null>(null);
   const condensedRowRef = useRef<HTMLDivElement | null>(null);
   // Save the target before collapse: the browser may clamp scrollTop as the viewport grows,
@@ -457,7 +477,8 @@ export function PullRequestDetailPanel({
     )
       return;
     compensation.scroller.scrollTop = Math.max(0, compensation.target);
-  }, [condensed, tab]);
+    savePullRequestScroll(viewState, tab, compensation.scroller);
+  }, [condensed, tab, viewState]);
   const lastSelectedMergeMethod = useUiStateStore((state) => state.pullRequestMergeMethod);
   const setLastSelectedMergeMethod = useUiStateStore((state) => state.setPullRequestMergeMethod);
   const resolveProjectDefaultMergeMethod = usePullRequestDefaultMergeMethodResolver(
@@ -605,6 +626,8 @@ export function PullRequestDetailPanel({
     nativeStackQuery.refresh();
   };
   const [refreshToken, setRefreshToken] = useState(0);
+  const [revisionToken, setRevisionToken] = useState(0);
+  const backgroundRefreshToken = revisionToken + (turnRefresh ?? 0);
   const [activityRevision, setActivityRevision] = useState<{
     readonly key: string;
     readonly updatedAt: string;
@@ -622,7 +645,7 @@ export function PullRequestDetailPanel({
       // Interrupting a mutation's activity refresh can leave SWR displaying stale data.
       setActivityRevision(next);
       setActivityRevalidations((count) => count + 1);
-      setRefreshToken((token) => token + 1);
+      setRevisionToken((token) => token + 1);
     }
   }
   const revalidateActivity = useEffectEvent(() => activityQuery.refresh());
@@ -1746,6 +1769,7 @@ export function PullRequestDetailPanel({
           const scroller = scrollerByTab.current[tab];
           if (event.target !== scroller || scroller === null || scroller === undefined) return;
           const top = scroller.scrollTop;
+          savePullRequestScroll(viewState, tab, scroller);
           const previous = condensedByTab[tab] ?? false;
           const foldHeight = foldRef.current?.scrollHeight ?? 0;
           let next = previous;
@@ -1879,7 +1903,8 @@ export function PullRequestDetailPanel({
                     {...(canFixFindings ? { onFixFinding: startFixFinding } : {})}
                     onRefresh={refreshDetail}
                     refreshToken={refreshToken}
-                    backgroundRefreshToken={turnRefresh ?? 0}
+                    backgroundRefreshToken={backgroundRefreshToken}
+                    {...(viewState ? { viewState } : {})}
                     revealRequest={codeRevealRequest}
                     onOpenFile={openCheckoutFile}
                     fileWorkspace={fileWorkspace}
