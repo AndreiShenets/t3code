@@ -3,6 +3,26 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./shared/customDefinition": {
+      "types": "./src/shared/customDefinition.ts",
+      "import": "./src/shared/customDefinition.ts"
+    },
+    "./server/customDriver": {
+      "types": "./src/server/customDriver.ts",
+      "import": "./src/server/customDriver.ts"
+    },
+    "./server/AzureDevOpsServerClient": {
+      "types": "./src/server/AzureDevOpsServerClient.ts",
+      "import": "./src/server/AzureDevOpsServerClient.ts"
+    },
+    "./server/AzureDevOpsServerPullRequestProvider": {
+      "types": "./src/server/AzureDevOpsServerPullRequestProvider.ts",
+      "import": "./src/server/AzureDevOpsServerPullRequestProvider.ts"
+    },
+    "./server/AzureDevOpsServerSourceControlProvider": {
+      "types": "./src/server/AzureDevOpsServerSourceControlProvider.ts",
+      "import": "./src/server/AzureDevOpsServerSourceControlProvider.ts"
+    },
     "./shared/definition": {
       "types": "./src/shared/definition.ts",
       "import": "./src/shared/definition.ts"
