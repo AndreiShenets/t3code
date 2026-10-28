@@ -184,6 +184,15 @@ const OpenCode2ProviderCapabilities = {
 type EventOf<T extends OpenCodeEvent["type"]> = Extract<OpenCodeEvent, { readonly type: T }>;
 type Tokens = EventOf<"session.step.ended">["data"]["tokens"];
 
+const contextUsageOfStep = (tokens: Tokens, window: number | undefined) => ({
+  usedTokens: tokens.input + tokens.cache.read + tokens.cache.write + tokens.output,
+  ...(window === undefined ? {} : { maxTokens: window }),
+  inputTokens: tokens.input + tokens.cache.read + tokens.cache.write,
+  cachedInputTokens: tokens.cache.read,
+  outputTokens: tokens.output,
+  reasoningOutputTokens: tokens.reasoning,
+});
+
 interface TurnOwner {
   readonly appThread: OrchestrationV2AppThread;
   readonly threadId: OrchestrationV2AppThread["id"];
@@ -273,6 +282,8 @@ interface OpenBlock {
 interface ThreadState {
   readonly sessionId: string;
   providerThread: OrchestrationV2ProviderThread;
+  // Session totals do not measure context; hold cost until a step supplies occupancy.
+  pendingCost: number | undefined;
   readonly providerTurns: Map<string, OrchestrationV2ProviderTurn>;
   readonly shells: Map<string, Shell.Info>;
   active: ActiveTurn | undefined;
@@ -738,6 +749,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
     ): ThreadState => ({
       sessionId,
       providerThread,
+      pendingCost: undefined,
       providerTurns: new Map(),
       shells: new Map(),
       active: undefined,
@@ -1597,13 +1609,8 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           ? {}
           : {
               tokenUsage: {
-                usedTokens:
-                  lastStep.input + lastStep.cache.read + lastStep.cache.write + lastStep.output,
+                ...contextUsageOfStep(lastStep, window),
                 maxTokens: window ?? null,
-                inputTokens: lastStep.input + lastStep.cache.read + lastStep.cache.write,
-                cachedInputTokens: lastStep.cache.read,
-                outputTokens: lastStep.output,
-                reasoningOutputTokens: lastStep.reasoning,
                 updatedAt: DateTime.formatIso(completedAt),
               },
             }),
@@ -2125,6 +2132,38 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           turn.usage.cacheWrite += tokens.cache.write;
           turn.usage.output += tokens.output + tokens.reasoning;
           turn.usage.reasoning += tokens.reasoning;
+          if (state.subagent === undefined) {
+            const window = windowOf(turn.input.runtimePolicy.cwd, turn.input.modelSelection.model);
+            const usage = contextUsageOfStep(tokens, window);
+            const updatedAt = yield* DateTime.now;
+            const cost =
+              state.pendingCost === undefined
+                ? state.providerThread.contextUsage?.cost
+                : { amount: state.pendingCost, currency: "USD" };
+            state.pendingCost = undefined;
+            state.providerThread = {
+              ...state.providerThread,
+              contextUsage: {
+                ...usage,
+                compactsAutomatically: true,
+                ...(cost === undefined ? {} : { cost }),
+              },
+              updatedAt,
+            };
+            yield* emitProviderTurn(state, turn, {
+              ...turn.providerTurn,
+              tokenUsage: {
+                ...usage,
+                maxTokens: window ?? null,
+                updatedAt: DateTime.formatIso(updatedAt),
+              },
+            });
+            yield* emit({
+              type: "provider_thread.updated",
+              driver,
+              providerThread: state.providerThread,
+            });
+          }
           return;
         }
         case "session.retry.scheduled":
@@ -2404,6 +2443,28 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       if (sessionId === undefined) return;
       const state = threads.get(sessionId);
       if (state === undefined) return;
+      if (event.type === "session.usage.updated") {
+        if (state.subagent !== undefined) return;
+        const contextUsage = state.providerThread.contextUsage;
+        if (contextUsage == null) {
+          state.pendingCost = event.data.cost;
+          return;
+        }
+        if (contextUsage.cost?.amount === event.data.cost) return;
+        state.providerThread = {
+          ...state.providerThread,
+          contextUsage: {
+            ...contextUsage,
+            cost: { amount: event.data.cost, currency: "USD" },
+          },
+          updatedAt: yield* DateTime.now,
+        };
+        return yield* emit({
+          type: "provider_thread.updated",
+          driver,
+          providerThread: state.providerThread,
+        });
+      }
       if (event.type === "session.model.selected" || event.type === "session.step.started") {
         if (event.type === "session.model.selected") state.model = event.data.model;
         const providerThread = withReportedModel(state.providerThread, event.data.model);
@@ -3466,6 +3527,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
             providerSessionId: input.providerSessionId,
             nativeThreadRef: ref(created.id),
             nativeConversationHeadRef: null,
+            contextUsage: null,
             status: "idle",
             updatedAt: createdAt,
           };
@@ -3506,12 +3568,21 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           const providerThread: OrchestrationV2ProviderThread = {
             ...threadInput.providerThread,
             providerSessionId: input.providerSessionId,
+            ...(threadInput.providerThread.contextUsage == null
+              ? {}
+              : {
+                  contextUsage: {
+                    ...threadInput.providerThread.contextUsage,
+                    cost: { amount: native.cost, currency: "USD" },
+                  },
+                }),
             status: "idle",
             updatedAt: yield* DateTime.now,
           };
           const cwd = threadInput.runtimePolicy?.cwd;
           const loaded = threads.has(sessionId);
           const state = register(providerThread, native, cwd ?? native.location.directory);
+          state.pendingCost = providerThread.contextUsage == null ? native.cost : undefined;
           if (!loaded) yield* stopLeftoverRequests(state);
           yield* writeRules(state, threadInput.runtimePolicy ?? state.policy);
           if (cwd != null && native.location.directory !== cwd) {

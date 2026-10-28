@@ -48,6 +48,19 @@ describe("V2 context window presentation", () => {
 });
 
 describe("live provider-turn usage (#8144)", () => {
+  it.each([0, 3.03])("retains session cost %d alongside live context tokens", (amount) => {
+    const snapshot = deriveLatestContextWindowSnapshot(
+      [],
+      decodeTokenUsage({ usedTokens: 42_000, updatedAt: "2026-10-22T12:00:00.000Z" }),
+      {
+        contextUsage: { usedTokens: 0, cost: { amount, currency: "USD" } },
+        updatedAt: DateTime.makeUnsafe("2026-10-22T11:59:00.000Z"),
+      },
+    );
+    expect(snapshot?.usedTokens).toBe(42_000);
+    expect(snapshot?.cost).toEqual({ amount, currency: "USD" });
+  });
+
   it("prefers the provider's live report over compaction items", () => {
     const usage = decodeTokenUsage({
       usedTokens: 42_000,
