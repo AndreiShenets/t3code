@@ -512,6 +512,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["diff ignore spaces edits default"],
   },
   {
+    id: "show-whitespace-characters",
+    title: "Show whitespace characters",
+    to: "/settings/general",
+    searchTerms: ["spaces tabs dots arrows invisible indentation file diff views"],
+  },
+  {
     id: "default-diff-file-state",
     title: "Default diff file state",
     to: "/settings/diffs",

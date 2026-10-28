@@ -39,6 +39,7 @@ const clientSettings: ClientSettings = {
   composerCollapseOnScroll: true,
   diffFilesCollapsed: true,
   diffIgnoreWhitespace: true,
+  showWhitespace: true,
   diffLayout: "stacked",
   environmentIdentificationMode: "artwork",
   favorites: [],
@@ -111,7 +112,7 @@ const withClientSettings = <A, E, R>(
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped);
 
 describe("DesktopClientSettings", () => {
-  it.effect.skipIf(!symlinksSupported)(
+    it.effect.skipIf(!symlinksSupported)(
     "saves through a symlinked client settings file without replacing the link",
     () =>
       withClientSettings(
