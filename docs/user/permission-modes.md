@@ -21,9 +21,9 @@ not prevent the agent from asking questions about the task.
 ## Provider differences
 
 Providers enforce permissions differently. Some read-only actions can proceed in **Supervised**.
-**Auto** uses automatic review on Codex, Claude, Cursor, Grok, and fx; providers without an equivalent,
-including OpenCode and Antigravity, fall back to asking. On Grok, commands its review blocks come
-to you for approval. On fx, prompts it still sends also come to you.
+**Auto** uses automatic review on Codex, Claude, Cursor, Grok, and fx. OpenCode 2 uses your native
+OpenCode permissions; OpenCode 1.x and Antigravity fall back to asking. On Grok, commands its
+review blocks come to you for approval. On fx, prompts it still sends also come to you.
 
 Muse Code offers only **Supervised** and **Full access**. A Muse thread already set to another mode
 runs in **Supervised**.
