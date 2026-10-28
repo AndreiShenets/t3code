@@ -29,6 +29,9 @@ import {
   parseWslRuntimeArchiveMembers,
   readWorkspaceConfig,
   createBuildConfig,
+  resolveDesktopProductName,
+  resolveDesktopBuildIconAssets,
+  resolveDesktopWebAssetBrand,
   DESKTOP_FILE_EXCLUSIONS,
   InvalidMacPasskeyRpDomainError,
   InvalidMacPasskeyPublishableKeyError,
@@ -70,6 +73,7 @@ import {
 } from "./update-release-package-versions.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 
 const encodeModuleUrl = Schema.encodeEffect(Schema.fromJsonString(Schema.String));
 const decodePackageVersion = Schema.decodeUnknownEffect(
@@ -258,6 +262,17 @@ const makeMacPayloadFixture = Effect.fn("test.makeMacPayloadFixture")(function* 
 });
 
 it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
+  it("keeps Nightly names and artwork for plain custom-build versions", () => {
+    for (const version of ["0.1.0", "0.0.17-nightly.20260413.42"]) {
+      assert.equal(resolveDesktopProductName(version), "T3 Code (Nightly)");
+      assert.equal(resolveDesktopWebAssetBrand(version), "nightly");
+      assert.deepStrictEqual(resolveDesktopBuildIconAssets(version), {
+        macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
+        linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
+        windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
+      });
+    }
+  });
   it.effect("rejects overlapping builds from another process until restoration finishes", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
