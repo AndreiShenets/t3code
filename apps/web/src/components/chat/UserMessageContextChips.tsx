@@ -6,7 +6,7 @@ import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { COMPOSER_CONTEXT_KINDS } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
-import { use, type CSSProperties, type ReactNode } from "react";
+import { use, type ReactNode } from "react";
 import { FileDiff, type FileDiffOptions } from "@pierre/diffs/react";
 import { useCodeDisplay } from "~/hooks/useCodeDisplay";
 import { CODE_WHITESPACE_UNSAFE_CSS } from "~/lib/codeWhitespace";
