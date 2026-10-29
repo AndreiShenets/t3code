@@ -335,6 +335,31 @@ export const DesktopCliCommandStateSchema = Schema.Struct({
 });
 export type DesktopCliCommandState = typeof DesktopCliCommandStateSchema.Type;
 
+export const DesktopCustomBuildStateSchema = Schema.Struct({
+  supported: Schema.Boolean,
+  status: Schema.Literals([
+    "idle",
+    "checking",
+    "available",
+    "downloading",
+    "downloaded",
+    "installing",
+    "up-to-date",
+  ]),
+  currentBuild: Schema.NullOr(Schema.String),
+  availableBuild: Schema.NullOr(Schema.String),
+  message: Schema.NullOr(Schema.String),
+});
+export type DesktopCustomBuildState = typeof DesktopCustomBuildStateSchema.Type;
+
+export const DesktopCustomBuildActionSchema = Schema.Literals([
+  "state",
+  "check",
+  "download",
+  "install",
+]);
+export type DesktopCustomBuildAction = typeof DesktopCustomBuildActionSchema.Type;
+
 export interface DesktopUpdateActionResult {
   accepted: boolean;
   completed: boolean;
@@ -1111,6 +1136,8 @@ export interface DesktopBridge {
     minimumVersion?: string,
   ) => Promise<DesktopUpdateState>;
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
+  customBuildUpdate?: (action: DesktopCustomBuildAction) => Promise<DesktopCustomBuildState>;
+  onCustomBuildState?: (listener: (state: DesktopCustomBuildState) => void) => () => void;
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   /** With a version, installs only that downloaded build. */
   installUpdate: (expectedVersion?: string) => Promise<DesktopUpdateActionResult>;
