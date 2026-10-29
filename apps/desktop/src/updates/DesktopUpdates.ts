@@ -71,7 +71,7 @@ const UpdateInfo = Schema.Struct({
   version: Schema.String,
   // Malformed notes must not block update-state decoding; normalizeDesktopUpdateReleaseNotes validates separately.
   releaseNotes: Schema.optional(Schema.Unknown),
-  releaseDate: Schema.optional(Schema.String),
+  releaseDate: Schema.optional(Schema.Unknown),
 });
 
 const DownloadProgressInfo = Schema.Struct({
@@ -374,7 +374,8 @@ export const make = Effect.gen(function* () {
           desktopUpdateChannelOf(version) === state.channel &&
           (Option.isSome(floor)
             ? compareSemverVersions(version, floor.value) >= 0
-            : desktopUpdateChannelOf(environment.appVersion) === state.channel),
+            : desktopUpdateChannelOf(environment.appVersion) === state.channel ||
+              (Boolean(environment.customBuildStamp) && state.channel === "nightly")),
       ),
     );
   const updateStateRef = yield* Ref.make<DesktopUpdateState>(
@@ -486,9 +487,10 @@ export const make = Effect.gen(function* () {
         desktopUpdateChannelOf(environment.appVersion) === "nightly");
     yield* electronUpdater.setChannel(channel);
     yield* electronUpdater.setAllowPrerelease(allowsPrerelease);
-    // An older build can lack migrations this one ran. Only a guarded track switch's own check
-    // may offer one.
-    yield* electronUpdater.setAllowDowngrade(false);
+    // Custom builds use a stable base version; their newer same-base nightlies sort below it.
+    yield* electronUpdater.setAllowDowngrade(
+      Boolean(environment.customBuildStamp) && allowsPrerelease,
+    );
     yield* electronUpdater.setFullChangelog(fullChangelog);
     yield* logUpdaterInfo("using update channel", {
       channel,
@@ -928,7 +930,7 @@ export const make = Effect.gen(function* () {
             info.releaseNotes,
             info.version,
             state.channel,
-            info.releaseDate,
+            typeof info.releaseDate === "string" ? info.releaseDate : undefined,
           );
           yield* setState(
             reduceDesktopUpdateStateOnUpdateAvailable(
