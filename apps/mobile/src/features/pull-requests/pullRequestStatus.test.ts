@@ -25,6 +25,25 @@ function check(status: PullRequestCheck["status"]): PullRequestCheck {
 }
 
 describe("mobile overview review status", () => {
+  it("uses the reviewer's known name in an approval summary", () => {
+    const approved = review("APPROVED", "2026-10-10T09:00:00Z");
+    expect(
+      pullRequestReviewSummary(
+        { reviewers: [] },
+        activity([
+          {
+            ...approved,
+            author: {
+              ...author,
+              login: "64d61648-5e0b-4335-bcec-3a3d88963c89",
+              name: "Andrei Shenets",
+            },
+          },
+        ]),
+      ).title,
+    ).toBe("Approved by Andrei Shenets");
+  });
+
   it("uses each reviewer's latest verdict even when history arrives out of order", () => {
     const result = pullRequestReviewSummary(
       { reviewers: [] },

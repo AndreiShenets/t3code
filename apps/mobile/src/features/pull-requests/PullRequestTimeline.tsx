@@ -1,4 +1,5 @@
 import { PullRequestEntryRow } from "./PullRequestEntryRow";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import IconGitCommit from "@tabler/icons-react-native/IconGitCommit";
@@ -91,7 +92,9 @@ function TimelineComment({
         <PullRequestAvatar actor={comment.author} size={22} />
         <View className="min-w-0 flex-1">
           <Text className="text-sm">
-            <Text className="font-t3-medium">{comment.author?.login ?? "Unknown author"}</Text>
+            <Text className="font-t3-medium">
+              {getPullRequestActorName(comment.author, "Unknown author")}
+            </Text>
             <Text className="text-foreground-muted">
               {approved ? " approved" : changes ? " requested changes" : " commented"}
             </Text>
@@ -219,7 +222,7 @@ export function pullRequestTimelineRows(
             <PullRequestAvatar actor={thread.comments[0]?.author ?? null} size={22} />
             <Text className="flex-1 text-sm">
               <Text className="font-t3-medium">
-                {thread.comments[0]?.author?.login ?? "Unknown author"}
+                {getPullRequestActorName(thread.comments[0]?.author, "Unknown author")}
               </Text>
               <Text className="text-foreground-muted"> started a discussion</Text>
             </Text>
