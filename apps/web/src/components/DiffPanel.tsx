@@ -61,7 +61,9 @@ import {
 } from "../state/entities";
 import { useClientSettings, updateClientSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
-import { DiffFilePathCopyButton } from "./DiffFilePathCopyButton";
+import { DiffFileHeaderActions, type DiffFileEditorAction } from "./diffs/DiffFileHeaderActions";
+import { useDiffEditorAction } from "./diffs/useDiffEditorAction";
+import { diffHeaderTogglePath } from "./diffs/diffHeaderInteraction";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { AnnotatableCodeView } from "./diffs/AnnotatableCodeView";
@@ -173,17 +175,25 @@ function DiffFileHeaderSuffix({
   error,
   truncated,
   onRetry,
+  onOpenFile,
+  editorAction,
 }: {
   filePath: string;
   hasStat: boolean;
   error: boolean;
   truncated: boolean;
   onRetry: (path: string) => void;
+  onOpenFile: (path: string) => void;
+  editorAction: DiffFileEditorAction | null;
 }) {
   return (
     <>
       <span data-diff-copy-path className="inline-flex">
-        <DiffFilePathCopyButton filePath={filePath} />
+        <DiffFileHeaderActions
+          filePath={filePath}
+          onOpenFile={onOpenFile}
+          editorAction={editorAction}
+        />
       </span>
       {hasStat ? (
         <DiffFileStatus error={error} truncated={truncated} retry={() => onRetry(filePath)} />
@@ -243,6 +253,11 @@ export default function DiffPanel({
   const activeRepositoryRoot = activeThread?.worktreePath
     ? undefined
     : activeProject?.repositoryIdentity?.rootPath;
+  const getEditorAction = useDiffEditorAction(
+    activeThread?.environmentId ?? null,
+    activeCwd,
+    activeRepositoryRoot,
+  );
   const serverConfig = useAtomValue(
     serverEnvironment.configValueAtom(activeThread?.environmentId ?? null),
   );
@@ -1141,28 +1156,7 @@ export default function DiffPanel({
                 <div
                   className="min-h-0 min-w-0 flex-1"
                   onClickCapture={(event) => {
-                    const composedPath = event.nativeEvent.composedPath?.() ?? [];
-                    for (const node of composedPath) {
-                      if (!(node instanceof HTMLElement)) continue;
-                      // Header buttons own their clicks; bubbling a chevron click would toggle twice.
-                      if (node instanceof HTMLButtonElement || node instanceof HTMLAnchorElement) {
-                        return;
-                      }
-                    }
-                    const title = composedPath.find(
-                      (node): node is HTMLElement =>
-                        node instanceof HTMLElement && node.hasAttribute("data-title"),
-                    );
-                    const filePath = title?.textContent;
-                    if (filePath) {
-                      openDiffFile(filePath);
-                      return;
-                    }
-                    const header = composedPath.find(
-                      (node): node is HTMLElement =>
-                        node instanceof HTMLElement && node.hasAttribute("data-diffs-header"),
-                    );
-                    const headerFilePath = header?.querySelector("[data-title]")?.textContent;
+                    const headerFilePath = diffHeaderTogglePath(event.nativeEvent);
                     if (!headerFilePath) return;
                     const file = codeViewFiles.find(
                       (candidate) => candidate.filePath === headerFilePath,
@@ -1210,6 +1204,8 @@ export default function DiffPanel({
                           error={state?.error ?? false}
                           truncated={state?.truncated ?? false}
                           onRetry={retry}
+                          onOpenFile={openDiffFile}
+                          editorAction={getEditorAction(path)}
                         />
                       );
                     }}

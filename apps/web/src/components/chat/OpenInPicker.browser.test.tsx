@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { act, fakeTimers, render as renderUi } from "../../../test/render";
 import type { RemoteOpenState } from "../../remoteOpen";
+import "~/index.css";
 
 const state = vi.hoisted(() => ({
   allowed: new Set<string>(),
@@ -64,8 +65,20 @@ vi.mock(import("../../remoteOpen"), async (importOriginal) => ({
   useRemoteOpenHint: () => [false, state.markHintSeen] as const,
   openRemoteEditorUrl: state.openUrl,
 }));
+vi.mock(import("../../state/server"), async (importOriginal) => {
+  const actual = await importOriginal();
+  const { Atom } = await import("effect/reactivity");
+  const config = Atom.make(() => ({ availableEditors: ["rider", "vscode"] }));
+  return {
+    ...actual,
+    serverEnvironment: { ...actual.serverEnvironment, configValueAtom: (() => config) as never },
+  };
+});
 
 import { OpenInPicker } from "./OpenInPicker";
+import { DiffFileHeaderActions } from "../diffs/DiffFileHeaderActions";
+import { useDiffEditorAction } from "../diffs/useDiffEditorAction";
+import { TooltipProvider } from "../ui/tooltip";
 import {
   registerOpenFavoriteEditorCommand,
   useOpenFavoriteEditorShortcut,
@@ -74,6 +87,40 @@ import {
 const primary = EnvironmentId.make("primary");
 const selected = EnvironmentId.make("selected");
 const editors: readonly EditorId[] = ["vscode"];
+
+function FileActions({
+  workspaceRoot = "/work/repo/apps/web",
+  repositoryRoot = "/work/repo",
+}: {
+  workspaceRoot?: string | undefined;
+  repositoryRoot?: string | undefined;
+}) {
+  const getEditorAction = useDiffEditorAction(selected, workspaceRoot, repositoryRoot);
+  return (
+    <TooltipProvider>
+      <OpenInPicker
+        environmentId={selected}
+        keybindings={DEFAULT_RESOLVED_KEYBINDINGS}
+        availableEditors={["rider", "vscode"]}
+        openInCwd={workspaceRoot ?? null}
+        enableShortcut={false}
+      />
+      <div data-file-actions>
+        <DiffFileHeaderActions
+          filePath="apps/web/src/file.ts"
+          onOpenFile={() => {}}
+          editorAction={getEditorAction("apps/web/src/file.ts")}
+        />
+      </div>
+      <div data-outside-workspace>
+        <DiffFileHeaderActions
+          filePath="apps/server/src/file.ts"
+          editorAction={getEditorAction("apps/server/src/file.ts")}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
 
 async function setup() {
   state.allowed.clear();
@@ -186,6 +233,68 @@ describe("host editor access", () => {
     expect(primaryButton().disabled).toBe(true);
     expect(byLabel("Choose editor").disabled).toBe(true);
     expect((await pressOpenFavorite()).defaultPrevented).toBe(false);
+  });
+});
+
+describe("diff header preferred editor", () => {
+  it("tracks picker selection and opens the checkout file in that editor at Edit's size", async () => {
+    await using fixture = await setup();
+    state.allowed.add(selected);
+    window.localStorage.setItem("t3code:last-editor", JSON.stringify("rider"));
+    await fixture.screen.rerender(<FileActions />);
+    const rider = fixture.byLabel("Open in Rider");
+    const edit = fixture.byLabel("Open file");
+    expect(rider.getBoundingClientRect().width).toBe(edit.getBoundingClientRect().width);
+    expect(rider.getBoundingClientRect().height).toBe(edit.getBoundingClientRect().height);
+    expect(rider.querySelector("svg")!.getBoundingClientRect().width).toBe(
+      edit.querySelector("svg")!.getBoundingClientRect().width,
+    );
+    await fixture.click(rider);
+    expect(state.run).toHaveBeenCalledExactlyOnceWith({
+      environmentId: selected,
+      input: { cwd: "/work/repo/apps/web/src/file.ts", editor: "rider" },
+    });
+
+    await fixture.click(fixture.byLabel("Choose editor"));
+    const vscode = fixture.menuItems().find((item) => item.textContent?.includes("VS Code"));
+    expect(vscode).toBeDefined();
+    await fixture.click(vscode!);
+    await fixture.click(fixture.byLabel("Open in VS Code"));
+    expect(state.run).toHaveBeenLastCalledWith({
+      environmentId: selected,
+      input: { cwd: "/work/repo/apps/web/src/file.ts", editor: "vscode" },
+    });
+    expect(
+      document.querySelector("[data-outside-workspace] button[aria-label^='Open in']"),
+    ).toBeNull();
+  });
+
+  it("uses remote file links rather than launching an editor on the server", async () => {
+    await using fixture = await setup();
+    state.remote = { mode: "remote-links", host: { kind: "ssh-alias", host: "devbox" } };
+    await fixture.screen.rerender(<FileActions />);
+    await fixture.click(fixture.byLabel("Open in VS Code"));
+    expect(state.openUrl).toHaveBeenCalledExactlyOnceWith(
+      "vscode://vscode-remote/ssh-remote+devbox/work/repo/apps/web/src/file.ts:1:1",
+    );
+    expect(state.run).not.toHaveBeenCalled();
+  });
+
+  it("respects host permissions and worktree paths", async () => {
+    await using fixture = await setup();
+    await fixture.screen.rerender(
+      <FileActions workspaceRoot="/work/feature" repositoryRoot="/work/feature" />,
+    );
+    expect(fixture.byLabel("Open in VS Code").disabled).toBe(true);
+    state.allowed.add(selected);
+    await act(async () => {
+      for (const listener of state.listeners) listener();
+    });
+    await fixture.click(fixture.byLabel("Open in VS Code"));
+    expect(state.run).toHaveBeenCalledExactlyOnceWith({
+      environmentId: selected,
+      input: { cwd: "/work/feature/apps/web/src/file.ts", editor: "vscode" },
+    });
   });
 });
 
