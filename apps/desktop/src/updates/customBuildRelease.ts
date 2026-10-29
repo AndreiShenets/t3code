@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
+import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
 
 export const CUSTOM_BUILD_REPOSITORY = "AndreiShenets/t3code";
 
@@ -9,7 +9,7 @@ export function isNightlyNotNewerThanCustomBuild(
   customBuildTimestamp: string | null,
 ) {
   if (
-    resolveDefaultDesktopUpdateChannel(version) !== "nightly" ||
+    desktopUpdateChannelOf(version) !== "nightly" ||
     typeof releaseDate !== "string" ||
     !customBuildTimestamp
   ) {
