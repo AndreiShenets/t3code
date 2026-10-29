@@ -27,6 +27,7 @@ export function DiffPanelShell(props: {
 
   return (
     <div
+      data-diff-search-scope
       className={cn(
         "flex h-full min-w-0 flex-col bg-background",
         props.mode === "inline"
