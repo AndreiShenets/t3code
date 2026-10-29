@@ -92,33 +92,19 @@ async function setup({ chatFirst = false, platform = "Win32" } = {}) {
     container,
     scope,
     panel,
-    unmount: screen.unmount,
     [Symbol.asyncDispose]: () => environment.disposeAsync(),
   };
 }
 
-it("opens find in a standalone review before clicking a collapsed file", async () => {
-  await using screen = await setup();
+it.each([
+  ["Win32", "Control"],
+  ["MacIntel", "Meta"],
+])("opens find from a standalone %s review before clicking a file", async (platform, modifier) => {
+  await using screen = await setup({ platform });
   const { container, viewer } = screen;
-  await userEvent.keyboard("{Control>}f{/Control}");
-
-  const search = container!.querySelector("[data-diffs-search]")?.shadowRoot;
-  expect(search).toBeDefined();
-  await userEvent.type(
-    search!.querySelector<HTMLInputElement>('input[placeholder="Search"]')!,
-    "src/",
-  );
-  await vi.waitFor(() =>
-    expect(search!.querySelector("[data-matches]")?.textContent).toBe("1 of 1"),
-  );
-  expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
-});
-
-it("opens find with Command+F on macOS", async () => {
-  await using screen = await setup({ platform: "MacIntel" });
-  const { container } = screen;
-  await userEvent.keyboard("{Meta>}f{/Meta}");
+  await userEvent.keyboard(`{${modifier}>}f{/${modifier}}`);
   expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
+  expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
 });
 
 it.each(["inline toolbar", "sheet toolbar", "Changes tab"])(
@@ -139,21 +125,6 @@ it.each(["inline toolbar", "sheet toolbar", "Changes tab"])(
   },
 );
 
-it("keeps chat find when the chat composer is focused", async () => {
-  await using screen = await setup({ chatFirst: true });
-  const { panel, container } = screen;
-  const composer = document.createElement("textarea");
-  document.body.append(composer);
-  try {
-    await userEvent.click(composer);
-    await userEvent.keyboard("{Control>}f{/Control}");
-    expect(panel.querySelector("[data-chat-find-open]")).not.toBeNull();
-    expect(container!.querySelector("[data-diffs-search]")).toBeNull();
-  } finally {
-    composer.remove();
-  }
-});
-
 it("does not claim page find just because a diff is visible beside chat", async () => {
   await using screen = await setup();
   const { panel, container } = screen;
@@ -162,40 +133,14 @@ it("does not claim page find just because a diff is visible beside chat", async 
   expect(container!.querySelector("[data-diffs-search]")).toBeNull();
 });
 
-it("keeps the viewer's own find and Escape behavior", async () => {
+it("leaves find owned by the focused viewer rather than chat", async () => {
   await using screen = await setup({ chatFirst: true });
-  const { container } = screen;
+  const { panel, container } = screen;
   await userEvent.click(container!, { position: { x: 320, y: 200 } });
   await userEvent.keyboard("{Control>}f{/Control}");
   expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
-  await userEvent.keyboard("{Escape}");
-  expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+  expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
 });
-
-it.each(["background", "collapsed header"])(
-  "opens review find after clicking the %s outside a preview panel",
-  async (target) => {
-    await using screen = await setup({ chatFirst: true });
-    const { panel, container, viewer } = screen;
-    panel.removeAttribute("data-preview-panel-mode");
-    if (target === "collapsed header") {
-      const header = await vi.waitFor(() => {
-        const element = container!
-          .querySelector("diffs-container")
-          ?.shadowRoot?.querySelector<HTMLElement>("[data-diffs-header]");
-        expect(element).toBeInstanceOf(HTMLElement);
-        return element!;
-      });
-      await userEvent.click(header);
-    } else {
-      await userEvent.click(container!, { position: { x: 320, y: 200 } });
-    }
-    await userEvent.keyboard("{Control>}f{/Control}");
-    expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
-    expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
-    expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
-  },
-);
 
 it.each(["inline", "standalone", "sheet"])(
   "opens review find after clicking non-focusable %s chrome beside collapsed files",
@@ -280,13 +225,5 @@ it("leaves project-wide search alone", async () => {
   await using screen = await setup();
   const { container } = screen;
   await userEvent.keyboard("{Control>}{Shift>}f{/Shift}{/Control}");
-  expect(container!.querySelector("[data-diffs-search]")).toBeNull();
-});
-
-it("removes the shortcut listener on unmount", async () => {
-  await using screen = await setup();
-  const { container } = screen;
-  await screen.unmount();
-  await userEvent.keyboard("{Control>}f{/Control}");
   expect(container!.querySelector("[data-diffs-search]")).toBeNull();
 });

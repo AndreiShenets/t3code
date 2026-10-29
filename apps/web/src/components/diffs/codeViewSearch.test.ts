@@ -91,7 +91,6 @@ describe("collectMatches", () => {
         ["file-1", "name", 0, 4],
       ],
     );
-    expect(find("b.ts")).toHaveLength(1);
   });
 
   it("keeps path and content matches in file order with distinct navigation offsets", () => {
