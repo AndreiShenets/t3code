@@ -100,6 +100,12 @@ describe("file editor word navigation", () => {
   it("moves each caret independently", () => {
     const document = new TextDocument<"file", undefined>("code.ts", "alpha beta.gamma");
     expect(move(document, [caret(0), caret(11)], "ArrowRight")).toEqual([caret(5), caret(16)]);
+
+    const selection: EditorSelection = { start: caret(2).start, end: caret(8).end, direction: 1 };
+    expect(move(document, [selection, caret(11)], "ArrowRight")).toEqual([caret(10), caret(16)]);
+    expect(move(document, [selection, caret(11)], "ArrowLeft")).toEqual([caret(0), caret(10)]);
+    expect(move(document, [selection], "ArrowRight", {})).toEqual([caret(8)]);
+    expect(move(document, [selection], "ArrowLeft", {})).toEqual([caret(2)]);
   });
 
   it("stops at the current word edge when starting inside a word", () => {
