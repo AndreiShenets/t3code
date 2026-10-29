@@ -1813,6 +1813,7 @@ export function PullRequestDetailPanel({
                   active={tab === "guide"}
                   title={detail.title}
                   workspaceRoot={detail.workspaceRoot}
+                  headSha={detail.headSha ?? null}
                   canComment={
                     detail.capabilities.review.inlineComment && detail.viewerPermissions.comment
                   }

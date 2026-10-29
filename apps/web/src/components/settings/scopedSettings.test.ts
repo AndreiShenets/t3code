@@ -312,12 +312,16 @@ describe("scoped settings writes", () => {
     await persistScopedSettingsPatch(
       planScopedSettingsPatch(named, environments, {
         diffIgnoreWhitespace: false,
+        showWhitespace: true,
         enableProviderUpdateChecks: false,
       }),
       persistServer,
       persistClient,
     );
-    expect(persistClient).toHaveBeenCalledExactlyOnceWith({ diffIgnoreWhitespace: false });
+    expect(persistClient).toHaveBeenCalledExactlyOnceWith({
+      diffIgnoreWhitespace: false,
+      showWhitespace: true,
+    });
     expect(persistServer).toHaveBeenCalledExactlyOnceWith({
       environmentId: server.environmentId,
       input: { patch: { enableProviderUpdateChecks: false } },
