@@ -7,7 +7,9 @@ import { useRightPanelStore } from "~/rightPanelStore";
 import { COMPOSER_CONTEXT_KINDS } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { use, type ReactNode } from "react";
-import { FileDiff } from "@pierre/diffs/react";
+import { FileDiff, type FileDiffOptions } from "@pierre/diffs/react";
+import { useCodeDisplay } from "~/hooks/useCodeDisplay";
+import { CODE_WHITESPACE_UNSAFE_CSS } from "~/lib/codeWhitespace";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 import {
   type ChatFileAttachment,
@@ -541,6 +543,20 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
     buildReviewCommentRenderablePatch(comment),
     `review-comment:${comment.id}`,
   );
+  const cwd = ctx.workspaceRoot ?? ctx.markdownCwd;
+  const { onPostRender: onCodePostRender } = useCodeDisplay(
+    cwd ? { environmentId: ctx.activeThreadEnvironmentId, cwd } : null,
+    renderablePatch?.kind === "files" ? [comment.filePath] : [],
+  );
+  const diffOptions: FileDiffOptions<undefined, undefined> = {
+    collapsed: false,
+    diffStyle: "unified",
+    theme: resolveDiffThemeName(renderedAppearance),
+    preferredHighlighter: PREFERRED_HIGHLIGHTER,
+    unsafeCSS: CODE_WHITESPACE_UNSAFE_CSS,
+    onPostRender: (container, _instance, phase) =>
+      onCodePostRender(container, comment.filePath, phase),
+  };
 
   return (
     <div className="space-y-2 rounded-lg border border-border/70 bg-background/70 p-3">
@@ -579,12 +595,7 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
             <FileDiff
               key={resolveFileDiffPath(fileDiff)}
               fileDiff={fileDiff}
-              options={{
-                collapsed: false,
-                diffStyle: "unified",
-                theme: resolveDiffThemeName(renderedAppearance),
-                preferredHighlighter: PREFERRED_HIGHLIGHTER,
-              }}
+              options={diffOptions}
             />
           ))}
         </DiffWorkerPoolProvider>

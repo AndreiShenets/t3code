@@ -38,6 +38,7 @@ const clientSettings: ClientSettings = {
   contextWindowMeterEnabled: false,
   diffFilesCollapsed: true,
   diffIgnoreWhitespace: true,
+  showWhitespace: true,
   diffLayout: "stacked",
   environmentIdentificationMode: "artwork",
   favorites: [],
