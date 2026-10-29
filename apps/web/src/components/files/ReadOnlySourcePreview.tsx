@@ -15,10 +15,13 @@ export default function ReadOnlySourcePreview(props: {
   readonly cacheKey?: string;
   readonly workspace?: CodeDisplayWorkspace;
   readonly onPostRender?: FileOptions<undefined, undefined>["onPostRender"];
+  /** A preview's own wrap toggle; omitted follows the word wrap setting. */
+  readonly wordWrap?: boolean;
 }) {
   const { name, onPostRender: onFilePostRender } = props;
   const resolvedTheme = useRenderedAppearance();
-  const wordWrap = useClientSettings((settings) => settings.wordWrap);
+  const defaultWordWrap = useClientSettings((settings) => settings.wordWrap);
+  const wordWrap = props.wordWrap ?? defaultWordWrap;
   const { onPostRender: onCodePostRender } = useCodeDisplay(props.workspace, [name]);
   const onPostRender: NonNullable<FileOptions<undefined, undefined>["onPostRender"]> = (
     container,
