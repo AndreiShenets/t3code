@@ -27,6 +27,38 @@ const otherIdentity = {
 };
 
 describe("applyShellStreamEvent", () => {
+  it("updates ancestor costs atomically with a child update or archive", () => {
+    const root = { ...v2ThreadShell, subagentCostUsd: 0 };
+    const child = { ...v2ThreadShell, id: ThreadId.make("child-cost") };
+    const snapshot = { ...v2ShellSnapshot, threads: [root, child] };
+    const updated = applyShellStreamEvent(snapshot, {
+      kind: "thread.updated",
+      location: "active",
+      sequence: 1,
+      thread: child,
+      ancestorCosts: [{ threadId: root.id, costUsd: 0.2593974 }],
+    });
+    expect(updated.threads[0]?.subagentCostUsd).toBe(0.2593974);
+    const archived = applyShellStreamEvent(updated, {
+      kind: "thread.removed",
+      location: "active",
+      sequence: 2,
+      threadId: child.id,
+      ancestorCosts: [{ threadId: root.id, costUsd: 0.2593974 }],
+    });
+    expect(archived.threads).toHaveLength(1);
+    expect(archived.threads[0]).toBe(updated.threads[0]);
+    expect(
+      applyShellStreamEvent(archived, {
+        kind: "thread.updated",
+        location: "active",
+        sequence: 1,
+        thread: child,
+        ancestorCosts: [{ threadId: root.id, costUsd: 0 }],
+      }),
+    ).toBe(archived);
+  });
+
   it("ignores stale project updates without mutating the snapshot", () => {
     const snapshotWithProject = {
       ...v2ShellSnapshot,

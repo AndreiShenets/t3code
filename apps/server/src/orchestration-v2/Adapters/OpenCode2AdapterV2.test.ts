@@ -957,10 +957,18 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
     },
   });
   const CHILD = "ses_f1485c529ffea4URrYruwEg0Ja";
-  it.effect("does not report subagent session costs as the root session cost", () =>
+  it.effect("reports subagent session costs on the child without replacing the root cost", () =>
     Effect.gen(function* () {
       const { runtime, thread } = yield* resumed([
         ...backgroundLaunch(CHILD),
+        event("session.execution.started", { sessionID: CHILD }),
+        event("session.step.ended", {
+          sessionID: CHILD,
+          assistantMessageID: "msg_child_cost",
+          finish: "stop",
+          cost: 99,
+          tokens: { input: 1200, output: 40, reasoning: 0, cache: { read: 300, write: 0 } },
+        }),
         event("session.usage.updated", {
           sessionID: CHILD,
           cost: 99,
@@ -976,10 +984,16 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       yield* runtime.startTurn(withLineage(thread));
       const costs = (yield* Fiber.join(received)).flatMap((event) =>
         event.type === "provider_thread.updated" && event.providerThread.contextUsage?.cost
-          ? [event.providerThread.contextUsage.cost.amount]
+          ? [
+              {
+                sessionId: event.providerThread.nativeThreadRef?.nativeId,
+                amount: event.providerThread.contextUsage.cost.amount,
+              },
+            ]
           : [],
       );
-      assert.notInclude(costs, 99);
+      assert.deepInclude(costs, { sessionId: CHILD, amount: 99 });
+      assert.isFalse(costs.some((cost) => cost.sessionId === SESSION && cost.amount === 99));
     }).pipe(Effect.scoped),
   );
 

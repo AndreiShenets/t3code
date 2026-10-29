@@ -48,6 +48,20 @@ describe("V2 context window presentation", () => {
 });
 
 describe("live provider-turn usage (#8144)", () => {
+  it("includes delegated session cost without adding child context tokens", () => {
+    const snapshot = deriveLatestContextWindowSnapshot(
+      [],
+      decodeTokenUsage({ usedTokens: 42_000, updatedAt: "2026-10-22T12:00:00.000Z" }),
+      {
+        contextUsage: { usedTokens: 42_000, cost: { amount: 0, currency: "USD" } },
+        updatedAt: DateTime.makeUnsafe("2026-10-22T11:59:00.000Z"),
+      },
+      0.2593974,
+    );
+    expect(snapshot?.cost).toEqual({ amount: 0.2593974, currency: "USD" });
+    expect(snapshot?.usedTokens).toBe(42_000);
+  });
+
   it.each([0, 3.03])("retains session cost %d alongside live context tokens", (amount) => {
     const snapshot = deriveLatestContextWindowSnapshot(
       [],

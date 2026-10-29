@@ -1362,7 +1362,10 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
         previous ?? newThreadState(childId, providerThread, call.state.directory, subagent);
       child.subagent = subagent;
       child.model = info?.model ?? child.model;
-      child.providerThread = withReportedModel(providerThread, child.model);
+      child.providerThread = withReportedModel(
+        { ...providerThread, contextUsage: child.providerThread.contextUsage },
+        child.model,
+      );
       child.directory = call.state.directory;
       child.agent = info?.agent ?? call.agent ?? child.agent;
       child.rules = info?.permissions ?? child.rules;
@@ -2118,38 +2121,36 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           turn.usage.cacheWrite += tokens.cache.write;
           turn.usage.output += tokens.output + tokens.reasoning;
           turn.usage.reasoning += tokens.reasoning;
-          if (state.subagent === undefined) {
-            const window = windowOf(turn.input.runtimePolicy.cwd, turn.input.modelSelection.model);
-            const usage = contextUsageOfStep(tokens, window);
-            const updatedAt = yield* DateTime.now;
-            const cost =
-              state.pendingCost === undefined
-                ? state.providerThread.contextUsage?.cost
-                : { amount: state.pendingCost, currency: "USD" };
-            state.pendingCost = undefined;
-            state.providerThread = {
-              ...state.providerThread,
-              contextUsage: {
-                ...usage,
-                compactsAutomatically: true,
-                ...(cost === undefined ? {} : { cost }),
-              },
-              updatedAt,
-            };
-            yield* emitProviderTurn(state, turn, {
-              ...turn.providerTurn,
-              tokenUsage: {
-                ...usage,
-                maxTokens: window ?? null,
-                updatedAt: DateTime.formatIso(updatedAt),
-              },
-            });
-            yield* emit({
-              type: "provider_thread.updated",
-              driver,
-              providerThread: state.providerThread,
-            });
-          }
+          const window = windowOf(turn.input.runtimePolicy.cwd, turn.input.modelSelection.model);
+          const usage = contextUsageOfStep(tokens, window);
+          const updatedAt = yield* DateTime.now;
+          const cost =
+            state.pendingCost === undefined
+              ? state.providerThread.contextUsage?.cost
+              : { amount: state.pendingCost, currency: "USD" };
+          state.pendingCost = undefined;
+          state.providerThread = {
+            ...state.providerThread,
+            contextUsage: {
+              ...usage,
+              compactsAutomatically: true,
+              ...(cost === undefined ? {} : { cost }),
+            },
+            updatedAt,
+          };
+          yield* emitProviderTurn(state, turn, {
+            ...turn.providerTurn,
+            tokenUsage: {
+              ...usage,
+              maxTokens: window ?? null,
+              updatedAt: DateTime.formatIso(updatedAt),
+            },
+          });
+          yield* emit({
+            type: "provider_thread.updated",
+            driver,
+            providerThread: state.providerThread,
+          });
           return;
         }
         case "session.retry.scheduled":
@@ -2413,7 +2414,6 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       const state = threads.get(sessionId);
       if (state === undefined) return;
       if (event.type === "session.usage.updated") {
-        if (state.subagent !== undefined) return;
         const contextUsage = state.providerThread.contextUsage;
         if (contextUsage == null) {
           state.pendingCost = event.data.cost;
