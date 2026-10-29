@@ -42,7 +42,7 @@ import {
   pullRequestDiffInitialPosition,
 } from "./pullRequestDiffDebug";
 import { usePullRequestDiffHighlightFiles } from "./usePullRequestDiffHighlightFiles";
-import { isPullRequestTestFile } from "./pullRequestFileFilters";
+import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
 import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
@@ -112,6 +112,7 @@ import {
   PullRequestReadStatus,
 } from "./PullRequestPresentation";
 import { usePullRequestFilesSection } from "./PullRequestFiles";
+import { usePullRequestMaintainerEdits } from "./usePullRequestMaintainerEdits";
 import { PullRequestDescription } from "./PullRequestDescription";
 import { PullRequestMediaVisibleContext } from "./PullRequestMedia";
 import { PullRequestMarkdownRepository } from "./PullRequestMarkdown";
@@ -417,6 +418,11 @@ export function PullRequestRouteScreen({ route }: StaticScreenProps<PullRequestP
   const terminology = sourceControlClients.get(identity?.provider).changeRequest;
   const permissions = usePullRequestPermissions(params, pr);
   const action = usePullRequestAction(params, pr);
+  const maintainerEdits = usePullRequestMaintainerEdits(
+    params,
+    pr,
+    permissions.canEditMaintainerEdits,
+  );
   const showsDeleteBranch = pr !== null && canPerformPullRequestAction(pr, "delete-branch");
   const confirmDeleteBranch = () =>
     pr &&
@@ -518,6 +524,19 @@ export function PullRequestRouteScreen({ route }: StaticScreenProps<PullRequestP
                     },
                   ]
                 : []),
+              ...(maintainerEdits.visible
+                ? [
+                    {
+                      accessibilityLabel: "Allow edits from maintainers",
+                      icon: "pencil" as const,
+                      selected: maintainerEdits.value,
+                      disabled: maintainerEdits.saving,
+                      subtitle: maintainerEdits.subtitle,
+                      overflowOnly: true,
+                      onPress: maintainerEdits.toggle,
+                    },
+                  ]
+                : []),
               ...(identity
                 ? [
                     {
@@ -596,6 +615,17 @@ export function PullRequestRouteScreen({ route }: StaticScreenProps<PullRequestP
                 onPress={() => navigation.navigate("PullRequestEdit", { ...params, field: "body" })}
               >
                 <Toolbar.Label>Edit description</Toolbar.Label>
+              </Toolbar.MenuAction>
+            ) : null}
+            {maintainerEdits.visible ? (
+              <Toolbar.MenuAction
+                icon="pencil"
+                isOn={maintainerEdits.value}
+                disabled={maintainerEdits.saving}
+                subtitle={maintainerEdits.subtitle}
+                onPress={maintainerEdits.toggle}
+              >
+                <Toolbar.Label>Allow edits from maintainers</Toolbar.Label>
               </Toolbar.MenuAction>
             ) : null}
             {identity ? (
@@ -1008,7 +1038,7 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
   const jumpedUnder = useRef<boolean | null>(filter.hideTestFiles);
   const hasTestFiles =
     result.parsed.kind === "files" &&
-    result.parsed.files.some((file) => isPullRequestTestFile(file.path));
+    result.parsed.files.some((file) => isTestChangedFile(file.path));
   const jumpStarted = () =>
     jumpedUnder.current !== null && (!hasTestFiles || jumpedUnder.current === filter.hideTestFiles);
   const scrollToFile = (fileId: string) => {
