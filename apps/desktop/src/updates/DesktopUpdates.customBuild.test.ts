@@ -29,7 +29,8 @@ describe("official updates from custom builds", () => {
           const updates = yield* DesktopUpdates.DesktopUpdates;
           const environment = yield* DesktopEnvironment.DesktopEnvironment;
           yield* updates.configure;
-          yield* updates.setChannel("nightly");
+          assert.equal((yield* updates.getState).channel, "nightly");
+          assert.isTrue(harness.allowDowngrade());
 
           const version = "0.1.1-nightly.20261018.3302";
           const latestRelease = {
@@ -57,7 +58,12 @@ describe("official updates from custom builds", () => {
           assert.equal(state.status, "available");
           assert.equal(state.availableVersion, version);
           assert.deepEqual(state.releaseNotes, [
-            { version, items: ["Fix update changelog"], totalItems: 1 },
+            {
+              version,
+              releasedAt: "2026-10-18T07:36:01Z",
+              items: ["Fix update changelog"],
+              totalItems: 1,
+            },
           ]);
           assert.deepEqual(harness.sentStates.at(-1)?.releaseNotes, state.releaseNotes);
 
@@ -175,7 +181,7 @@ describe("official updates from custom builds", () => {
       Effect.gen(function* () {
         const updates = yield* DesktopUpdates.DesktopUpdates;
         yield* updates.configure;
-        yield* updates.setChannel("nightly");
+        yield* updates.setChannel("nightly", { minimumVersion: nightlyVersion });
         harness.emit("update-available", {
           version: nightlyVersion,
           releaseDate: "2026-10-16T00:00:00Z",
