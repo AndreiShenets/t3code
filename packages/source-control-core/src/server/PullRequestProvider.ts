@@ -24,6 +24,7 @@ import type {
   PullRequestReaction,
   PullRequestReactionContent,
   PullRequestReviewCommentDraft,
+  PullRequestSubmitReviewPartialResult,
   PullRequestReviewDecision,
   PullRequestReviewThread,
   PullRequestThreadCommentsResult,
@@ -190,6 +191,7 @@ export interface ProviderChangeRequestDetail extends ProviderChangeRequest {
   readonly closedAt: string | null;
   readonly reviewers: ReadonlyArray<PullRequestActor>;
   readonly checks: ReadonlyArray<PullRequestCheck>;
+  readonly checksIncomplete?: boolean;
   readonly mergeCapabilities: PullRequestMergeCapabilities;
   readonly viewerPermissions: PullRequestViewerPermissions;
   readonly baseComparison?: PullRequestBaseComparison;
@@ -212,6 +214,8 @@ export interface ProviderChangeRequestActivity {
 }
 
 export interface ProviderDiffSlice {
+  readonly baseSha?: string;
+  readonly headSha?: string;
   readonly patch: string;
   /** Content was omitted within this slice. */
   readonly truncated: boolean;
@@ -500,7 +504,7 @@ export interface PullRequestProviderApi {
       readonly body: string;
       readonly comments: ReadonlyArray<PullRequestReviewCommentDraft>;
     },
-  ) => Effect.Effect<void, PullRequestProviderError>;
+  ) => Effect.Effect<void | PullRequestSubmitReviewPartialResult, PullRequestProviderError>;
 
   /** Exclude the author using host-specific account identities. */
   readonly listReviewerCandidates: (
