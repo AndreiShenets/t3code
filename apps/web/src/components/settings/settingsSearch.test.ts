@@ -104,6 +104,12 @@ describe("searchSettings", () => {
     expect(searchSettings("update track")).toEqual([]);
   });
 
+  it("offers custom build search only in Windows desktop apps", () => {
+    const custom = SETTINGS_SEARCH_ITEMS.find((item) => item.id === "custom-build");
+    expect(custom).toMatchObject({ to: "/settings/general", desktopOnly: true, windowsOnly: true });
+    expect(searchSettings("AndreiShenets")).toEqual([]);
+  });
+
   it("hides settings whose controls are unavailable", () => {
     const available = filterAvailableSettingsSearchItems({
       hasCloudPublicConfig: false,
