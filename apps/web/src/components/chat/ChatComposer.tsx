@@ -261,6 +261,14 @@ import { useSoftwareKeyboardOpen } from "../../hooks/useSoftwareKeyboardOpen";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { usePanelAnimationSettings } from "../../panelAnimations";
 import { readEnvironmentScope } from "../../state/session";
+import {
+  MCP_COMMAND_USAGE,
+  parseMcpCommand,
+  supportsMcpManagement,
+  type McpCommand,
+  type McpManagementRequest,
+} from "@t3tools/client-runtime/mcpCommands";
+import { ComposerMcpDialog } from "./McpServerControls";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
 import { useComposerRestingTransition } from "./useComposerRestingTransition";
 import { ComposerCommandMenuLayer } from "./ComposerCommandMenuLayer";
@@ -923,6 +931,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         (multipleModelSelections === null ? providerSendBlockReason : null)));
   const isSendDisabled = sendDisabledReason !== null;
   const selectedProviderStatus = selectedProviderEntry?.snapshot ?? null;
+  const mcpAvailable = supportsMcpManagement(selectedProviderStatus) && gitCwd !== null;
+  const [mcpRequest, setMcpRequest] = useState<McpManagementRequest | null>(null);
+  const mcpTarget = gitCwd ? { instanceId: selectedInstanceId, cwd: gitCwd } : null;
+  const openMcp = (command: Exclude<McpCommand, { action: "invalid" }>) => {
+    if (mcpTarget) setMcpRequest({ environmentId, target: mcpTarget, command });
+  };
   const compactCommandAvailable = providerSupportsManualCompaction(selectedProviderEntry);
   const selectedProviderSkills = selectedProviderStatus
     ? resolveProviderSkillsForCwd(selectedProviderStatus, gitCwd)
@@ -1120,6 +1134,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     pullRequestRepository,
     threadPullRequests,
     planModeUiEnabled,
+    mcpAvailable,
     compactSlashCommandAvailable,
     selectedProvider,
     selectedProviderSkills,
@@ -1857,6 +1872,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
     if (item.type === "slash-command") {
+      if (item.command === "mcp") {
+        const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
+          expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+          focusEditorAfterReplace: false,
+        });
+        if (applied) {
+          setComposerHighlightedItemId(null);
+          openMcp({ action: "list" });
+        }
+        return;
+      }
       if (item.command === "model") {
         const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
           expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
@@ -2045,6 +2071,23 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     dispatchMode?: ComposerDispatchMode,
     submissionIntent?: ComposerSubmissionIntent,
   ) => {
+    const mcp = activePendingProgress ? null : parseMcpCommand(promptRef.current);
+    if (mcp !== null) {
+      event?.preventDefault();
+      if (!mcpAvailable || !mcpTarget) {
+        setComposerSubmissionError("MCP management requires OpenCode V2 and a workspace.");
+      } else if (mcp.action === "invalid") {
+        setComposerSubmissionError(MCP_COMMAND_USAGE);
+      } else if (composerImagesRef.current.length > 0 || composerFilesRef.current.length > 0) {
+        setComposerSubmissionError("Remove attachments before running an MCP command.");
+      } else {
+        setComposerSubmissionError(null);
+        openMcp(mcp);
+        setPrompt("");
+        promptRef.current = "";
+      }
+      return;
+    }
     if (
       noProviderAvailable ||
       isSendDisabled ||
@@ -3138,6 +3181,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
+      {mcpRequest ? (
+        <ComposerMcpDialog
+          key={JSON.stringify([mcpRequest.environmentId, mcpRequest.target])}
+          {...mcpRequest}
+          onClose={() => setMcpRequest(null)}
+        />
+      ) : null}
       <ComposerBanner.Dock>
         <ComposerBanner.Column>
           <ComposerBannerStack items={shelfItems} />
