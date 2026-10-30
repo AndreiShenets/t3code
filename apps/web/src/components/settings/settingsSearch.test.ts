@@ -58,6 +58,15 @@ const ITEMS: ReadonlyArray<SettingsSearchItem> = [
 ];
 
 describe("searchSettings", () => {
+  it.each(["show whitespace", "spaces tabs", "invisible characters"])(
+    "routes %s to the whitespace preference",
+    (query) => {
+      expect(searchSettings(query)[0]).toMatchObject({
+        id: "show-whitespace-characters",
+        to: "/settings/general",
+      });
+    },
+  );
   it("matches titles, sections, and remembered setting details", () => {
     expect(searchSettings("word", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
     expect(searchSettings("network", ITEMS).map((item) => item.id)).toEqual(["network-access"]);
