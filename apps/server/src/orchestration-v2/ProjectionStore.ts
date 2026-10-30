@@ -6039,7 +6039,8 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         FROM orchestration_v2_projection_threads
         WHERE json_extract(payload_json, '$.lineage.relationshipToParent') = 'subagent'
       ), descendants(thread_id, child_id) AS (
-        SELECT parent_id, thread_id FROM children WHERE parent_id IN ${sql.in(threadIds)}
+        SELECT parent_id, thread_id FROM children
+        WHERE parent_id IN (SELECT value FROM json_each(${encodeIdList(threadIds)}))
         UNION
         SELECT descendants.thread_id, children.thread_id
         FROM descendants JOIN children ON children.parent_id = descendants.child_id
