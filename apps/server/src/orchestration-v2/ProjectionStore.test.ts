@@ -3003,7 +3003,7 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
     }),
   );
 
-  it.effect("shows the native goal of the active provider thread on the shell", () =>
+  it.effect("shows the native goal and persisted subagent costs on the shell", () =>
     Effect.gen(function* () {
       const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
       const now = yield* DateTime.now;
@@ -3063,6 +3063,13 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
             handoffIds: [],
             forkedFrom: null,
             goal,
+            contextUsage:
+              goal === null
+                ? null
+                : {
+                    usedTokens: 42_000,
+                    cost: { amount: 0, currency: "USD" },
+                  },
             createdAt: now,
             updatedAt: DateTime.add(now, { seconds }),
           },
@@ -3075,8 +3082,99 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
 
       yield* applyProviderThread("first", goal, 0);
       assert.deepEqual(yield* shellGoal, goal);
+      const projection = yield* projectionStore.getThreadProjection(threadId);
+      const delegatedId = ThreadId.make("thread:provider-goal:delegated");
+      for (const child of [
+        {
+          id: ThreadId.make("thread:provider-goal:native"),
+          parent: threadId,
+          amount: 0.2593974,
+          source: "provider" as const,
+          relationship: "subagent" as const,
+          archived: false,
+        },
+        {
+          id: delegatedId,
+          parent: threadId,
+          amount: 1,
+          source: "mcp" as const,
+          relationship: "subagent" as const,
+          archived: false,
+        },
+        {
+          id: ThreadId.make("thread:provider-goal:nested"),
+          parent: delegatedId,
+          amount: 2,
+          source: "provider" as const,
+          relationship: "subagent" as const,
+          archived: true,
+        },
+        {
+          id: ThreadId.make("thread:provider-goal:fork"),
+          parent: threadId,
+          amount: 100,
+          source: "web" as const,
+          relationship: "fork" as const,
+          archived: false,
+        },
+      ]) {
+        const providerThreadId = ProviderThreadId.make(`provider:${child.id}`);
+        yield* projectionStore.apply({
+          id: EventId.make(`event:${child.id}:created`),
+          type: "thread.created",
+          threadId: child.id,
+          occurredAt: now,
+          payload: {
+            ...projection.thread,
+            id: child.id,
+            creationSource: child.source,
+            activeProviderThreadId: providerThreadId,
+            lineage: {
+              parentThreadId: child.parent,
+              relationshipToParent: child.relationship,
+              rootThreadId: threadId,
+            },
+            archivedAt: child.archived ? now : null,
+          },
+        });
+        yield* projectionStore.apply({
+          id: EventId.make(`event:${child.id}:cost`),
+          type: "provider-thread.updated",
+          threadId: child.id,
+          occurredAt: now,
+          payload: {
+            ...projection.providerThreads[0]!,
+            id: providerThreadId,
+            appThreadId: child.id,
+            contextUsage: { usedTokens: 999_999, cost: { amount: child.amount, currency: "USD" } },
+          },
+        });
+      }
+      const listed = (yield* projectionStore.getShellSnapshot()).threads.find(
+        (thread) => thread.id === threadId,
+      );
+      for (const shell of [listed, yield* projectionStore.getThreadShell(threadId)]) {
+        assert.approximately(shell!.subagentCostUsd!, 3.2593974, 0.000001);
+      }
+      const nativeId = ThreadId.make("thread:provider-goal:native");
+      const native = (yield* projectionStore.getThreadProjection(nativeId)).providerThreads[0]!;
+      for (let index = 0; index < 2; index += 1) {
+        yield* projectionStore.apply({
+          id: EventId.make(`event:provider-goal:native-update:${index}`),
+          type: "provider-thread.updated",
+          threadId: nativeId,
+          occurredAt: now,
+          payload: {
+            ...native,
+            contextUsage: { usedTokens: 999_999, cost: { amount: 0.5, currency: "USD" } },
+          },
+        });
+        assert.equal((yield* projectionStore.getThreadShell(threadId))?.subagentCostUsd, 3.5);
+      }
+      assert.equal((yield* projectionStore.getThreadShell(delegatedId))?.subagentCostUsd, 2);
       yield* applyProviderThread("second", null, 1);
       assert.isNull(yield* shellGoal);
+      assert.equal((yield* projectionStore.getThreadShell(threadId))?.subagentCostUsd, 3.5);
     }),
   );
 

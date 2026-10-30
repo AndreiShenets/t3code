@@ -131,7 +131,7 @@ import {
   loadOlderSettledThreadsPage,
   loadShellSnapshotParts,
   shellStreamItemFromEnrichmentRefresh,
-  shellStreamItemFromThreadShell,
+  projectThreadShellItem,
   shellStreamItemsFromInitialSnapshot,
   loadSubscriberShellSnapshot,
   shellStreamItemsFromResumeSnapshot,
@@ -1070,8 +1070,7 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
             if ("aggregateKind" in stored) {
               return yield* projectItem(stored);
             }
-            const shell = yield* threadManagement.getThreadShell(stored.event.threadId);
-            return shellStreamItemFromThreadShell({ stored, shell });
+            return yield* projectThreadShellItem(stored, threadManagement.getThreadShell);
           }),
         { concurrency: 8 },
       );
