@@ -36,6 +36,19 @@ The confirmation counts the running threads that the restarts will interrupt,
 and how many can resume afterwards. See **Continue threads after restarts**
 below.
 
+## Custom Windows builds
+
+In custom Windows x64 builds, the sidebar's custom-build control or **Settings → General → Custom build** checks releases from
+`AndreiShenets/t3code`, including prereleases. Download the offered build, then install it when
+you are ready to interrupt running agents. The installer is verified against the release's
+`SHA256SUMS` before it opens.
+
+Normal upstream update checks default to Nightly and respect an explicitly selected update track. Installing an official
+nightly replaces the customizations, including this control; reinstall a custom build to restore them.
+Custom builds with embedded UTC build times offer an official nightly only if its release timestamp is newer,
+so older nightlies do not light up the update indicator. Stable-track updates are unchanged. If either timestamp is
+unavailable or invalid, normal update checks apply.
+
 ## Switch between Stable and Nightly
 
 In the desktop app, change **Settings → About → Update track**. T3 Code shows each
