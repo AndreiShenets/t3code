@@ -59,6 +59,8 @@ export function retainPullRequestDiffPage(
   if (
     previous === result ||
     (previous?.patch === result.patch &&
+      previous.headSha === result.headSha &&
+      previous.baseSha === result.baseSha &&
       previous.truncated === result.truncated &&
       previous.nextCursor === result.nextCursor &&
       JSON.stringify(previous.omittedFileStats ?? []) ===

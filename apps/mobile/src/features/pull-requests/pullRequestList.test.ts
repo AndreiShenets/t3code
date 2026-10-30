@@ -23,6 +23,7 @@ import {
   scopedPullRequestListKey,
   shownPullRequestListPages,
   pullRequestListRowsAreEqual,
+  pullRequestListFacets,
   withAnsweredPullRequestStats,
   withListedPullRequests,
   withShownPullRequestStats,
@@ -85,9 +86,49 @@ describe("recycled PR list rows", () => {
       }),
     ).toBe(false);
   });
+
+  it("updates the author label and initials when a name becomes available", () => {
+    const original = scopedEntry();
+    expect(
+      pullRequestListRowsAreEqual(original, {
+        ...original,
+        author: { login: "octocat", name: "Mona Lisa", avatarUrl: null },
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("mobile PR list pagination", () => {
+  it("shows author names in facets while keeping logins as filter values", () => {
+    const login = "64d61648-5e0b-4335-bcec-3a3d88963c89";
+    const rows = [entry(1, { author: { login, name: "Andrei Shenets", avatarUrl: null } })];
+    expect(pullRequestListFacets(rows)).toMatchObject({
+      authors: [login],
+      authorNames: { [login]: "Andrei Shenets" },
+    });
+    expect(
+      filterPullRequestList(rows, DEFAULT_PR_LIST_CONTROLS, {}, "andrei", new Set(["github.com"])),
+    ).toEqual(rows);
+    expect(
+      filterPullRequestList(
+        rows,
+        DEFAULT_PR_LIST_CONTROLS,
+        {},
+        "someone else",
+        new Set(["github.com"]),
+      ),
+    ).toEqual([]);
+    expect(
+      filterPullRequestList(
+        rows,
+        { ...DEFAULT_PR_LIST_CONTROLS, filters: { author: login } },
+        {},
+        "",
+        new Set(),
+      ),
+    ).toEqual(rows);
+  });
+
   it("continues only the repositories that have more, preserving the query and filters", () => {
     const first = pullRequestListHead(
       null,
