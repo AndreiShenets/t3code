@@ -23,6 +23,7 @@ import {
   dedupeShellEnrichment,
   omitIdleSubagentShells,
   omitOlderSettledShells,
+  projectThreadShellItem,
   shellStreamItemFromEnrichmentRefresh,
   shellStreamItemsFromInitialSnapshot,
   shouldPublishShellApplicationEvent,
@@ -685,6 +686,31 @@ describe("skipUnchangedThreadShells", () => {
         updated(3, shell("a")),
       ]);
       expect(sent).toEqual([1, 2, 3]);
+    }),
+  );
+
+  it.effect("publishes changed ancestor costs even when the child shell is unchanged", () =>
+    Effect.gen(function* () {
+      const parent = shell("parent");
+      const child = shell("child", {
+        lineage: {
+          rootThreadId: parent.id,
+          parentThreadId: parent.id,
+          relationshipToParent: "subagent",
+        },
+      });
+      const project = (sequence: number, cost: number) =>
+        projectThreadShellItem({ sequence, event: { threadId: child.id } }, (threadId) =>
+          Effect.succeed(threadId === child.id ? child : { ...parent, subagentCostUsd: cost }),
+        );
+      const first = yield* project(1, 0.2593974);
+      const second = yield* project(2, 0.5);
+      expect(first.ancestorCosts).toEqual([{ threadId: parent.id, costUsd: 0.2593974 }]);
+      const sent = yield* Stream.fromIterable([first, second]).pipe(
+        skipUnchangedThreadShells,
+        Stream.runCollect,
+      );
+      expect(sent).toHaveLength(2);
     }),
   );
 });
