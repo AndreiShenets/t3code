@@ -8,8 +8,10 @@ import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as TestClock from "effect/testing/TestClock";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { vi } from "vite-plus/test";
@@ -17,6 +19,7 @@ import { vi } from "vite-plus/test";
 vi.mock("electron", () => ({}));
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
+import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopState from "../app/DesktopState.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
@@ -54,6 +57,7 @@ const harness = (
     launch?: boolean;
     nightlyBusy?: boolean;
     pages?: ReturnType<typeof release>[][];
+    env?: Readonly<Record<string, string | undefined>>;
     gate?: { started: Deferred.Deferred<void>; finish: Deferred.Deferred<void> };
   } = {},
 ) =>
@@ -72,9 +76,11 @@ const harness = (
     });
     const steps: string[] = [];
     const requests: string[] = [];
+    const changes = yield* Queue.make<void>();
     let openedPath: string | null = null;
     let downloadPath: string | null = null;
     const layers = Layer.mergeAll(
+      DesktopConfig.layerTest(options.env ?? {}),
       Layer.succeed(DesktopEnvironment.DesktopEnvironment, {
         platform: options.platform ?? "win32",
         processArch: options.arch ?? "x64",
@@ -85,7 +91,9 @@ const harness = (
         path,
       } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]),
       Layer.succeed(DesktopState.DesktopState, { quitting, backendReady, primaryBackendStartup }),
-      Layer.mock(ElectronWindow.ElectronWindow)({ sendAll: () => Effect.void }),
+      Layer.mock(ElectronWindow.ElectronWindow)({
+        sendAll: () => Queue.offer(changes, undefined).pipe(Effect.asVoid),
+      }),
       Layer.mock(ElectronShell.ElectronShell)({
         openPath: (target) =>
           Effect.sync(() => {
@@ -142,6 +150,7 @@ const harness = (
       updates,
       steps,
       requests,
+      changes,
       quitting,
       fs,
       get openedPath() {
@@ -154,6 +163,41 @@ const harness = (
   });
 
 it.layer(NodeServices.layer)("custom builds", (it) => {
+  it.effect("discovers releases after startup and on each four-minute poll until shutdown", () =>
+    Effect.gen(function* () {
+      const pages = [[release()]];
+      const h = yield* harness({ currentStamp: "202610171538", pages });
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* h.updates.configure;
+          yield* TestClock.adjust("14 seconds");
+          assert.equal((yield* h.updates.act("state")).status, "idle");
+          assert.deepEqual(h.requests, []);
+
+          yield* TestClock.adjust("1 second");
+          yield* Queue.takeN(h.changes, 2);
+          assert.equal((yield* h.updates.act("state")).availableBuild, "0.1.1 202610171539");
+
+          pages[0] = [release("202610181200")];
+          yield* TestClock.adjust("225 seconds");
+          yield* Queue.takeN(h.changes, 2);
+          assert.equal((yield* h.updates.act("state")).availableBuild, "0.1.1 202610181200");
+
+          pages[0] = [release("202610191200")];
+          yield* TestClock.adjust("4 minutes");
+          yield* Queue.takeN(h.changes, 2);
+          assert.equal((yield* h.updates.act("state")).availableBuild, "0.1.1 202610191200");
+          assert.equal(h.requests.length, 3);
+          assert.deepEqual(h.steps, []);
+        }),
+      );
+
+      yield* TestClock.adjust("8 minutes");
+      assert.equal(h.requests.length, 3);
+    }),
+  );
+
   it.effect("checks, downloads, verifies and opens the installer before graceful quit", () =>
     Effect.gen(function* () {
       const h = yield* harness();
@@ -247,19 +291,40 @@ it.layer(NodeServices.layer)("custom builds", (it) => {
       yield* Deferred.await(gate.started);
       assert.equal((yield* h.updates.act("state")).status, "downloading");
       assert.equal((yield* h.updates.act("download")).status, "downloading");
+
+      yield* h.updates.configure;
+      yield* TestClock.adjust("15 seconds");
+      assert.equal((yield* h.updates.act("state")).status, "downloading");
+      assert.equal(h.requests.filter((url) => url.startsWith("https://api.github.com/")).length, 1);
+
       yield* Deferred.succeed(gate.finish, undefined);
       assert.equal((yield* Fiber.join(fiber)).status, "downloaded");
       assert.equal(h.requests.filter((url) => url.endsWith(".exe")).length, 1);
     }),
   );
 
-  it.effect("reports GitHub errors and allows retry", () =>
+  it.effect("reports GitHub errors and retries on the next poll", () =>
     Effect.gen(function* () {
-      const h = yield* harness({ apiStatus: 403 });
-      const first = yield* h.updates.act("check");
+      const options = { apiStatus: 403 };
+      const h = yield* harness(options);
+      yield* h.updates.configure;
+      yield* TestClock.adjust("15 seconds");
+      yield* Queue.takeN(h.changes, 2);
+      const first = yield* h.updates.act("state");
       assert.equal(first.status, "idle");
       assert.match(first.message!, /GitHub/);
-      yield* h.updates.act("check");
+
+      options.apiStatus = 200;
+      yield* TestClock.adjust("225 seconds");
+      yield* Queue.takeN(h.changes, 2);
+      const recovered = yield* h.updates.act("state");
+      assert.equal(recovered.status, "available");
+      assert.equal(recovered.message, null);
+      assert.equal(h.requests.length, 2);
+
+      yield* Ref.set(h.quitting, true);
+      yield* TestClock.adjust("4 minutes");
+      assert.deepEqual(yield* h.updates.act("state"), recovered);
       assert.equal(h.requests.length, 2);
     }),
   );
@@ -277,16 +342,33 @@ it.layer(NodeServices.layer)("custom builds", (it) => {
     }),
   );
 
-  it.effect("cleans a superseded download when checking again", () =>
-    Effect.gen(function* () {
-      const h = yield* harness();
-      yield* h.updates.act("check");
-      yield* h.updates.act("download");
-      const path = h.downloadPath!;
-      assert.equal(yield* h.fs.exists(path), true);
-      assert.equal((yield* h.updates.act("check")).status, "available");
-      assert.equal(yield* h.fs.exists(path), false);
-    }),
+  it.effect(
+    "keeps a downloaded installer across polls and removes it only for a newer release",
+    () =>
+      Effect.gen(function* () {
+        const pages = [[release()]];
+        const h = yield* harness({ pages });
+        yield* h.updates.act("check");
+        yield* h.updates.act("download");
+        const path = h.downloadPath!;
+        assert.equal(yield* h.fs.exists(path), true);
+        yield* Queue.takeN(h.changes, 4);
+
+        yield* h.updates.configure;
+        yield* TestClock.adjust("15 seconds");
+        yield* Queue.takeN(h.changes, 2);
+        assert.equal((yield* h.updates.act("state")).status, "downloaded");
+        assert.equal(yield* h.fs.exists(path), true);
+
+        pages[0] = [release("202610181200")];
+        yield* TestClock.adjust("225 seconds");
+        yield* Queue.takeN(h.changes, 2);
+        const newer = yield* h.updates.act("state");
+        assert.equal(newer.status, "available");
+        assert.equal(newer.availableBuild, "0.1.1 202610181200");
+        assert.equal(yield* h.fs.exists(path), false);
+        assert.deepEqual(h.steps, []);
+      }),
   );
 
   it.effect("does not fetch or install on unsupported platforms/architectures or dev apps", () =>
@@ -297,10 +379,17 @@ it.layer(NodeServices.layer)("custom builds", (it) => {
         { packaged: false },
       ]) {
         const h = yield* harness(options);
+        yield* h.updates.configure;
+        yield* TestClock.adjust("4 minutes");
         assert.equal((yield* h.updates.act("check")).supported, false);
         assert.deepEqual(h.requests, []);
         assert.deepEqual(h.steps, []);
       }
+
+      const disabled = yield* harness({ env: { T3CODE_DISABLE_AUTO_UPDATE: "true" } });
+      yield* disabled.updates.configure;
+      yield* TestClock.adjust("4 minutes");
+      assert.deepEqual(disabled.requests, []);
     }),
   );
 });

@@ -38,8 +38,9 @@ below.
 
 ## Custom Windows builds
 
-In custom Windows x64 builds, the sidebar's custom-build control or **Settings → General → Custom build** checks releases from
-`AndreiShenets/t3code`, including prereleases. Download the offered build, then install it when
+Custom Windows x64 builds check releases from `AndreiShenets/t3code`, including prereleases,
+15 seconds after startup and every four minutes. You can also check from the sidebar's custom-build
+control or **Settings → General → Custom build**. Download the offered build, then install it when
 you are ready to interrupt running agents. The installer is verified against the release's
 `SHA256SUMS` before it opens.
 

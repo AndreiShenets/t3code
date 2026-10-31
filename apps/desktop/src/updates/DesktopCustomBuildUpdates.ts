@@ -1,17 +1,20 @@
 // @effect-diagnostics nodeBuiltinImport:off - Incremental hashing keeps installers out of memory.
 import * as NodeCrypto from "node:crypto";
 import { type DesktopCustomBuildAction, type DesktopCustomBuildState } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
+import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopState from "../app/DesktopState.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
@@ -34,6 +37,9 @@ const ERROR_MESSAGES = {
   busy: "Another update action is in progress. Wait for it to finish.",
   unavailable: "Check for a custom build and download it before installing.",
 } as const;
+
+const AUTO_UPDATE_STARTUP_DELAY = "15 seconds";
+const AUTO_UPDATE_POLL_INTERVAL = "4 minutes";
 
 class CustomBuildUpdateError extends Schema.TaggedError<CustomBuildUpdateError>()(
   "CustomBuildUpdateError",
@@ -58,11 +64,13 @@ class CustomBuildUpdateError extends Schema.TaggedError<CustomBuildUpdateError>(
 export class DesktopCustomBuildUpdates extends Context.Service<
   DesktopCustomBuildUpdates,
   {
+    readonly configure: Effect.Effect<void, never, Scope.Scope>;
     readonly act: (action: DesktopCustomBuildAction) => Effect.Effect<DesktopCustomBuildState>;
   }
 >()("@t3tools/desktop/updates/DesktopCustomBuildUpdates") {}
 
 export const make = Effect.gen(function* () {
+  const config = yield* DesktopConfig.DesktopConfig;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const fs = yield* FileSystem.FileSystem;
   const client = HttpClient.followRedirects(yield* HttpClient.HttpClient);
@@ -115,7 +123,17 @@ export const make = Effect.gen(function* () {
       all.push(...batch);
       if (batch.length < 100) break;
     }
-    release = selectCustomBuild(all);
+    const selected = selectCustomBuild(all);
+    if (
+      downloaded &&
+      release &&
+      selected &&
+      release.installer.browser_download_url === selected.installer.browser_download_url &&
+      release.installer.size === selected.installer.size
+    ) {
+      return { status: "downloaded", availableBuild: selected.label } as const;
+    }
+    release = selected;
     if (downloaded) yield* fs.remove(downloaded.path, { force: true }).pipe(Effect.ignore);
     downloaded = null;
     const newer = release && (!currentStamp || release.stamp > currentStamp);
@@ -197,42 +215,70 @@ export const make = Effect.gen(function* () {
     return { status: "installing" } as const;
   });
 
+  const act = Effect.fn("desktop.customBuildUpdates.act")(function* (
+    action: DesktopCustomBuildAction,
+  ) {
+    const before = yield* Ref.get(state);
+    if (action === "state") return before;
+    if (yield* Ref.getAndSet(active, true)) return before;
+    return yield* Effect.gen(function* () {
+      if (!before.supported) return yield* new CustomBuildUpdateError({ reason: "unsupported" });
+      if (yield* Ref.get(desktopState.quitting))
+        return yield* new CustomBuildUpdateError({ reason: "busy" });
+      if (
+        (action === "download" && before.status !== "available") ||
+        (action === "install" && before.status !== "downloaded")
+      ) {
+        return yield* new CustomBuildUpdateError({ reason: "unavailable" });
+      }
+      yield* setState({
+        ...before,
+        status:
+          action === "check" ? "checking" : action === "download" ? "downloading" : "installing",
+        message: null,
+      });
+      const next = yield* action === "check" ? check : action === "download" ? download : install;
+      return yield* setState({ ...before, ...next, message: null });
+    }).pipe(
+      Effect.catchTags({
+        CustomBuildUpdateError: (error) =>
+          setState({
+            ...before,
+            status: before.status === "downloaded" && !downloaded ? "available" : before.status,
+            message: error.message,
+          }),
+      }),
+      Effect.onInterrupt(() => setState(before)),
+      Effect.ensuring(Ref.set(active, false)),
+    );
+  });
+
+  const automaticCheck = Effect.gen(function* () {
+    if (yield* Ref.get(desktopState.quitting)) return;
+    yield* act("check");
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.void
+        : Effect.logError("Custom build update check failed", cause),
+    ),
+  );
+
   return DesktopCustomBuildUpdates.of({
-    act: Effect.fn("desktop.customBuildUpdates.act")(function* (action) {
-      const before = yield* Ref.get(state);
-      if (action === "state") return before;
-      if (yield* Ref.getAndSet(active, true)) return before;
-      return yield* Effect.gen(function* () {
-        if (!before.supported) return yield* new CustomBuildUpdateError({ reason: "unsupported" });
-        if (yield* Ref.get(desktopState.quitting))
-          return yield* new CustomBuildUpdateError({ reason: "busy" });
-        if (
-          (action === "download" && before.status !== "available") ||
-          (action === "install" && before.status !== "downloaded")
-        ) {
-          return yield* new CustomBuildUpdateError({ reason: "unavailable" });
-        }
-        yield* setState({
-          ...before,
-          status:
-            action === "check" ? "checking" : action === "download" ? "downloading" : "installing",
-          message: null,
-        });
-        const next = yield* action === "check" ? check : action === "download" ? download : install;
-        return yield* setState({ ...before, ...next, message: null });
-      }).pipe(
-        Effect.catchTags({
-          CustomBuildUpdateError: (error) =>
-            setState({
-              ...before,
-              status: before.status === "downloaded" && !downloaded ? "available" : before.status,
-              message: error.message,
-            }),
-        }),
-        Effect.onInterrupt(() => setState(before)),
-        Effect.ensuring(Ref.set(active, false)),
+    act,
+    configure: Effect.gen(function* () {
+      if (config.disableAutoUpdate || !(yield* Ref.get(state)).supported) return;
+
+      yield* Effect.sleep(AUTO_UPDATE_STARTUP_DELAY).pipe(
+        Effect.andThen(automaticCheck),
+        Effect.forkScoped,
       );
-    }),
+      yield* Effect.sleep(AUTO_UPDATE_POLL_INTERVAL).pipe(
+        Effect.andThen(automaticCheck),
+        Effect.forever,
+        Effect.forkScoped,
+      );
+    }).pipe(Effect.withSpan("desktop.customBuildUpdates.configure")),
   });
 });
 
