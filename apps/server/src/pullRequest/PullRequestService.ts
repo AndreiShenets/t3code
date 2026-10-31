@@ -63,6 +63,7 @@ import {
   type PullRequestSetFilesViewedInput,
   type PullRequestState,
   type PullRequestSubmitReviewInput,
+  type PullRequestSubmitReviewResult,
   PullRequestStack,
   PullRequestSummary,
   type PullRequestThreadReplyInput,
@@ -258,7 +259,7 @@ export class PullRequestService extends Context.Service<
     ) => Effect.Effect<void, PullRequestError>;
     readonly submitReview: (
       input: PullRequestSubmitReviewInput,
-    ) => Effect.Effect<void, PullRequestError>;
+    ) => Effect.Effect<PullRequestSubmitReviewResult, PullRequestError>;
     readonly replyToThread: (
       input: PullRequestThreadReplyInput,
     ) => Effect.Effect<void, PullRequestError>;
@@ -1788,6 +1789,9 @@ export const make = Effect.gen(function* () {
             reviewers: changeRequest.reviewers,
             labels: changeRequest.labels,
             checks: changeRequest.checks,
+            ...(changeRequest.checksIncomplete === undefined
+              ? {}
+              : { checksIncomplete: changeRequest.checksIncomplete }),
             mergeCapabilities: changeRequest.mergeCapabilities,
             viewerPermissions: changeRequest.viewerPermissions,
             ...(viewer === null || viewer.trim().length === 0 ? {} : { viewer }),
@@ -2260,7 +2264,7 @@ export const make = Effect.gen(function* () {
 
   const submitReview: PullRequestService["Service"]["submitReview"] = (input) =>
     requireProject(input).pipe(
-      Effect.flatMap((project): Effect.Effect<void, PullRequestError> => {
+      Effect.flatMap((project): ReturnType<PullRequestService["Service"]["submitReview"]> => {
         const review = project.api.capabilities.review;
         const refuse = (detail: string) =>
           Effect.fail(new PullRequestOperationError({ operation: "submitReview", detail }));
@@ -2272,13 +2276,14 @@ export const make = Effect.gen(function* () {
         }
         if (
           input.verdict !== "approve" &&
+          !(input.verdict === "request-changes" && review.verdictOnly === true) &&
           input.body.trim().length === 0 &&
           input.comments.length === 0
         ) {
           return refuse("A review needs a summary or at least one comment.");
         }
         return viewerPermissionsOf(project, input, "submitReview").pipe(
-          Effect.flatMap((viewer): Effect.Effect<void, PullRequestError> => {
+          Effect.flatMap((viewer): ReturnType<PullRequestService["Service"]["submitReview"]> => {
             if (!viewer.verdicts.includes(input.verdict)) {
               return refuse(
                 `You need write access on this repository to ${
@@ -2393,11 +2398,16 @@ export const make = Effect.gen(function* () {
   const setReaction: PullRequestService["Service"]["setReaction"] = (input) =>
     requireProject(input).pipe(
       Effect.flatMap((project): Effect.Effect<void, PullRequestError> => {
-        if (project.api.capabilities.reactions !== true) {
+        if (
+          project.api.capabilities.reactions !== true ||
+          (project.api.capabilities.reactionContents !== undefined &&
+            !project.api.capabilities.reactionContents.includes(input.content)) ||
+          (input.subjectId === undefined && project.api.capabilities.descriptionReactions === false)
+        ) {
           return Effect.fail(
             new PullRequestOperationError({
               operation: "setReaction",
-              detail: "This host has no reactions.",
+              detail: "This host does not support this reaction or target.",
             }),
           );
         }
@@ -3535,13 +3545,13 @@ export const make = Effect.gen(function* () {
   });
 
   const invalidatedByMutation =
-    <I extends PullRequestRef>(
-      method: (input: I) => Effect.Effect<void, PullRequestError>,
-    ): ((input: I) => Effect.Effect<void, PullRequestError>) =>
+    <I extends PullRequestRef, A>(
+      method: (input: I) => Effect.Effect<A, PullRequestError>,
+    ): ((input: I) => Effect.Effect<A, PullRequestError>) =>
     (input) =>
       Effect.gen(function* () {
         const ref = yield* canonicalRef(input);
-        yield* readCache.invalidate(refScope(ref)).pipe(
+        const result = yield* readCache.invalidate(refScope(ref)).pipe(
           Effect.andThen(method(input)),
           Effect.ensuring(readCache.invalidate(refScope(ref))),
           Effect.tap(() =>
@@ -3552,6 +3562,7 @@ export const make = Effect.gen(function* () {
           ),
         );
         yield* SubscriptionRef.set(pullRequestRefreshes, listingsEpoch);
+        return result;
       });
   const runActionAndInvalidate: PullRequestService["Service"]["runAction"] = Effect.fn(
     "PullRequestService.runActionAndInvalidate",

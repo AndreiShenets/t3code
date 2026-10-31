@@ -5,10 +5,37 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   PullRequestDetail,
   PullRequestListResult,
+  PullRequestReviewCommentDraft,
+  PullRequestSubmitReviewResult,
+  PullRequestSubmitReviewPartialResult,
   resolvePullRequestAuthorFilter,
 } from "./pullRequest.ts";
 
 const decodeDetail = Schema.decodeUnknownSync(Schema.toCodecJson(PullRequestDetail));
+const decodeReviewDraft = Schema.decodeUnknownSync(PullRequestReviewCommentDraft);
+const decodeReviewResult = Schema.decodeUnknownSync(PullRequestSubmitReviewResult);
+const decodePartialReviewResult = Schema.decodeUnknownSync(PullRequestSubmitReviewPartialResult);
+
+it("retains rendered draft anchors and decodes legacy and partial review results", () => {
+  const draft = {
+    path: "a.ts",
+    body: "feedback",
+    position: { kind: "added", newLine: 1 },
+    baseSha: "base",
+    headSha: "head",
+  };
+  expect(decodeReviewDraft(draft)).toEqual(draft);
+  expect(decodeReviewResult(undefined)).toBeUndefined();
+  const partial = {
+    status: "partial",
+    postedCommentIndexes: [0, 2],
+    summaryPosted: true,
+    outcomeUnknown: true,
+    message: "Check the PR before retrying",
+  };
+  expect(decodeReviewResult(partial)).toEqual(partial);
+  expect(() => decodePartialReviewResult({ ...partial, postedCommentIndexes: [-1] })).toThrow();
+});
 
 const LIST_RESULT: PullRequestListResult = {
   viewers: { "github.com": "bilal", "gitlab.com": "bilal.hassan" },
@@ -100,6 +127,7 @@ describe("PullRequestCapabilities", () => {
       closedAt: null,
       reviewers: [],
       checks: [],
+      checksIncomplete: true,
       mergeCapabilities: { merge: true, squash: true, rebase: true },
       capabilities: {
         ...base,
@@ -128,6 +156,7 @@ describe("PullRequestCapabilities", () => {
       requestReviewers: true,
     });
     expect(decoded.title).toBe(detail.title);
+    expect(decoded.checksIncomplete).toBe(true);
   });
 });
 
