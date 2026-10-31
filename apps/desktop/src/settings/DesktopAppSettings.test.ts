@@ -41,13 +41,14 @@ const DesktopSettingsPatch = Schema.Struct({
 const decodeDesktopSettingsPatch = Schema.decodeEffect(Schema.fromJsonString(DesktopSettingsPatch));
 const encodeDesktopSettingsPatch = Schema.encodeEffect(Schema.fromJsonString(DesktopSettingsPatch));
 
-function layerEnvironment(baseDir: string, appVersion = "0.0.17") {
+function layerEnvironment(baseDir: string, appVersion = "0.0.17", customBuildStamp?: string) {
   return DesktopEnvironment.layer({
     dirname: "/repo/apps/desktop/src",
     homeDirectory: baseDir,
     platform: "darwin",
     processArch: "x64",
     appVersion,
+    ...(customBuildStamp ? { customBuildStamp } : {}),
     appPath: "/repo",
     isPackaged: true,
     resourcesPath: "/missing/resources",
@@ -65,7 +66,7 @@ const withSettings = <A, E, R>(
     E,
     R | DesktopAppSettings.DesktopAppSettings | DesktopEnvironment.DesktopEnvironment
   >,
-  options?: { readonly appVersion?: string },
+  options?: { readonly appVersion?: string; readonly customBuildStamp?: string },
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -75,7 +76,9 @@ const withSettings = <A, E, R>(
     return yield* effect.pipe(
       Effect.provide(
         DesktopAppSettings.layer.pipe(
-          Layer.provideMerge(layerEnvironment(baseDir, options?.appVersion)),
+          Layer.provideMerge(
+            layerEnvironment(baseDir, options?.appVersion, options?.customBuildStamp),
+          ),
           Layer.provideMerge(NodeServices.layer),
         ),
       ),
@@ -124,6 +127,26 @@ describe("DesktopSettings", () => {
     }),
   );
 
+  it.effect(
+    "keeps custom builds on nightly by default and honors an explicit stable selection",
+    () =>
+      withSettings(
+        Effect.gen(function* () {
+          const settings = yield* DesktopAppSettings.DesktopAppSettings;
+          assert.equal((yield* settings.load).updateChannel, "nightly");
+          yield* writeSettingsPatch({
+            updateChannel: "latest",
+            updateChannelConfiguredByUser: false,
+          });
+          assert.equal((yield* settings.load).updateChannel, "nightly");
+          yield* settings.setUpdateChannel("latest");
+          assert.equal((yield* settings.load).updateChannel, "latest");
+          yield* settings.setUpdateChannel("nightly");
+          assert.equal((yield* settings.load).updateChannel, "nightly");
+        }),
+        { appVersion: "0.1.1", customBuildStamp: "202610171539" },
+      ),
+  );
   it.effect(
     "persists disabling and re-enabling local execution without clearing backend settings",
     () =>
