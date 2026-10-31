@@ -50,6 +50,7 @@ it("keeps Try again inside a short panel when a failed guide has long diagnostic
     <PullRequestGuideTab
       environmentId={EnvironmentId.make("environment")}
       reference={reference}
+      headSha="head"
       title="Test pull request"
       workspaceRoot="/workspace"
       active
