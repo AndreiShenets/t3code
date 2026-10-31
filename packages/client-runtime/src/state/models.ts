@@ -215,6 +215,17 @@ function terminalRunStatus(status: OrchestrationV2RunStatus): boolean {
   );
 }
 
+/** An async question waits for an answer only once its run stops working. */
+export function shellHasPendingUserInput(thread: OrchestrationV2ThreadShell): boolean {
+  const status = shellRuntime(thread)?.status;
+  // Waiting runs have ended their provider turn and are only draining effects.
+  const working = status === "preparing" || status === "starting" || status === "running";
+  return (
+    thread.pendingRuntimeRequest?.kind === "user_input" &&
+    (thread.pendingRuntimeRequest.blocking !== false || !working)
+  );
+}
+
 // Background commands keep the display active without holding run completion or notifications.
 function shellRuntime(thread: OrchestrationV2ThreadShell): ThreadRuntimeSummary | null {
   const parkAtIdle = (thread.pendingBackgroundTasks?.length ?? 0) > 0 && thread.status !== "failed";
@@ -271,11 +282,6 @@ export function presentThreadShell(
           assistantMessageId: null,
         } satisfies ThreadRunSummary);
   const runtime = shellRuntime(thread);
-  // Waiting runs have ended their provider turn and are only draining effects.
-  const runtimeIsWorking =
-    runtime?.status === "preparing" ||
-    runtime?.status === "starting" ||
-    runtime?.status === "running";
   return {
     environmentId,
     id: thread.id,
@@ -309,9 +315,7 @@ export function presentThreadShell(
       thread.pendingRuntimeRequest !== null &&
       thread.pendingRuntimeRequest.kind !== "user_input" &&
       thread.pendingRuntimeRequest.kind !== "auth_refresh",
-    hasPendingUserInput:
-      thread.pendingRuntimeRequest?.kind === "user_input" &&
-      (thread.pendingRuntimeRequest.blocking !== false || !runtimeIsWorking),
+    hasPendingUserInput: shellHasPendingUserInput(thread),
     pendingSubagentRequest,
     pendingGuestMessageCount: thread.pendingGuestMessageCount ?? 0,
     hasActionableProposedPlan: thread.hasActionableProposedPlan,
