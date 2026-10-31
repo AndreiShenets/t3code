@@ -15,6 +15,9 @@ cost, split by token type and by speed. These estimates are not your subscriptio
 split, such as a provider-reported cost for a model without public rates, shows as **Other**.
 Select a model under **Breakdown** to see its trend, cache hit rate, and cost per million tokens.
 
+**Today** shows hourly usage from midnight in your local time zone through now, including the
+current partial hour. **Past 24h** shows a rolling 24-hour window; longer periods show daily usage.
+
 Totals depend on the history available on each server. Grok turns without a saved completed-turn
 record are missing from the totals.
 
