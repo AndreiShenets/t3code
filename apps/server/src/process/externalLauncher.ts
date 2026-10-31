@@ -164,6 +164,12 @@ function resolveCommandEditorArgs(
           path,
         ],
       });
+    case "visual-studio":
+      return Option.match(parsedTarget, {
+        onNone: () => [target],
+        // Edit.GoTo accepts a line number, not a column.
+        onSome: ({ path, line }) => ["/Edit", path, "/Command", `Edit.GoTo ${line}`],
+      });
   }
 }
 
@@ -483,6 +489,9 @@ const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
   const editorDef = EDITORS.find((editor) => editor.id === input.editor);
   if (!editorDef) {
     return yield* new ExternalLauncherUnknownEditorError({ editor: input.editor });
+  }
+  if (editorDef.id === "visual-studio" && platform !== "win32") {
+    return yield* new ExternalLauncherUnsupportedEditorError({ editor: input.editor });
   }
 
   if (editorDef.commands) {
