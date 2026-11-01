@@ -419,7 +419,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <span {...triggerTextProps}>{triggerContent}</span>
           ) : (
             <Tooltip>
-              <TooltipTrigger render={<span {...triggerTextProps} />}>{triggerContent}</TooltipTrigger>
+              <TooltipTrigger render={<span {...triggerTextProps} />}>
+                {triggerContent}
+              </TooltipTrigger>
               <TooltipPopup side="top">{triggerTooltipContent}</TooltipPopup>
             </Tooltip>
           )}
