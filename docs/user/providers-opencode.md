@@ -49,6 +49,19 @@ using the same workspace. It is broader than the current thread, especially on a
 shared external server. Use **Allow once** for a single request. Denying an action
 does not stop the whole turn.
 
+## MCP connections
+
+With OpenCode 2, use `/mcp` in the composer to view and enable or disable configured
+MCP servers. On web and desktop, you can also open **MCP** in the thread's workspace
+panel. You can enter `/mcp enable <server>` or `/mcp disable <server>` directly.
+Changes affect all OpenCode sessions using that workspace directory, not just the
+current thread. They are runtime-only: no project or global configuration is
+changed, and defaults return when OpenCode reloads or restarts. T3 Code manages
+its own MCP connection separately.
+
+If a server needs authentication, sign in through `/mcps` in OpenCode, then refresh
+the MCP list in T3 Code.
+
 ## Refresh models, commands, and skills
 
 After changing an OpenCode login or configuration, use **Refresh provider status**
