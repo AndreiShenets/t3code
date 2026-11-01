@@ -215,17 +215,6 @@ function terminalRunStatus(status: OrchestrationV2RunStatus): boolean {
   );
 }
 
-/** An async question waits for an answer only once its run stops working. */
-export function shellHasPendingUserInput(thread: OrchestrationV2ThreadShell): boolean {
-  const status = shellRuntime(thread)?.status;
-  // Waiting runs have ended their provider turn and are only draining effects.
-  const working = status === "preparing" || status === "starting" || status === "running";
-  return (
-    thread.pendingRuntimeRequest?.kind === "user_input" &&
-    (thread.pendingRuntimeRequest.blocking !== false || !working)
-  );
-}
-
 // Background commands keep the display active without holding run completion or notifications.
 function shellRuntime(thread: OrchestrationV2ThreadShell): ThreadRuntimeSummary | null {
   const parkAtIdle = (thread.pendingBackgroundTasks?.length ?? 0) > 0 && thread.status !== "failed";
@@ -315,7 +304,8 @@ export function presentThreadShell(
       thread.pendingRuntimeRequest !== null &&
       thread.pendingRuntimeRequest.kind !== "user_input" &&
       thread.pendingRuntimeRequest.kind !== "auth_refresh",
-    hasPendingUserInput: shellHasPendingUserInput(thread),
+    // Async questions count too, so a thread with any open question leaves Working.
+    hasPendingUserInput: thread.pendingRuntimeRequest?.kind === "user_input",
     pendingSubagentRequest,
     pendingGuestMessageCount: thread.pendingGuestMessageCount ?? 0,
     hasActionableProposedPlan: thread.hasActionableProposedPlan,
