@@ -216,7 +216,7 @@ function isAuthoredByViewer(entry: ScopedEntry, viewers: PullRequestViewers): bo
 export function matchesPullRequestQuery(entry: PullRequestListEntry, query: string): boolean {
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) return true;
-  return `#${entry.number} ${entry.title} ${entry.repository} ${entry.headBranch} ${entry.author?.login ?? ""}`
+  return `#${entry.number} ${entry.title} ${entry.repository} ${entry.headBranch} ${entry.author?.login ?? ""} ${entry.author?.name ?? ""}`
     .toLowerCase()
     .includes(normalizedQuery);
 }
@@ -647,7 +647,11 @@ export function scorePullRequestMatch(entry: PullRequestListEntry, query: string
   if (title.includes(needle)) return 80;
   if (terms.length > 1 && terms.every((term) => title.includes(term))) return 70;
   if (entry.headBranch.toLowerCase().includes(needle)) return 60;
-  if ((entry.author?.login ?? "").toLowerCase().includes(needle)) return 50;
+  if (
+    (entry.author?.login ?? "").toLowerCase().includes(needle) ||
+    (entry.author?.name ?? "").toLowerCase().includes(needle)
+  )
+    return 50;
   if (entry.repository.toLowerCase().includes(needle)) return 40;
   if (terms.some((term) => title.includes(term))) return 30;
   return 10;
