@@ -53,6 +53,36 @@ function makeHarness(environmentIds: ReadonlyArray<EnvironmentId> = [environment
 }
 
 describe("v2 thread shell lists", () => {
+  it("keeps background commands in Working until the last one exits", () => {
+    const { registry, threads, snapshotAtom } = makeHarness();
+    const root = {
+      ...v2ThreadShell,
+      latestRunId: RunId.make("shell-run"),
+      activeRunId: null,
+      status: "completed" as const,
+      activityRunStatus: null,
+      pendingBackgroundTasks: [
+        { taskId: "sh_tests", kind: "command" as const, description: "npm test" },
+        { taskId: "sh_build", kind: "command" as const, description: "npm run build" },
+      ],
+    };
+    const parent = threads.threadShellAtom({ environmentId, threadId: root.id });
+    const dispose = registry.mount(parent);
+    const update = (pendingBackgroundTasks: typeof root.pendingBackgroundTasks) =>
+      registry.set(snapshotAtom(environmentId), {
+        ...v2ShellSnapshot,
+        threads: [{ ...root, pendingBackgroundTasks }],
+      });
+    update(root.pendingBackgroundTasks);
+    expect(isThreadWorking(registry.get(parent)!)).toBe(true);
+    update(root.pendingBackgroundTasks.slice(1));
+    expect(isThreadWorking(registry.get(parent)!)).toBe(true);
+    update([]);
+    expect(isThreadWorking(registry.get(parent)!)).toBe(false);
+    dispose();
+    registry.dispose();
+  });
+
   it("preserves ordered reference arrays when a middle thread changes", () => {
     const { registry, threads, snapshotAtom } = makeHarness();
     const snapshot = {
