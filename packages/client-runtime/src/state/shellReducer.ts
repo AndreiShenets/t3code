@@ -137,6 +137,22 @@ export function applyShellStreamEvent(
 ): OrchestrationV2ShellSnapshot {
   if (event.sequence <= snapshot.snapshotSequence) return snapshot;
 
+  if ("ancestorCosts" in event && event.ancestorCosts !== undefined) {
+    const costs = new Map(event.ancestorCosts.map((cost) => [cost.threadId, cost.costUsd]));
+    const updateCosts = (threads: OrchestrationV2ShellSnapshot["threads"]) =>
+      threads.map((thread) => {
+        const cost = costs.get(thread.id);
+        return cost === undefined || thread.subagentCostUsd === (cost ?? undefined)
+          ? thread
+          : { ...thread, subagentCostUsd: cost ?? undefined };
+      });
+    snapshot = {
+      ...snapshot,
+      threads: updateCosts(snapshot.threads),
+      archivedThreads: updateCosts(snapshot.archivedThreads),
+    };
+  }
+
   switch (event.kind) {
     case "project.updated": {
       // Enrichment is async. A project mutation can land with null

@@ -315,6 +315,7 @@ const resumed = (
     readonly resolveExtractedTextPath?: (path: string) => Effect.Effect<string | undefined>;
     readonly fileSystem?: FileSystem.FileSystem;
     readonly onPrompt?: (input: unknown) => void;
+    readonly forkedFrom?: OrchestrationV2ProviderThread["forkedFrom"];
   },
 ) =>
   Effect.gen(function* () {
@@ -348,7 +349,10 @@ const resumed = (
       },
     );
     const thread = yield* runtime.resumeThread({
-      providerThread: providerThread(yield* DateTime.now),
+      providerThread: {
+        ...providerThread(yield* DateTime.now),
+        forkedFrom: options?.forkedFrom ?? null,
+      },
       threadId,
       modelSelection: bigPickle,
       runtimePolicy: policy(options?.supervised === true ? "approval-required" : "full-access"),
@@ -416,6 +420,173 @@ const history = {
 };
 
 it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
+  it.effect("restores the cumulative session cost when resuming", () =>
+    Effect.gen(function* () {
+      const runtime = yield* openCode2ReplayRuntime([
+        ...opening,
+        out("session.get", { sessionID: SESSION }),
+        replyData("session.get", sessionInfo({ cost: 3.03 })),
+        ...noOpenRequests,
+      ]);
+      const thread = yield* runtime.resumeThread({
+        providerThread: {
+          ...providerThread(yield* DateTime.now),
+          contextUsage: { usedTokens: 42_000, maxTokens: 160_000 },
+        },
+        threadId,
+        modelSelection: bigPickle,
+        runtimePolicy: policy(),
+      });
+      assert.deepEqual(thread.contextUsage?.cost, { amount: 3.03, currency: "USD" });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("replaces session cost from usage updates without adding it twice", () =>
+    Effect.gen(function* () {
+      const usage = { sessionID: SESSION, cost: 3.03, tokens: sessionInfo().tokens };
+      const { runtime, thread } = yield* resumed([
+        out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+        promptAccepted,
+        event("session.step.ended", {
+          sessionID: SESSION,
+          assistantMessageID: "msg_cost_step",
+          finish: "stop",
+          cost: 0.12,
+          tokens: { input: 1200, output: 40, reasoning: 0, cache: { read: 300, write: 0 } },
+        }),
+        event("session.usage.updated", usage),
+        event("session.usage.updated", usage),
+        event("session.usage.updated", { ...usage, cost: 3.15 }),
+        event("session.execution.succeeded", { sessionID: SESSION }),
+      ]);
+      const received = yield* runtime.events.pipe(
+        Stream.takeUntil((event) => event.type === "turn.terminal"),
+        Stream.runCollect,
+        Effect.forkScoped,
+      );
+      yield* runtime.startTurn(turnInput(thread));
+      const updates = (yield* Fiber.join(received)).flatMap((event) =>
+        event.type === "provider_thread.updated" ? [event.providerThread.contextUsage] : [],
+      );
+      assert.equal(updates.filter((usage) => usage?.cost?.amount === 3.03).length, 1);
+      assert.deepInclude(updates.at(-1), {
+        usedTokens: 1540,
+        cost: { amount: 3.15, currency: "USD" },
+      });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect.each(["session.step.ended", "session.step.failed"] as const)(
+    "waits for measured fork context and publishes it during a turn on %s",
+    (stepType) =>
+      Effect.gen(function* () {
+        const { runtime, thread } = yield* resumed(
+          [
+            out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+            promptAccepted,
+            event("session.usage.updated", {
+              sessionID: SESSION,
+              cost: 0.25,
+              tokens: sessionInfo().tokens,
+            }),
+            event(stepType, {
+              sessionID: SESSION,
+              assistantMessageID: "msg_first_fork_step",
+              finish: stepType === "session.step.failed" ? "content-filter" : "stop",
+              error: { type: "unknown", message: "failed" },
+              cost: 0.25,
+              tokens: { input: 1200, output: 40, reasoning: 0, cache: { read: 300, write: 0 } },
+            }),
+            event("session.execution.succeeded", { sessionID: SESSION }),
+          ],
+          { forkedFrom: { providerThreadId: ProviderThreadId.make("source-session") } },
+        );
+        assert.isNotOk(thread.contextUsage);
+        const received = yield* runtime.events.pipe(
+          Stream.takeUntil((event) => event.type === "turn.terminal"),
+          Stream.runCollect,
+          Effect.forkScoped,
+        );
+        yield* runtime.startTurn(turnInput(thread));
+        const events = yield* Fiber.join(received);
+        const measurements = events.flatMap((event) =>
+          event.type === "provider_thread.updated" && event.providerThread.contextUsage
+            ? [event.providerThread.contextUsage]
+            : [],
+        );
+        assert.isNotEmpty(measurements);
+        for (const usage of measurements) {
+          assert.deepInclude(usage, {
+            usedTokens: 1540,
+            cost: { amount: 0.25, currency: "USD" },
+          });
+        }
+        assert.isTrue(
+          events.some(
+            (event) =>
+              event.type === "provider_turn.updated" &&
+              event.providerTurn.completedAt === null &&
+              event.providerTurn.tokenUsage?.usedTokens === 1540,
+          ),
+        );
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("clears the old session's context and cost when replacing its native session", () =>
+    Effect.gen(function* () {
+      const runtime = yield* openCode2ReplayRuntime([
+        ...opening,
+        out("session.create", "<any>"),
+        replyData("session.create", sessionInfo()),
+      ]);
+      const thread = yield* runtime.ensureThread({
+        existingProviderThread: {
+          ...providerThread(yield* DateTime.now),
+          nativeThreadRef: null,
+          contextUsage: { usedTokens: 42_000, cost: { amount: 3.03, currency: "USD" } },
+        },
+        threadId,
+        modelSelection: bigPickle,
+        runtimePolicy: policy(),
+      });
+      assert.isNotOk(thread.contextUsage);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reports idle session cost without replacing its context occupancy", () =>
+    Effect.gen(function* () {
+      const runtime = yield* openCode2ReplayRuntime([
+        ...opening,
+        out("session.get", { sessionID: SESSION }),
+        replyData("session.get", sessionInfo()),
+        ...noOpenRequests,
+        event("session.usage.updated", {
+          sessionID: SESSION,
+          cost: 0.25,
+          tokens: { input: 999_999, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        }),
+      ]);
+      yield* runtime.resumeThread({
+        providerThread: {
+          ...providerThread(yield* DateTime.now),
+          contextUsage: { usedTokens: 42_000, maxTokens: 160_000 },
+        },
+        threadId,
+        modelSelection: bigPickle,
+        runtimePolicy: policy(),
+      });
+      const update = yield* runtime.events.pipe(
+        Stream.filter((event) => event.type === "provider_thread.updated"),
+        Stream.runHead,
+      );
+      assert.deepEqual(Option.getOrUndefined(update)?.providerThread.contextUsage, {
+        usedTokens: 42_000,
+        maxTokens: 160_000,
+        cost: { amount: 0.25, currency: "USD" },
+      });
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("switches the session's model and variant before a turn that changed them", () =>
     Effect.gen(function* () {
       const { runtime, thread } = yield* resumed([
@@ -969,6 +1140,46 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       assert.equal(yield* runtime.hasPendingBackgroundWorkForThread!(thread), running);
     }).pipe(Effect.scoped),
   );
+  it.effect("reports subagent session costs on the child without replacing the root cost", () =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed([
+        ...backgroundLaunch(CHILD),
+        event("session.execution.started", { sessionID: CHILD }),
+        event("session.step.ended", {
+          sessionID: CHILD,
+          assistantMessageID: "msg_child_cost",
+          finish: "stop",
+          cost: 99,
+          tokens: { input: 1200, output: 40, reasoning: 0, cache: { read: 300, write: 0 } },
+        }),
+        event("session.usage.updated", {
+          sessionID: CHILD,
+          cost: 99,
+          tokens: sessionInfo().tokens,
+        }),
+        event("session.execution.succeeded", { sessionID: SESSION }),
+      ]);
+      const received = yield* runtime.events.pipe(
+        Stream.takeUntil((event) => event.type === "turn.terminal"),
+        Stream.runCollect,
+        Effect.forkScoped,
+      );
+      yield* runtime.startTurn(withLineage(thread));
+      const costs = (yield* Fiber.join(received)).flatMap((event) =>
+        event.type === "provider_thread.updated" && event.providerThread.contextUsage?.cost
+          ? [
+              {
+                sessionId: event.providerThread.nativeThreadRef?.nativeId,
+                amount: event.providerThread.contextUsage.cost.amount,
+              },
+            ]
+          : [],
+      );
+      assert.deepInclude(costs, { sessionId: CHILD, amount: 99 });
+      assert.isFalse(costs.some((cost) => cost.sessionId === SESSION && cost.amount === 99));
+    }).pipe(Effect.scoped),
+  );
+
   const watchBackgroundTurn = (runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime) =>
     Effect.gen(function* () {
       const attached = yield* Deferred.make<void>();
