@@ -94,8 +94,11 @@ const unitTestProject = {
   },
 } satisfies TestProjectInlineConfiguration;
 
-// Hash checkout paths to ports 61000-64999; Vitest's fixed port collides under inherited strictPort.
-const browserTestApiPort = 61_000 + ((Hash.string(import.meta.dirname) >>> 0) % 4_000);
+// Hash checkout paths below Windows' reserved ephemeral range to avoid EACCES and parallel collisions.
+const browserTestApiPort =
+  // oxlint-disable-next-line t3code/no-global-process-runtime -- Vite evaluates this config before an Effect runtime exists.
+  (process.platform === "win32" ? 20_000 : 61_000) +
+  ((Hash.string(import.meta.dirname) >>> 0) % 4_000);
 
 const browserTestProject = {
   extends: true,
