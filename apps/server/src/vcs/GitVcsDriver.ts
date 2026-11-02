@@ -1380,6 +1380,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
           "diff",
           ...(input.format === "numstat" ? ["--numstat", "-z"] : ["--patch"]),
           "--no-color",
+          "--no-relative",
           "--no-ext-diff",
           "--no-textconv",
           ...PATCH_RENDER_PREFIX_ARGS,
