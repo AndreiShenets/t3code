@@ -139,6 +139,13 @@ export function usePullRequestDiff(
     refresh,
     parsed,
     patch,
+    snapshotForPath: (path: string) => {
+      const page = pages.find((page) => {
+        const parsed = getCachedPullRequestDiffPages([page], key, terminology);
+        return parsed?.kind === "files" && parsed.files.some((file) => file.path === path);
+      });
+      return page?.result;
+    },
     nextCursor,
     canLoadMore,
     loadMore,

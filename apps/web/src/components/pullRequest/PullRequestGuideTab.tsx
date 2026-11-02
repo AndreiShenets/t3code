@@ -63,8 +63,10 @@ export function PullRequestGuideTab({
           canComment,
           rangeComments,
           pending,
-          onComment: ({ path, oldPath, position, startPosition, body }) =>
+          onComment: ({ path, oldPath, position, startPosition, body, headSha, baseSha }) =>
             addComment(reviewKey, {
+              ...(headSha === undefined ? {} : { headSha }),
+              ...(baseSha === undefined ? {} : { baseSha }),
               id: nextPendingReviewCommentId(),
               path,
               ...(oldPath === null ? {} : { oldPath }),

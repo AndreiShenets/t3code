@@ -24,6 +24,36 @@ const thread: PullRequestReviewThread = {
   comments: [],
 };
 describe("PR comments in continuous native diffs", () => {
+  it("shows the known author name in an inline discussion", () => {
+    const annotated = annotatePullRequestDiff(
+      data,
+      [
+        {
+          ...thread,
+          comments: [
+            {
+              id: "comment",
+              author: {
+                login: "d87a712c-fad9-49b8-9c7b-b8d7049638f3",
+                name: "Serhii Zubatkin",
+                avatarUrl: null,
+              },
+              body: "please add ticket number",
+              createdAt: "2026-10-21T10:00:00Z",
+              url: null,
+              reactions: [],
+            },
+          ],
+        },
+      ],
+      [],
+      "abc",
+    );
+    expect(annotated.rows.find((row) => row.id === "discussion:t")?.commentText).toBe(
+      "Serhii Zubatkin\nplease add ticket number\n1 comments · Tap to open",
+    );
+  });
+
   it("returns unannotated data unchanged without reading or indexing rows", () => {
     const unannotated = {
       ...data,

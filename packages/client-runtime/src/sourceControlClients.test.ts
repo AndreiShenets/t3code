@@ -13,6 +13,17 @@ const parse = (url: string) => {
 const kindOf = (url: string) => sourceControlClients.parseChangeRequestUrl(url)?.definition.kind;
 
 describe("sourceControlClients.parseChangeRequestUrl", () => {
+  it("distinguishes Azure Server collections from cloud Azure pull request URLs", () => {
+    expect(kindOf("http://code.example:8080/tfs/collection/project/_git/repo/pullrequest/7")).toBe(
+      "azure-devops-custom-server",
+    );
+    expect(kindOf("https://dev.azure.com/org/project/_git/repo/pullrequest/7")).toBe(
+      "azure-devops",
+    );
+    expect(kindOf("https://org.visualstudio.com/project/_git/repo/pullrequest/7")).toBe(
+      "azure-devops",
+    );
+  });
   it("reads a GitHub pull request, lower-casing the repository", () => {
     expect(parse("https://github.com/T3Tools/T3Code/pull/123")).toEqual({
       host: "github.com",
@@ -271,6 +282,18 @@ describe("sourceControlClients.recognizeRemote", () => {
 });
 
 describe("sourceControlClients repository keys", () => {
+  it("preserves HTTP ports for custom Azure repository identity", () => {
+    expect(
+      sourceControlClients.repositoryKeyFromRemote(
+        "http://code.example:8080/tfs/Default%20Collection/Project/_git/Web.git",
+      ),
+    ).toBe("code.example:8080/tfs/default%20collection/project/_git/web");
+    expect(
+      sourceControlClients.repositoryKeyFromRemote(
+        "https://dev.azure.com:8443/org/project/_git/web",
+      ),
+    ).toBe("dev.azure.com/org/project/_git/web");
+  });
   // Persisted as `repositoryIdentity.canonicalKey` and in thread pull request keys.
   it.each([
     ["git@github.com:T3Tools/T3Code.git", "github.com/t3tools/t3code"],
@@ -311,6 +334,27 @@ describe("sourceControlClients repository keys", () => {
 });
 
 describe("sourceControlClients project hosts", () => {
+  it("recognizes custom Azure repositories and retains their web authority", () => {
+    const remoteUrl = "https://code.example:8443/tfs/Default%20Collection/Project/_git/Web";
+    expect(sourceControlClients.recognizeRemote(remoteUrl)).toEqual({
+      kind: "azure-devops-custom-server",
+      name: "Azure DevOps Custom",
+      baseUrl: "https://code.example:8443",
+    });
+    expect(
+      sourceControlClients.changeRequestHost(
+        { locator: { remoteUrl } },
+        "azure-devops-custom-server",
+      ),
+    ).toBe("code.example:8443");
+    expect(
+      sourceControlClients.repositorySelector({
+        provider: SourceControlProviderKind.make("azure-devops-custom-server"),
+        name: "Web%20UI",
+        displayName: "tfs/collection/project/_git/Web%20UI",
+      }),
+    ).toBe("Web UI");
+  });
   const identity = {
     canonicalKey: "forge.example/team/repo",
     locator: { remoteUrl: "http://forge.example:3000/team/repo.git" },

@@ -1,4 +1,7 @@
-import type { PullRequestReviewCommentDraft } from "@t3tools/contracts";
+import type {
+  PullRequestReviewCommentDraft,
+  PullRequestSubmitReviewResult,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { PullRequestReviewCommentDraft as CommentSchema } from "@t3tools/contracts";
 import type { PullRequestParams } from "./usePullRequestDiff";
@@ -9,6 +12,7 @@ export type PendingReviewComment = PullRequestReviewCommentDraft & {
   readonly code: string;
 };
 export type ReviewDraft = {
+  readonly outcomeUnknown?: boolean;
   readonly summary: string;
   readonly comment: string;
   readonly comments: readonly PendingReviewComment[];
@@ -28,6 +32,7 @@ export const ReviewDraftDocument = Schema.Struct({
   drafts: Schema.Record(
     Schema.String,
     Schema.Struct({
+      outcomeUnknown: Schema.optional(Schema.Boolean),
       summary: Schema.String,
       comment: Schema.String,
       comments: Schema.Array(
@@ -41,17 +46,45 @@ export const ReviewDraftDocument = Schema.Struct({
     }),
   ),
 });
-export function clearSubmittedReview(current: ReviewDraft, submitted: ReviewDraft): ReviewDraft {
+
+export function reviewCommentsForSubmission(
+  comments: ReadonlyArray<PendingReviewComment>,
+): ReadonlyArray<PullRequestReviewCommentDraft> {
+  return comments.map(({ id: _id, code: _code, headSha, baseSha, ...comment }) => ({
+    ...comment,
+    ...(headSha.trim() ? { headSha } : {}),
+    ...(baseSha?.trim() ? { baseSha } : {}),
+  }));
+}
+
+export function clearSubmittedReview(
+  current: ReviewDraft,
+  submitted: ReviewDraft,
+  result: PullRequestSubmitReviewResult = undefined,
+): ReviewDraft {
+  const posted =
+    result === undefined
+      ? submitted.comments
+      : result.postedCommentIndexes.flatMap((index) =>
+          submitted.comments[index] ? [submitted.comments[index]] : [],
+        );
   return {
     ...current,
-    summary: current.summary === submitted.summary ? "" : current.summary,
+    ...(result === undefined && current.outcomeUnknown === undefined
+      ? {}
+      : { outcomeUnknown: result?.outcomeUnknown === true }),
+    summary:
+      (result === undefined || result.summaryPosted) && current.summary === submitted.summary
+        ? ""
+        : current.summary,
     comments: current.comments.filter(
       (comment) =>
-        !submitted.comments.some(
+        !posted.some(
           (saved) =>
             saved.id === comment.id &&
             saved.body === comment.body &&
             saved.headSha === comment.headSha &&
+            saved.baseSha === comment.baseSha &&
             saved.path === comment.path &&
             saved.oldPath === comment.oldPath &&
             saved.code === comment.code &&
