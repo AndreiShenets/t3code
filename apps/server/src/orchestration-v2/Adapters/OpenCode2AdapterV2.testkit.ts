@@ -60,6 +60,11 @@ const operationOf = (
   if (method === "POST" && path === "/api/session") return { type: "session.create", input: body };
   if (method === "GET" && path === "/api/session/active") return { type: "session.active" };
   if (method === "GET" && path === "/api/command") return { type: "command.list", input: query };
+  if (method === "GET" && path === "/api/shell") return { type: "shell.list", input: query };
+  const shell = /^\/api\/shell\/([^/]+)$/.exec(path);
+  if (method === "DELETE" && shell !== null) {
+    return { type: "shell.remove", input: { id: shell[1], ...query } };
+  }
   const mcp = /^\/api\/experimental\/mcp\/([^/]+)$/.exec(path);
   if (mcp !== null && method === "PUT") {
     return { type: "mcp.add", input: { server: mcp[1], ...query, ...(body as object) } };
