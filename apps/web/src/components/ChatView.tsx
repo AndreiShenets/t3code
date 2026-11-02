@@ -1455,6 +1455,7 @@ export default function ChatView(props: ChatViewProps) {
     serverVisibleTurnItems ?? [],
     activeThreadLiveTokenUsage,
     activeProviderThread,
+    serverThreadShell?.source.subagentCostUsd,
   );
   const pendingBackgroundTasks = deriveThreadPendingBackgroundTasks(serverProjection);
   const activeWorkStartedAt =
