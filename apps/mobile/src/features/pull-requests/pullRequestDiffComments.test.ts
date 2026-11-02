@@ -50,7 +50,7 @@ describe("PR comments in continuous native diffs", () => {
       "abc",
     );
     expect(annotated.rows.find((row) => row.id === "discussion:t")?.commentText).toBe(
-      "Serhii Zubatkin\nplease add ticket number\n1 comments · Tap to open",
+      "Serhii Zubatkin\nplease add ticket number\n1 comment · Tap to open",
     );
   });
 
