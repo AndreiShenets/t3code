@@ -572,7 +572,6 @@ export function openCode2CommandsToServerProviderSlashCommands(
   return slashCommands;
 }
 
-// OpenCode has no reviewer; Auto asks like Supervised.
 const OPENCODE_2_PRESENTATION = {
   ...OPENCODE_PRESENTATION,
   showInteractionModeToggle: true,
