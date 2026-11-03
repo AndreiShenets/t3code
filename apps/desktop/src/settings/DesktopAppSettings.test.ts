@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -54,7 +55,11 @@ function layerEnvironment(baseDir: string, appVersion = "0.0.17", customBuildSta
     runningUnderArm64Translation: false,
   }).pipe(
     Layer.provide(
-      Layer.mergeAll(NodeServices.layer, DesktopConfig.layerTest({ T3CODE_HOME: baseDir })),
+      Layer.mergeAll(
+        NodeServices.layer,
+        NodeCrypto.layer,
+        DesktopConfig.layerTest({ T3CODE_HOME: baseDir }),
+      ),
     ),
   );
 }
@@ -78,11 +83,11 @@ const withSettings = <A, E, R>(
           Layer.provideMerge(
             layerEnvironment(baseDir, options?.appVersion, options?.customBuildStamp),
           ),
-          Layer.provideMerge(NodeServices.layer),
+          Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
         ),
       ),
     );
-  }).pipe(Effect.provide(NodeServices.layer), Effect.scoped);
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)), Effect.scoped);
 
 function writeSettingsPatch(patch: typeof DesktopSettingsPatch.Type) {
   return Effect.gen(function* () {
