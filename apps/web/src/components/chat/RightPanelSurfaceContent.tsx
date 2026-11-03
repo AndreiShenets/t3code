@@ -21,6 +21,7 @@ import {
 } from "../PersistentThreadTerminals";
 import { pullRequestPanelContext } from "../pullRequest/pullRequestDetail.logic";
 import { PullRequestDetailPanel } from "../pullRequest/PullRequestDetailPanel";
+import { getPullRequestViewState } from "../pullRequest/pullRequestViewState";
 import { PullRequestDetailGhost } from "../pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel";
@@ -127,11 +128,13 @@ export function RightPanelSurfaceContent(props: {
           />
         );
       }
+      const viewState = getPullRequestViewState(threadRef, surface);
       return (
         <PullRequestDetailPanel
           getShortcutContext={props.getShortcutContext}
           shortcutsEnabled={visible && props.activeSurfaceId === surface.id}
-          key={`${scopedThreadKey(threadRef)}:${surface.id}`}
+          key={`${scopedThreadKey(threadRef)}:${surface.id}:${viewState.instanceId}`}
+          viewState={viewState}
           environmentId={props.environmentId}
           onSelectPullRequest={(reference) => {
             useRightPanelStore.getState().openPullRequest(threadRef, {
