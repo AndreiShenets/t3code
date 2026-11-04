@@ -2,11 +2,23 @@ import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3
 import { describe, expect, it } from "vite-plus/test";
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import {
+  formatContextWindowCost,
   hasAvailableCompactionProvider,
   hasDismissedResumeCompaction,
   resolveContextWindowModelDisplayName,
   shouldReserveContextWindowMeter,
 } from "./ContextWindowMeter.logic";
+
+describe("formatContextWindowCost", () => {
+  it.each([
+    [{ amount: 3.03, currency: "USD" }, "$3.03"],
+    [{ amount: 0, currency: "USD" }, "$0.00"],
+    [{ amount: 0.0012, currency: "USD" }, "$0.0012"],
+    [{ amount: 1.25, currency: "EUR" }, "EUR 1.25"],
+  ])("formats %j as %s", (cost, formatted) => {
+    expect(formatContextWindowCost(cost)).toBe(formatted);
+  });
+});
 
 function claudeProvider(input: {
   instanceId: string;
