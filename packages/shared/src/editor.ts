@@ -32,6 +32,7 @@ export const resolveEditorCommand = Effect.fn("editor.resolveEditorCommand")(fun
   if (editor.commands === null) return Option.none();
   const baseArgs = "baseArgs" in editor ? editor.baseArgs : [];
   const platform = yield* HostProcess.Platform;
+  if (editor.id === "visual-studio" && platform !== "win32") return Option.none();
   // Prefer Zed's macOS bundle because OpenZFS also installs a zed executable.
   const preferBundle = platform === "darwin" && editor.id === "zed";
   const preferZeditor = platform === "linux" && editor.id === "zed";
@@ -84,7 +85,23 @@ export const resolveEditorCommand = Effect.fn("editor.resolveEditorCommand")(fun
         (root): root is string => !!root,
       ),
     ];
-    if (jetbrains) {
+    if (editor.id === "visual-studio") {
+      // Visual Studio's normal installer does not add devenv.exe to PATH.
+      for (const root of new Set(roots)) {
+        const directory = path.join(root, "Microsoft Visual Studio");
+        const versions = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => []));
+        for (const version of versions) {
+          if (!/^\d/.test(version)) continue;
+          const versionDirectory = path.join(directory, version);
+          const editions = yield* fs
+            .readDirectory(versionDirectory)
+            .pipe(Effect.orElseSucceed(() => []));
+          for (const edition of editions) {
+            candidates.push(path.join(versionDirectory, edition, "Common7/IDE/devenv.exe"));
+          }
+        }
+      }
+    } else if (jetbrains) {
       if (env.LOCALAPPDATA) {
         candidates.push(path.join(env.LOCALAPPDATA, "JetBrains/Toolbox/scripts", `${command}.cmd`));
       }
