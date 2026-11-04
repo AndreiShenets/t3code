@@ -1671,6 +1671,31 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
   );
 
+  it.effect(
+    "persists an Azure DevOps collection for automatic authentication without a token",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* ServerSettingsModule.ServerSettingsService;
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const fields = { collectionUrl: "https://ado.example/Collection" };
+        const saved = yield* service.updateSettings({
+          sourceControlHosts: { "azure-devops-custom-server": fields },
+        });
+        assert.deepEqual(saved.sourceControlHosts["azure-devops-custom-server"], fields);
+        assert.deepEqual(
+          ServerSettingsModule.redactServerSettingsForClient(saved).sourceControlHosts[
+            "azure-devops-custom-server"
+          ],
+          fields,
+        );
+        const persisted = yield* fs
+          .readFileString(config.settingsPath)
+          .pipe(Effect.flatMap(decodeServerSettingsJson));
+        assert.deepEqual(persisted.sourceControlHosts["azure-devops-custom-server"], fields);
+      }).pipe(Effect.provide(layerServerSettings())),
+  );
+
   it.effect("knows every strictly decoded field that can hold a secret reference", () =>
     Effect.sync(() => {
       // Shipped clients decode these as strings. Each must be covered by the older-client case above.

@@ -7,7 +7,7 @@ import type { PullRequestReviewVerdict } from "@t3tools/contracts";
 import { useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Platform, Pressable, View } from "react-native";
-import { clearSubmittedReview } from "./pullRequestReviewDrafts";
+import { clearSubmittedReview, reviewCommentsForSubmission } from "./pullRequestReviewDrafts";
 import { usePullRequestReviewDraft } from "./usePullRequestReviewDraft";
 import { reviewPositionLabel } from "./pullRequestDiffComments";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
@@ -68,6 +68,7 @@ export function PullRequestReviewSheet({
   const target = pullRequestTarget(params);
   const result = useEnvironmentQuery(composerPullRequests.detail(target));
   const { refresh: refreshDetail } = result;
+  const refreshActivity = useAtomRefresh(composerPullRequests.activity(target));
   useFocusEffect(refreshDetail);
   const permissions = usePullRequestPermissions(params, result.data);
   const submission = useActionSubmission(params);
@@ -94,12 +95,14 @@ export function PullRequestReviewSheet({
       : false;
   const canSubmit =
     store.ready &&
-    (!reviewing || (!stale && canSubmitComments)) &&
+    (!reviewing || (!stale && canSubmitComments && !store.draft.outcomeUnknown)) &&
     (reviewing
       ? verdict !== undefined &&
         (summaryRequired
           ? body.trim().length > 0
           : verdict.value === "approve" ||
+            (verdict.value === "request-changes" &&
+              result.data?.capabilities.review.verdictOnly === true) ||
             body.trim().length > 0 ||
             store.draft.comments.length > 0)
       : permissions.canComment && body.trim().length > 0);
@@ -116,19 +119,28 @@ export function PullRequestReviewSheet({
                 ...target.input,
                 verdict: verdict.value,
                 body,
-                comments: submitted.comments.map(
-                  ({ id: _id, headSha: _sha, code: _code, ...comment }) => comment,
-                ),
+                comments: reviewCommentsForSubmission(submitted.comments),
               },
             })
           : await comment({ ...target, input: { ...target.input, body } });
       if (response._tag === "Failure") throw squashAtomCommandFailure(response);
       store.update((current) =>
         reviewing
-          ? clearSubmittedReview(current, submitted)
+          ? clearSubmittedReview(current, submitted, response.value)
           : { ...current, comment: current.comment === submitted.comment ? "" : current.comment },
       );
       await store.flush();
+      if (response.value?.status === "partial") {
+        refreshDetail();
+        refreshActivity();
+        const partial = response.value;
+        const feedbackPosted =
+          submitted.comments.every((_, index) => partial.postedCommentIndexes.includes(index)) &&
+          (body.trim().length === 0 || partial.summaryPosted);
+        throw new Error(
+          `${feedbackPosted ? "Review feedback posted; vote not confirmed." : "Some review feedback was not posted."} ${partial.message}`,
+        );
+      }
     });
   return (
     <SheetContent
@@ -156,6 +168,21 @@ export function PullRequestReviewSheet({
         />
       }
     >
+      {reviewing && store.draft.outcomeUnknown ? (
+        <View className="gap-2">
+          <Text>
+            The host may have accepted more of this review. Refresh and check the PR before retrying
+            to avoid duplicates.
+          </Text>
+          <Button
+            label="I checked the PR; allow retry"
+            onPress={() => {
+              refreshDetail();
+              store.update((draft) => ({ ...draft, outcomeUnknown: false }));
+            }}
+          />
+        </View>
+      ) : null}
       {reviewing && offered.length > 1 ? (
         <SegmentedControl
           options={offered.map((option) => ({ value: option.value, label: option.title }))}

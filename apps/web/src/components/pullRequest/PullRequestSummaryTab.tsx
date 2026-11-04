@@ -543,6 +543,7 @@ export function PullRequestSummaryTab({
       className="ml-auto justify-end"
       reactions={comment.reactions ?? []}
       canReact={detail.capabilities.reactions === true}
+      capabilities={detail.capabilities}
       subjectId={comment.id}
       environmentId={environmentId}
       reference={reference}
@@ -660,20 +661,39 @@ export function PullRequestSummaryTab({
               {reviewerEntries.length === 0 ? (
                 <span className="text-muted-foreground">None</span>
               ) : (
-                <span className="flex items-center -space-x-1">
+                <span
+                  className={
+                    detail.reviewers.some((reviewer) => reviewer.reviewOutcome !== undefined)
+                      ? "flex flex-wrap items-center gap-2"
+                      : "flex items-center -space-x-1"
+                  }
+                >
                   {reviewerEntries.map((entry) => {
                     const login = entry.actor?.login ?? "ghost";
                     const named =
                       entry.actor?.name && entry.actor.name !== login
                         ? `${entry.actor.name} (@${login})`
                         : login;
+                    const vote = entry.actor?.reviewOutcome;
+                    const voteLabel =
+                      vote === "approved"
+                        ? "Approved"
+                        : vote === "approved-with-suggestions"
+                          ? "Approved with suggestions"
+                          : vote === "waiting"
+                            ? "Waiting for author"
+                            : vote === "rejected"
+                              ? "Rejected"
+                              : vote === "none"
+                                ? "No vote"
+                                : null;
                     return (
                       <Tooltip key={entry.key}>
                         <TooltipTrigger
                           render={
                             <span
                               className={cn(
-                                "relative rounded-full hover:z-10",
+                                "relative inline-flex items-center gap-1 rounded-full hover:z-10",
                                 entry.outcome
                                   ? pullRequestReviewOutcomeRingClassName(
                                       entry.outcome,
@@ -689,6 +709,7 @@ export function PullRequestSummaryTab({
                             tooltip={false}
                             variant="avatar"
                           />
+                          {voteLabel ? <span className="text-xs">{voteLabel}</span> : null}
                           {entry.outcome ? (
                             <>
                               <PullRequestReviewOutcomeAvatarBadge
@@ -704,13 +725,15 @@ export function PullRequestSummaryTab({
                           ) : null}
                         </TooltipTrigger>
                         <TooltipPopup side="bottom">
-                          {entry.outcome
-                            ? `${named}: ${
-                                entry.stale
-                                  ? pullRequestReviewOutcomeStaleLabel(entry.outcome)
-                                  : pullRequestReviewOutcomeLabel(entry.outcome)
-                              }`
-                            : named}
+                          {voteLabel
+                            ? `${named}: ${voteLabel}`
+                            : entry.outcome
+                              ? `${named}: ${
+                                  entry.stale
+                                    ? pullRequestReviewOutcomeStaleLabel(entry.outcome)
+                                    : pullRequestReviewOutcomeLabel(entry.outcome)
+                                }`
+                              : named}
                         </TooltipPopup>
                       </Tooltip>
                     );
