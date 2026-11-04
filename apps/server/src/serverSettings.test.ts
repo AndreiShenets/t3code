@@ -1687,9 +1687,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         });
         assert.deepEqual(saved.sourceControlHosts["azure-devops-custom-server"], fields);
         assert.deepEqual(
-          ServerSettingsModule.redactServerSettingsForClient(saved).sourceControlHosts[
-            "azure-devops-custom-server"
-          ],
+          ServerSettingsModule.redactServerSettingsForClient(saved, { secretReferences: true })
+            .sourceControlHosts["azure-devops-custom-server"],
           fields,
         );
         const persisted = yield* fs
