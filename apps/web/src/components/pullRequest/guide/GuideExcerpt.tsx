@@ -40,6 +40,7 @@ import {
 import type { PullRequestCompletionScope } from "../PullRequestMarkdownTextarea";
 import { GuideNoteMarker } from "./GuideNotes";
 import { GuideProse } from "./GuideProse";
+import { guideDiffSnapshot } from "./useGuideDiffFiles";
 
 const EXCERPT_UNSAFE_CSS = `${DIFF_VIEW_UNSAFE_CSS}
 [data-code]::-webkit-scrollbar-thumb {
@@ -59,6 +60,8 @@ export interface ExcerptCommenting {
   readonly completionScope: PullRequestCompletionScope | null;
   readonly pending: ReadonlyArray<PendingReviewComment>;
   readonly onComment: (comment: {
+    readonly headSha?: string | undefined;
+    readonly baseSha?: string | undefined;
     readonly path: string;
     readonly oldPath: string | null;
     readonly position: PullRequestReviewPosition;
@@ -76,6 +79,8 @@ interface ExcerptAnnotation {
 }
 
 interface ExcerptDraft {
+  readonly headSha?: string | undefined;
+  readonly baseSha?: string | undefined;
   readonly range: SelectedLineRange;
   readonly position: PullRequestReviewPosition;
   readonly startPosition?: PullRequestReviewPosition;
@@ -258,7 +263,7 @@ function ExcerptDiff({
     if (range === null) return;
     const anchor = resolveDiffReviewAnchor(file, range, commenting?.rangeComments === true);
     if (anchor === null) return;
-    setDraft({ range, ...anchor });
+    setDraft({ range, ...anchor, ...(file ? guideDiffSnapshot(file) : {}) });
   };
   const interactive = commenting !== null && draft === null;
   const onAskAgent = commenting?.onAskAgent ?? null;
@@ -345,6 +350,8 @@ function ExcerptDiff({
                     return;
                   }
                   commenting.onComment({
+                    ...(draft.headSha === undefined ? {} : { headSha: draft.headSha }),
+                    ...(draft.baseSha === undefined ? {} : { baseSha: draft.baseSha }),
                     path: excerpt.path,
                     oldPath: previousPathOf(file, excerpt.path),
                     position: draft.position,

@@ -1716,6 +1716,30 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
   );
 
+  it.effect(
+    "persists an Azure DevOps collection for automatic authentication without a token",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* ServerSettingsModule.ServerSettingsService;
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const fields = { collectionUrl: "https://ado.example/Collection" };
+        const saved = yield* service.updateSettings({
+          sourceControlHosts: { "azure-devops-custom-server": fields },
+        });
+        assert.deepEqual(saved.sourceControlHosts["azure-devops-custom-server"], fields);
+        assert.deepEqual(
+          ServerSettingsModule.redactServerSettingsForClient(saved, { secretReferences: true })
+            .sourceControlHosts["azure-devops-custom-server"],
+          fields,
+        );
+        const persisted = yield* fs
+          .readFileString(config.settingsPath)
+          .pipe(Effect.flatMap(decodeServerSettingsJson));
+        assert.deepEqual(persisted.sourceControlHosts["azure-devops-custom-server"], fields);
+      }).pipe(Effect.provide(layerServerSettings())),
+  );
+
   it.effect("removing a secret provider unsets every field that read from it", () =>
     Effect.gen(function* () {
       const service = yield* ServerSettingsModule.ServerSettingsService;
