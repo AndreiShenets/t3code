@@ -1378,7 +1378,13 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
           args: [...longPaths, "clean", "-dn", "--", "."],
           env: { LC_ALL: "C" },
         });
-        if (/^Would remove /m.test(remaining.stdout)) {
+        if (
+          /^Would remove /m.test(remaining.stdout) &&
+          (yield* fileSystem.readDirectory(input.cwd).pipe(
+            Effect.map((entries) => entries.length > 0),
+            Effect.orElseSucceed(() => true),
+          ))
+        ) {
           yield* resetIndex;
           return yield* new VcsProcessExitError({
             operation,
