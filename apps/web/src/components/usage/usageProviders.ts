@@ -3,6 +3,8 @@ import type { UsageProviderKind } from "@t3tools/contracts";
 import { ProviderDriverKind } from "@t3tools/contracts";
 import { usageSeriesColor, usageSeriesLabel, type UsageSeries } from "@t3tools/shared/usageSeries";
 
+import type { UsageMetric } from "./usageShortcuts";
+
 type UsageProviderPresentation = {
   readonly label: string;
   readonly color: string;
@@ -72,4 +74,19 @@ export function providersWithUsage(
       .map((entry) => entry.provider),
   );
   return PROVIDER_ORDER.filter((provider) => active.has(provider));
+}
+
+export function rankProvidersByMetric(
+  providers: readonly UsageProviderKind[],
+  totals: readonly {
+    readonly provider: UsageProviderKind;
+    readonly costUsd: number;
+    readonly totalTokens: number;
+  }[],
+  metric: UsageMetric,
+): readonly UsageProviderKind[] {
+  const field = metric === "cost" ? "costUsd" : "totalTokens";
+  const value = (provider: UsageProviderKind) =>
+    totals.find((entry) => entry.provider === provider)?.[field] ?? 0;
+  return providers.toSorted((left, right) => value(right) - value(left));
 }

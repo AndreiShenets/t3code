@@ -112,6 +112,7 @@ import {
   PROVIDER_PRESENTATION,
   providersWithUsage,
   usagePresentation,
+  rankProvidersByMetric,
 } from "./usageProviders";
 import {
   readUsagePagePreferences,
@@ -688,13 +689,14 @@ function UsageOverview({
     (peak, model) => Math.max(peak, metric === "tokens" ? model.totalTokens : model.costUsd),
     0,
   );
+  const rankedProviders = rankProvidersByMetric(activeProviders, merged.providers, metric);
   const cursorInsertAt =
-    Math.max(activeProviders.indexOf("codex"), activeProviders.indexOf("claude")) + 1;
+    Math.max(rankedProviders.indexOf("codex"), rankedProviders.indexOf("claude")) + 1;
   const summaryRows: ReadonlyArray<
     | { readonly kind: "usage"; readonly series: UsageSeries }
     | { readonly kind: "enable"; readonly environment: EnvironmentUsageStatus }
   > = [
-    ...activeProviders
+    ...rankedProviders
       .slice(0, cursorInsertAt)
       .flatMap((provider) =>
         activeSeries
@@ -702,7 +704,7 @@ function UsageOverview({
           .map((series) => ({ kind: "usage" as const, series })),
       ),
     ...cursorAccessEnvironments.map((environment) => ({ kind: "enable" as const, environment })),
-    ...activeProviders
+    ...rankedProviders
       .slice(cursorInsertAt)
       .flatMap((provider) =>
         activeSeries
