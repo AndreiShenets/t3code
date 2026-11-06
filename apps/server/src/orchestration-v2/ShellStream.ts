@@ -636,7 +636,14 @@ export function skipUnchangedThreadShells<A extends OrchestrationV2ShellStreamIt
   return Stream.suspend(() => {
     const lastSent = new Map<
       OrchestrationV2ThreadShell["id"],
-      { readonly thread: OrchestrationV2ThreadShell; readonly sentAt: number }
+      {
+        readonly thread: OrchestrationV2ThreadShell;
+        readonly sentAt: number;
+        readonly ancestorCosts: Extract<
+          OrchestrationV2ShellStreamItem,
+          { kind: "thread.updated" }
+        >["ancestorCosts"];
+      }
     >();
     return stream.pipe(
       Stream.filterEffect((item) =>
@@ -650,6 +657,12 @@ export function skipUnchangedThreadShells<A extends OrchestrationV2ShellStreamIt
           if (
             previous !== undefined &&
             now - previous.sentAt < UNCHANGED_THREAD_SHELL_RESEND_MS &&
+            (previous.ancestorCosts?.length ?? 0) === (item.ancestorCosts?.length ?? 0) &&
+            (item.ancestorCosts ?? []).every(
+              (cost, index) =>
+                cost.threadId === previous.ancestorCosts?.[index]?.threadId &&
+                cost.costUsd === previous.ancestorCosts?.[index]?.costUsd,
+            ) &&
             sameThreadShell(
               { ...item.thread, updatedAt: previous.thread.updatedAt },
               previous.thread,
@@ -657,7 +670,11 @@ export function skipUnchangedThreadShells<A extends OrchestrationV2ShellStreamIt
           ) {
             return false;
           }
-          lastSent.set(item.thread.id, { thread: item.thread, sentAt: now });
+          lastSent.set(item.thread.id, {
+            thread: item.thread,
+            sentAt: now,
+            ancestorCosts: item.ancestorCosts,
+          });
           return true;
         }),
       ),
@@ -696,3 +713,25 @@ export function shellStreamItemFromThreadShell(input: {
     threadId: input.stored.event.threadId,
   };
 }
+
+export const projectThreadShellItem = Effect.fn("ShellStream.projectThreadShellItem")(function* <
+  E,
+  R,
+>(
+  stored: Extract<ShellApplicationEvent, { readonly event: unknown }>,
+  readShell: (threadId: ThreadId) => Effect.Effect<OrchestrationV2ThreadShell | null, E, R>,
+) {
+  let shell = yield* readShell(stored.event.threadId);
+  const item = shellStreamItemFromThreadShell({ stored, shell });
+  const ancestorCosts: Array<{ threadId: ThreadId; costUsd: number | null }> = [];
+  while (
+    shell?.lineage.relationshipToParent === "subagent" &&
+    shell.lineage.parentThreadId !== null
+  ) {
+    shell = yield* readShell(shell.lineage.parentThreadId);
+    if (shell === null) break;
+    ancestorCosts.push({ threadId: shell.id, costUsd: shell.subagentCostUsd ?? null });
+  }
+  // Clients accept each sequence only once, so ancestor costs travel in the child's frame.
+  return ancestorCosts.length === 0 ? item : { ...item, ancestorCosts };
+});
