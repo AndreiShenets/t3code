@@ -13,6 +13,7 @@ import {
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
 import type { ReactNode } from "react";
+import { formatUsd } from "@t3tools/shared/usageFormat";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { useNowMinute } from "../../hooks/useNowMinute";
@@ -131,6 +132,34 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
                 </span>
               ) : null}
             </>
+          }
+        />
+      </div>
+    </ThreadDetailsSection>
+  );
+}
+
+export function ThreadDetailsSessionCost({
+  cost,
+}: {
+  readonly cost: NonNullable<ContextWindowSnapshot["cost"]>;
+}) {
+  const value =
+    cost.currency === "USD" ? formatUsd(cost.amount) : `${cost.currency} ${cost.amount.toFixed(2)}`;
+  return (
+    <ThreadDetailsSection
+      headingId="thread-details-session-cost-heading"
+      title="Session cost"
+      showHeading={false}
+    >
+      <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
+        <UsageRow
+          label="Session cost"
+          fill={null}
+          tone={null}
+          value={value}
+          tooltip={
+            <span className="text-foreground">Includes reported delegated-agent costs.</span>
           }
         />
       </div>

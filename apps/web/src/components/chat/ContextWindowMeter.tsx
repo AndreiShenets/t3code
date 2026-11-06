@@ -34,10 +34,6 @@ export function ContextWindowMeter(props: {
   const dashOffset = circumference * (1 - normalizedPercentage / 100);
   const totalProcessedTokens = usage.totalProcessedTokens ?? null;
   const showTotalProcessed = totalProcessedTokens !== null && totalProcessedTokens > 0;
-  const contextLabel =
-    usage.maxTokens !== null && usedPercentage
-      ? `Context window ${usedPercentage} used`
-      : `Context window ${formatContextWindowTokens(usage.usedTokens)} tokens used`;
   const isOverloaded = normalizedPercentage > 90;
   const usageColor = isOverloaded
     ? "var(--color-error)"
@@ -50,7 +46,16 @@ export function ContextWindowMeter(props: {
         delay={150}
         closeDelay={onCompact ? 150 : 0}
         render={
-          <Button size="icon-sm" variant="ghost-muted" aria-label={contextLabel}>
+          <Button
+            size="icon-sm"
+            variant="ghost-muted"
+            className="size-7"
+            aria-label={
+              usage.maxTokens !== null && usedPercentage
+                ? `Context window ${usedPercentage} used`
+                : `Context window ${formatContextWindowTokens(usage.usedTokens)} tokens used`
+            }
+          >
             <span className="relative flex size-5 items-center justify-center">
               <svg
                 viewBox="0 0 24 24"
@@ -134,7 +139,7 @@ export function ContextWindowMeter(props: {
           ) : null}
           {usage.cost != null ? (
             <div className="flex items-center justify-between gap-3 text-2xs leading-4">
-              <span className="text-secondary-label">Session cost</span>
+              <span className="text-secondary-label">Cost</span>
               <span className="font-medium tabular-nums text-secondary-label">
                 {formatContextWindowCost(usage.cost)}
               </span>
@@ -171,5 +176,5 @@ export function ContextWindowMeter(props: {
 }
 
 export function ContextWindowMeterPlaceholder() {
-  return <span aria-hidden="true" className="size-8 shrink-0 sm:size-7" />;
+  return <span aria-hidden="true" className="size-7 shrink-0" />;
 }
