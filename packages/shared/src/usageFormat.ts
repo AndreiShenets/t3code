@@ -5,6 +5,7 @@ import {
   type UsageSource,
   type UsageSummaryInput,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 
 import type { UsageContractMismatch } from "./usageMerge.ts";
 
@@ -245,10 +246,12 @@ export function formatRelativeHourShort(
   return formatDateTimeShort(hourStart, timeZone, hour12);
 }
 
+export type UsagePeriod = number | "today";
+
 export function makeWindow(
-  days: number,
+  days: UsagePeriod,
   now = new Date(),
-  resolution: UsageResolution = "day",
+  resolution: UsageResolution = days === "today" || days === 1 ? "hour" : "day",
 ): UsageSummaryInput {
   let timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   let format: Intl.DateTimeFormat;
@@ -270,8 +273,17 @@ export function makeWindow(
   }
   const untilDay = format.format(now);
   if (resolution === "hour") {
-    const untilTimeMs = Math.floor(now.getTime() / 60_000) * 60_000;
-    const sinceTimeMs = untilTimeMs - 24 * HOUR_MS;
+    const sinceTimeMs =
+      days === "today"
+        ? DateTime.toEpochMillis(
+            DateTime.startOf(DateTime.makeZonedUnsafe(now, { timeZone }), "day"),
+          )
+        : Math.floor(now.getTime() / 60_000) * 60_000 - 24 * HOUR_MS;
+    // The server requires a nonempty window, even at the exact instant of midnight.
+    const untilTimeMs =
+      days === "today"
+        ? Math.max(now.getTime(), sinceTimeMs + 1)
+        : Math.floor(now.getTime() / 60_000) * 60_000;
     const sinceTime = new Date(sinceTimeMs);
     const untilTime = new Date(untilTimeMs);
     return {
@@ -287,7 +299,7 @@ export function makeWindow(
   const [year = 0, month = 1, dayOfMonth = 1] = untilDay
     .split("-")
     .map((part) => Number.parseInt(part, 10));
-  const start = new Date(Date.UTC(year, month - 1, dayOfMonth - (days - 1)));
+  const start = new Date(Date.UTC(year, month - 1, dayOfMonth - (days === "today" ? 0 : days - 1)));
   return {
     sinceDay: UsageDay.make(start.toISOString().slice(0, 10)),
     untilDay: UsageDay.make(untilDay),
