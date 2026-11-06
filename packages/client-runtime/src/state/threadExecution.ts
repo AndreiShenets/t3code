@@ -23,10 +23,7 @@ import {
   type RunId,
   type ThreadId,
 } from "@t3tools/contracts";
-import {
-  backgroundWorkHoldsCompletion,
-  derivePendingBackgroundWork,
-} from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import {
   getModelSelectionStringOptionValue,
   getProviderOptionCurrentLabel,
