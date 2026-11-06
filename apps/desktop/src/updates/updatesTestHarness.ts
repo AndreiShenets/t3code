@@ -1,3 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off - Mock filesystem paths must use the host's separators.
+import * as NodePath from "node:path";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { DesktopUpdateState } from "@t3tools/contracts";
@@ -35,10 +38,12 @@ export interface UpdatesHarnessOptions {
   readonly backendInstances?: ReadonlyArray<DesktopBackendPool.DesktopBackendInstance>;
   readonly env?: Record<string, string | undefined>;
   readonly platform?: NodeJS.Platform;
+  readonly appVersion?: string;
   readonly packageType?: string | undefined;
   readonly installRecord?: string | undefined;
+  readonly customBuildStamp?: string;
+  readonly customBuildTimestamp?: string;
   readonly policy?: DesktopUpdatePolicy.UpdatePolicy;
-  readonly appVersion?: string;
   /** Starts from in-memory settings with this track saved, as after a restart. */
   readonly savedChannel?: DesktopAppSettings.DesktopSettings["updateChannel"];
   /** Adds a WSL backend beside the primary, as on a Windows host with WSL enabled. */
@@ -182,6 +187,8 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
     isPackaged: true,
     resourcesPath: "/missing/resources",
     runningUnderArm64Translation: false,
+    ...(options.customBuildStamp ? { customBuildStamp: options.customBuildStamp } : {}),
+    ...(options.customBuildTimestamp ? { customBuildTimestamp: options.customBuildTimestamp } : {}),
   }).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -247,7 +254,8 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
         ? (installRecords.get(path) ?? previousInstallRecord)
         : undefined;
       if (installRecord !== undefined) return Effect.succeed(installRecord);
-      return path === "/missing/resources/package-type" && options.packageType !== undefined
+      return path === NodePath.join("/missing/resources", "package-type") &&
+        options.packageType !== undefined
         ? Effect.succeed(options.packageType)
         : Effect.fail(
             PlatformError.systemError({

@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+// @effect-diagnostics-next-line nodeBuiltinImport:off - Metadata is acquired before Clerk registration, where yielding would race Electron's ready event.
+import * as NodeFS from "node:fs";
 
 import * as Electron from "electron";
 
@@ -13,12 +15,14 @@ export interface ElectronAppMetadata {
   readonly isPackaged: boolean;
   readonly resourcesPath: string;
   readonly runningUnderArm64Translation: boolean;
+  readonly customBuildStamp?: string;
+  readonly customBuildTimestamp?: string;
 }
 
 export class ElectronAppMetadataReadError extends Schema.TaggedError<ElectronAppMetadataReadError>()(
   "ElectronAppMetadataReadError",
   {
-    property: Schema.Literals(["app-version", "app-path"]),
+    property: Schema.Literals(["app-version", "app-path", "custom-build-metadata"]),
     cause: Schema.Defect(),
   },
 ) {
@@ -129,12 +133,42 @@ export const make = ElectronApp.of({
         }),
     });
 
+    const customBuildMetadata = Electron.app.isPackaged
+      ? yield* Effect.try({
+          try: () => NodeFS.readFileSync(`${appPath}/package.json`, "utf8"),
+          catch: (cause) =>
+            new ElectronAppMetadataReadError({ property: "custom-build-metadata", cause }),
+        }).pipe(
+          Effect.flatMap(
+            Schema.decodeEffect(
+              Schema.fromJsonString(
+                Schema.Struct({
+                  t3codeCustomBuildStamp: Schema.optional(
+                    Schema.String.check(Schema.isPattern(/^\d{12}$/)),
+                  ),
+                  t3codeCustomBuildTimestamp: Schema.optional(Schema.Unknown),
+                }),
+              ),
+            ),
+          ),
+          Effect.orElseSucceed(() => undefined),
+        )
+      : undefined;
+
     return {
       appVersion,
       appPath,
       isPackaged: Electron.app.isPackaged,
       resourcesPath: process.resourcesPath,
       runningUnderArm64Translation: Electron.app.runningUnderARM64Translation === true,
+      ...(customBuildMetadata?.t3codeCustomBuildStamp
+        ? {
+            customBuildStamp: customBuildMetadata.t3codeCustomBuildStamp,
+            ...(typeof customBuildMetadata.t3codeCustomBuildTimestamp === "string"
+              ? { customBuildTimestamp: customBuildMetadata.t3codeCustomBuildTimestamp }
+              : {}),
+          }
+        : {}),
     };
   }),
   name: Effect.sync(() => Electron.app.name),
