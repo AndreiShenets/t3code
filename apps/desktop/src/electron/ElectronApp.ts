@@ -22,7 +22,7 @@ export interface ElectronAppMetadata {
 export class ElectronAppMetadataReadError extends Schema.TaggedError<ElectronAppMetadataReadError>()(
   "ElectronAppMetadataReadError",
   {
-    property: Schema.Literals(["app-version", "app-path"]),
+    property: Schema.Literals(["app-version", "app-path", "custom-build-metadata"]),
     cause: Schema.Defect(),
   },
 ) {
@@ -134,7 +134,11 @@ export const make = ElectronApp.of({
     });
 
     const customBuildMetadata = Electron.app.isPackaged
-      ? yield* Effect.try(() => NodeFS.readFileSync(`${appPath}/package.json`, "utf8")).pipe(
+      ? yield* Effect.try({
+          try: () => NodeFS.readFileSync(`${appPath}/package.json`, "utf8"),
+          catch: (cause) =>
+            new ElectronAppMetadataReadError({ property: "custom-build-metadata", cause }),
+        }).pipe(
           Effect.flatMap(
             Schema.decodeEffect(
               Schema.fromJsonString(
