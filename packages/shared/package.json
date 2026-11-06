@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./usageSeries": {
+      "types": "./src/usageSeries.ts",
+      "import": "./src/usageSeries.ts"
+    },
     "./changedFileKind": {
       "types": "./src/changedFileKind.ts",
       "import": "./src/changedFileKind.ts"
