@@ -31,8 +31,10 @@ const state = vi.hoisted(() => ({
 vi.mock("~/state/pullRequests", async () => {
   const { Atom } = await import("effect/reactivity");
   const Effect = await import("effect/Effect");
-  const Data = await import("effect/Data");
-  class DiffReadError extends Data.TaggedError("DiffReadError")<{ readonly message: string }> {}
+  const Schema = await import("effect/Schema");
+  class DiffReadError extends Schema.TaggedError<DiffReadError>()("DiffReadError", {
+    message: Schema.String,
+  }) {}
   const pages = Atom.family((key: string) =>
     Atom.make(
       Effect.tryPromise({
