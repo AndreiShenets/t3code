@@ -438,6 +438,7 @@ export interface ChatComposerProps {
   contextWindowEntries: Parameters<typeof deriveLatestContextWindowSnapshot>[0];
   contextWindowLiveUsage: Parameters<typeof deriveLatestContextWindowSnapshot>[1];
   contextWindowProviderThread: Parameters<typeof deriveLatestContextWindowSnapshot>[2];
+  contextWindowSubagentCostUsd?: number | null | undefined;
   compactThreadUnavailable: boolean;
   compactDisabled: boolean;
   compactDisabledReason: string | null;
@@ -565,6 +566,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     contextWindowEntries,
     contextWindowLiveUsage,
     contextWindowProviderThread,
+    contextWindowSubagentCostUsd,
     compactThreadUnavailable,
     compactDisabled,
     compactDisabledReason,
@@ -613,6 +615,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     contextWindowEntries,
     contextWindowLiveUsage,
     contextWindowProviderThread,
+    contextWindowSubagentCostUsd,
   );
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
