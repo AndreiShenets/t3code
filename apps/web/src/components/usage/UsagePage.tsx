@@ -33,7 +33,6 @@ import {
   usageSeriesKey,
   usageSeriesTotals,
   usageSeriesValue,
-  type UsageSeries,
 } from "@t3tools/shared/usageSeries";
 
 import { cn } from "../../lib/utils";
