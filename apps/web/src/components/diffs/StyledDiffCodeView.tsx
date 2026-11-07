@@ -170,14 +170,9 @@ export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
   flex-shrink: 0;
 }
 
-[data-title] {
-  cursor: pointer;
-  transition: color 120ms ease;
+[data-title], [data-prev-name] {
+  cursor: text;
   font-family: var(--font-sans) !important;
-}
-
-[data-title]:hover {
-  color: color-mix(in srgb, var(--code-foreground) 84%, var(--primary)) !important;
 }
 
 /* Expanding a file mounts its body all at once; easing it in matches the 200ms the app's
