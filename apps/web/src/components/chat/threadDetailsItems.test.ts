@@ -15,6 +15,7 @@ describe("thread details items", () => {
     { legacy: true, items: {}, usage: true, context: true },
     { legacy: true, items: { usage: false }, usage: false, context: true },
     { legacy: false, items: { usage: true, retired: false }, usage: true, context: false },
+    { legacy: false, items: { sessionCost: false }, usage: false, context: false },
   ])("resolves Usage and Context from overrides and the retired Labs flag: %o", (row) => {
     const visibility = resolveThreadDetailsVisibility({
       threadDetailsItems: row.items,
@@ -23,6 +24,7 @@ describe("thread details items", () => {
     expect(visibility.usage).toBe(row.usage);
     expect(visibility.context).toBe(row.context);
     expect(visibility.servers).toBe(true);
+    expect(visibility.sessionCost).toBe(row.items.sessionCost ?? true);
   });
 
   it("stores only choices that differ from the default", () => {
