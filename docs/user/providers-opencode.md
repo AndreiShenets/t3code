@@ -22,6 +22,14 @@ started on 1.x continue on 2.x.
 
 Plan mode uses OpenCode's `plan` agent.
 
+## Subscription usage limits
+
+For local OpenCode 2, thread usage limits can reuse an enabled Codex or Claude
+provider's limits when both logins have the same email and workspace or organization.
+Select an OpenAI subscription model or a Claude Agent model in OpenCode; no manual
+mapping is needed. API-key, proxy, cloud, and external-server connections do not
+inherit subscription limits. Refresh provider status after changing a login.
+
 ## Compaction
 
 OpenCode compacts long conversations itself, and T3 Code has no setting for it. On
