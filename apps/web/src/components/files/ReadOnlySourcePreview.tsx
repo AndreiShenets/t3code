@@ -14,7 +14,7 @@ export default function ReadOnlySourcePreview(props: {
   readonly text: string;
   readonly cacheKey?: string;
   readonly workspace?: CodeDisplayWorkspace;
-  readonly onPostRender?: FileOptions<unknown, undefined>["onPostRender"];
+  readonly onPostRender?: FileOptions<undefined, undefined>["onPostRender"];
   /** A preview's own wrap toggle; omitted follows the word wrap setting. */
   readonly wordWrap?: boolean;
 }) {
