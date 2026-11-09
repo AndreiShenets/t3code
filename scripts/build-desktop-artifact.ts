@@ -988,6 +988,11 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   "!**/node_modules/@cursor/sdk-*/**/*",
   "!apps/desktop/prod-resources/cursor-sdk",
   "!apps/desktop/prod-resources/cursor-sdk/**/*",
+  "!apps/desktop/resources/resource-monitor",
+  "!apps/desktop/resources/resource-monitor/**/*",
+  "!apps/desktop/prod-resources/resource-monitor",
+  "!apps/desktop/prod-resources/resource-monitor/**/*",
+  "!**/node_modules/@yuuang/ffi-rs-win32-ia32-msvc/**/*",
   // The installed Claude CLI is supplied explicitly; exclude optional bundled executables, retaining SDK JavaScript.
   "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
   "!**/*.map",
@@ -1038,6 +1043,8 @@ export const WINDOWS_SERVER_ASAR_UNPACK_GLOBS = [
 ] as const;
 // Keep sidecar exclusions aligned with the app; .bin symlinks are unused and unsupported by ASAR extraction.
 export const WINDOWS_SERVER_ASAR_IGNORE_GLOBS = [
+  "**/node_modules/@yuuang/ffi-rs-win32-ia32-msvc",
+  "**/node_modules/@yuuang/ffi-rs-win32-ia32-msvc/**",
   "**/node_modules/@cursor/sdk-*",
   "**/node_modules/@cursor/sdk-*/**",
   "**/node_modules/@anthropic-ai/claude-agent-sdk-*",
