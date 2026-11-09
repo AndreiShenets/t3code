@@ -102,6 +102,13 @@ import { ComposerCommandPopover } from "./ComposerCommandPopover";
 import { ComposerPopoverAnchor } from "./ComposerPopoverAnchor";
 import { ComposerQueuedEditAttachments } from "./ComposerQueuedEdit";
 import { useComposerCommandMenu } from "./use-composer-command-menu";
+import { ComposerMcpSheet } from "./ComposerMcpSheet";
+import {
+  MCP_COMMAND_USAGE,
+  parseMcpCommand,
+  supportsMcpManagement,
+  type McpManagementRequest,
+} from "@t3tools/client-runtime/mcpCommands";
 import type { ComposerEnvironmentCandidate } from "@t3tools/client-runtime/composerThreadItems";
 import { offersLinkedEnvironments } from "@t3tools/client-runtime/link-request";
 import {
@@ -537,6 +544,10 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     return report !== null;
   };
 
+  const [mcpRequest, setMcpRequest] = useState<McpManagementRequest | null>(null);
+  const mcpTarget = props.projectCwd
+    ? { instanceId: currentModelSelection.instanceId, cwd: props.projectCwd }
+    : null;
   const mentionableEnvironments = useMentionableEnvironments();
   // Mentions name any model for the agent, so they aren't limited to models this thread can switch to.
   const mentionModelOptions = buildModelOptions(
@@ -566,6 +577,14 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     offersUsageLimits: usageLimitsOffered,
     onUsageLimits:
       usageLimitsOffered && draftAttachments.length === 0 ? openUsageLimits : undefined,
+    onMcp: mcpTarget
+      ? () =>
+          setMcpRequest({
+            environmentId: props.environmentId,
+            target: mcpTarget,
+            command: { action: "list" },
+          })
+      : undefined,
     modelOptions: mentionModelOptions,
     modelProviders: props.serverConfig?.providers,
     ...(props.onFreshSession === undefined ? {} : { onFreshSession: props.onFreshSession }),
@@ -679,6 +698,20 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
       pendingNativeImagePasteCountRef.current > 0
     )
       return;
+    const mcp = parseMcpCommand(draftMessage);
+    if (mcp !== null) {
+      if (!supportsMcpManagement(selectedProviderStatus) || !mcpTarget) {
+        Dialog.alert("MCP unavailable", "MCP management requires OpenCode V2 and a workspace.");
+      } else if (mcp.action === "invalid") {
+        Dialog.alert("MCP command", MCP_COMMAND_USAGE);
+      } else if (draftAttachments.length > 0) {
+        Dialog.alert("MCP command", "Remove attachments before running an MCP command.");
+      } else {
+        setMcpRequest({ environmentId: props.environmentId, target: mcpTarget, command: mcp });
+        onChangeDraftMessage("");
+      }
+      return;
+    }
     if (usageLimitsOffered && isUsageLimitsCommand(draftMessage) && draftAttachments.length === 0) {
       if (openUsageLimits()) onChangeDraftMessage("");
       return;
@@ -884,6 +917,13 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
           />
         ) : null}
 
+        {mcpRequest ? (
+          <ComposerMcpSheet
+            key={JSON.stringify([mcpRequest.environmentId, mcpRequest.target])}
+            {...mcpRequest}
+            onClose={() => setMcpRequest(null)}
+          />
+        ) : null}
         <ComposerSurface
           animateLayout={false}
           style={{

@@ -67,6 +67,7 @@ export function useComposerMenuItems({
   pullRequestProjectId,
   pullRequestRepository,
   threadPullRequests,
+  mcpAvailable,
   sideChatAvailable,
   sideChatDisabledReason,
   freshSessionAvailable,
@@ -87,6 +88,7 @@ export function useComposerMenuItems({
   readonly pullRequestProjectId: ProjectId | null;
   readonly pullRequestRepository: string | null;
   readonly threadPullRequests: ReadonlyArray<ThreadPullRequestLink> | undefined;
+  readonly mcpAvailable: boolean;
   readonly sideChatAvailable: boolean;
   readonly sideChatDisabledReason: string | null;
   readonly freshSessionAvailable: boolean;
@@ -231,6 +233,17 @@ export function useComposerMenuItems({
     }
     if (composerTrigger.kind === "slash-command") {
       const builtInSlashCommandItems = [
+        ...(mcpAvailable
+          ? [
+              {
+                id: "slash:mcp",
+                type: "slash-command" as const,
+                command: "mcp" as const,
+                label: "/mcp",
+                description: "Manage MCP connections for this workspace",
+              },
+            ]
+          : []),
         {
           id: "slash:model",
           type: "slash-command",
