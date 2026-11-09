@@ -1,4 +1,3 @@
-/** Keep bundler externals and staged runtime dependency roots aligned. */
 // Filesystem-loaded externals need dependencies outside the bundle.
 const CLI_RUNTIME_EXTERNAL_PREFIXES = [
   // Cursor ships computed Webpack imports and platform helper packages.
@@ -30,20 +29,25 @@ const CURSOR_RUNTIME_DEPENDENCIES = [
   "@statsig/js-client",
   "@statsig/client-core",
   "zod",
-  "undici",
   "@fastify/busboy",
 ] as const;
 
 export function isRuntimeExternalCliDependency(id: string): boolean {
   return (
+    isUndiciDependency(id) ||
     CLI_RUNTIME_EXTERNAL_PREFIXES.some((prefix) => id.startsWith(prefix)) ||
     CURSOR_RUNTIME_DEPENDENCIES.some((name) => id === name || id.startsWith(`${name}/`))
   );
 }
 
+function isUndiciDependency(id: string): boolean {
+  return id === "undici" || id.startsWith("undici/");
+}
+
 /** Use neverBundle: false from alwaysBundle means no opinion and leaves transitive packages bundled. */
 export function isExternalCliDependency(id: string): boolean {
-  return isRuntimeExternalCliDependency(id);
+  // SEA imports need bundling; outboundHttp still createRequire()s the staged undici copy.
+  return !isUndiciDependency(id) && isRuntimeExternalCliDependency(id);
 }
 
 export function shouldBundleCliDependency(id: string): boolean {
