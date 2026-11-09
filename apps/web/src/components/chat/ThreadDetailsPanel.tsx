@@ -28,6 +28,7 @@ import { ThreadMcpControl } from "./ThreadMcpControl";
 import { ThreadServersPanel } from "./ThreadServersPanel";
 import {
   ThreadDetailsContext,
+  ThreadDetailsSessionCost,
   ThreadDetailsUsage,
   type ThreadDetailsUsageInput,
 } from "./ThreadDetailsUsage";
@@ -277,6 +278,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
 
               {visible.context && props.usage.contextWindow ? (
                 <ThreadDetailsContext usage={props.usage.contextWindow} />
+              ) : null}
+
+              {visible.sessionCost && props.usage.contextWindow?.cost != null ? (
+                <ThreadDetailsSessionCost cost={props.usage.contextWindow.cost} />
               ) : null}
 
               {/* Shown only when no section above has content, so an emptied card can be refilled. */}
