@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import { act, fakeTimers, render as renderUi } from "../../../test/render";
-import * as liveAnnouncements from "../../lib/announce";
 import type { RemoteOpenState } from "../../remoteOpen";
 
 const state = vi.hoisted(() => ({
@@ -172,7 +171,6 @@ async function setup() {
 describe("host editor access", () => {
   it("offers and opens installed Visual Studio without advertising it for other environments", async () => {
     await using fixture = await setup();
-    using _announcements = vi.spyOn(liveAnnouncements, "announce").mockImplementation(() => {});
     state.allowed.add(selected);
     await fixture.renderPicker(["vscode", "visual-studio"]);
     await userEvent.click(page.getByRole("button", { name: "Choose editor", exact: true }));
@@ -180,9 +178,14 @@ describe("host editor access", () => {
     await expect.element(visualStudio).toBeVisible();
     await userEvent.click(visualStudio);
     expect(state.setPreferred).toHaveBeenCalledWith("visual-studio");
-    await userEvent.click(
-      page.getByRole("button", { name: "Open file in preferred editor", exact: true }),
-    );
+    {
+      using _timers = fakeTimers();
+      await fixture.click(fixture.primaryButton());
+      await act(async () => vi.runAllTimers());
+      for (const region of document.querySelectorAll('body > [aria-live="polite"]')) {
+        region.textContent = "";
+      }
+    }
     expect(state.run).toHaveBeenCalledWith({
       environmentId: selected,
       input: { cwd: "/work/project", editor: "visual-studio" },
