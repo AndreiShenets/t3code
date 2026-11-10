@@ -118,6 +118,7 @@ describe("diff path search", () => {
     const view = {
       searchState: { pendingReveal: "unfold" },
       render: vi.fn(),
+      getStickyHeaderOffset: () => 32,
       scrollTo: vi.fn(),
       options: { onRevealSearchMatch: vi.fn() },
     };
@@ -127,7 +128,7 @@ describe("diff path search", () => {
       type: "item",
       id: "file-1",
       align: "start",
-      offset: 48,
+      offset: 80,
       behavior: "smooth-auto",
     });
     expect(view.options.onRevealSearchMatch).not.toHaveBeenCalled();

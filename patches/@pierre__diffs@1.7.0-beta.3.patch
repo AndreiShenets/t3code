@@ -17,7 +17,7 @@ index 774c1ab..8e27d29 100644
     * Return an in-memory retention key for an item's editable draft and
     * undo/redo history. Called only when CodeView creates the item's editor.
 diff --git a/dist/components/CodeView.js b/dist/components/CodeView.js
-index 6ee5032..2ced713 100644
+index 6ee5032..c3f183b 100644
 --- a/dist/components/CodeView.js
 +++ b/dist/components/CodeView.js
 @@ -213,7 +213,8 @@ var CodeView = class CodeView {
@@ -71,7 +71,7 @@ index 6ee5032..2ced713 100644
  		this.searchState.current = match;
 +		if (match.headerField != null) {
 +			this.searchState.pendingReveal = void 0;
-+			this.scrollTo({ type: "item", id: match.itemId, align: "start", offset: 48, behavior: this.options.searchOptions?.scrollBehavior ?? "smooth-auto" });
++			this.scrollTo({ type: "item", id: match.itemId, align: "start", offset: 48 + this.getStickyHeaderOffset(), behavior: this.options.searchOptions?.scrollBehavior ?? "smooth-auto" });
 +			this.render();
 +			return;
 +		}
