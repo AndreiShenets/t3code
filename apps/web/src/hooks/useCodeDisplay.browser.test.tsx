@@ -29,8 +29,9 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("~/rpc/atomRegistry", () => ({
-  get appAtomRegistry() {
-    return state.registry;
+  appAtomRegistry: {
+    refresh: (atom: Parameters<AtomRegistry.AtomRegistry["refresh"]>[0]) =>
+      state.registry!.refresh(atom),
   },
 }));
 vi.mock("~/state/filesystem", () => ({
