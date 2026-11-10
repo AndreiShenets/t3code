@@ -103,7 +103,7 @@ it.each([
   await using screen = await setup({ platform });
   const { container, viewer } = screen;
   await userEvent.keyboard(`{${modifier}>}f{/${modifier}}`);
-  expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
+  expect(container!.querySelector("[data-search-panel]")).not.toBeNull();
   expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
 });
 
@@ -119,7 +119,7 @@ it.each(["inline toolbar", "sheet toolbar", "Changes tab"])(
     else scope.prepend(button);
     await userEvent.click(button);
     await userEvent.keyboard("{Control>}f{/Control}");
-    expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
+    expect(container!.querySelector("[data-search-panel]")).not.toBeNull();
     expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
     expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
   },
@@ -130,7 +130,7 @@ it("does not claim page find just because a diff is visible beside chat", async 
   const { panel, container } = screen;
   panel.setAttribute("data-preview-panel-mode", "inline");
   await userEvent.keyboard("{Control>}f{/Control}");
-  expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+  expect(container!.querySelector("[data-search-panel]")).toBeNull();
 });
 
 it("leaves find owned by the focused viewer rather than chat", async () => {
@@ -138,7 +138,7 @@ it("leaves find owned by the focused viewer rather than chat", async () => {
   const { panel, container } = screen;
   await userEvent.click(container!, { position: { x: 320, y: 200 } });
   await userEvent.keyboard("{Control>}f{/Control}");
-  expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
+  expect(container!.querySelector("[data-search-panel]")).not.toBeNull();
   expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
 });
 
@@ -158,14 +158,14 @@ it.each(["inline", "standalone", "sheet"])(
       await userEvent.click(composer);
       await userEvent.click(chrome);
       await userEvent.keyboard("{Control>}f{/Control}");
-      expect(container!.querySelector("[data-diffs-search]")).not.toBeNull();
+      expect(container!.querySelector("[data-search-panel]")).not.toBeNull();
       expect(panel.querySelector("[data-chat-find-open]")).toBeNull();
       expect(viewer!.getItem("src/example.ts")?.collapsed).toBe(true);
 
       await userEvent.keyboard("{Escape}");
       await userEvent.click(composer);
       await userEvent.keyboard("{Control>}f{/Control}");
-      expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+      expect(container!.querySelector("[data-search-panel]")).toBeNull();
       expect(panel.querySelector("[data-chat-find-open]")).not.toBeNull();
     } finally {
       composer.remove();
@@ -179,7 +179,7 @@ it.each(["hidden", "invisible"])("ignores a %s review tab", async (visibility) =
   if (visibility === "hidden") scope.style.display = "none";
   else scope.style.visibility = "hidden";
   await userEvent.keyboard("{Control>}f{/Control}");
-  expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+  expect(container!.querySelector("[data-search-panel]")).toBeNull();
 });
 
 it("does not take find from a comment input", async () => {
@@ -189,7 +189,7 @@ it("does not take find from a comment input", async () => {
   scope.prepend(input);
   await userEvent.click(input);
   await userEvent.keyboard("{Control>}f{/Control}");
-  expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+  expect(container!.querySelector("[data-search-panel]")).toBeNull();
 });
 
 it("does not take find from a separate dialog inside the panel", async () => {
@@ -203,7 +203,7 @@ it("does not take find from a separate dialog inside the panel", async () => {
   scope.append(dialog);
   await userEvent.click(button);
   await userEvent.keyboard("{Control>}f{/Control}");
-  expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+  expect(container!.querySelector("[data-search-panel]")).toBeNull();
 });
 
 it("does not take find from another pane", async () => {
@@ -215,7 +215,7 @@ it("does not take find from another pane", async () => {
   try {
     await userEvent.click(button);
     await userEvent.keyboard("{Control>}f{/Control}");
-    expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+    expect(container!.querySelector("[data-search-panel]")).toBeNull();
   } finally {
     button.remove();
   }
@@ -225,5 +225,5 @@ it("leaves project-wide search alone", async () => {
   await using screen = await setup();
   const { container } = screen;
   await userEvent.keyboard("{Control>}{Shift>}f{/Shift}{/Control}");
-  expect(container!.querySelector("[data-diffs-search]")).toBeNull();
+  expect(container!.querySelector("[data-search-panel]")).toBeNull();
 });
