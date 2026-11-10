@@ -233,7 +233,11 @@ it("keeps a folded filename match visible below the find panel", async () => {
   await using screen = await setup();
   const { viewer, container } = screen;
   const reveal = vi.fn();
-  viewer.setOptions({ onRevealSearchMatch: reveal, searchOptions: { scrollBehavior: "instant" } });
+  viewer.setOptions({
+    stickyHeaders: true,
+    onRevealSearchMatch: reveal,
+    searchOptions: { scrollBehavior: "instant" },
+  });
   const fileDiff = parsePatchFiles(patch)[0]!.files[0]!;
   viewer.setItems(
     Array.from({ length: 60 }, (_, index) => ({
@@ -251,7 +255,11 @@ it("keeps a folded filename match visible below the find panel", async () => {
     expect(ranges.map(String)).toEqual(["src/file-20.ts"]);
     const match = ranges[0]!.getBoundingClientRect();
     const viewport = container.getBoundingClientRect();
-    expect(match.top).toBeGreaterThanOrEqual(viewport.top + 40);
+    const findPanel = container
+      .querySelector("[data-search-panel]")!
+      .shadowRoot!.querySelector("[data-search-grid]")!
+      .getBoundingClientRect();
+    expect(match.top).toBeGreaterThanOrEqual(findPanel.bottom);
     expect(match.bottom).toBeLessThanOrEqual(viewport.bottom);
   });
   expect(viewer.getItem("file-20")?.collapsed).toBe(true);
