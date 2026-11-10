@@ -11,6 +11,7 @@ import type { EnvironmentId, ProjectId, ScopedThreadRef } from "@t3tools/contrac
 import { useState, type ReactNode, type Ref } from "react";
 
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import type { CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";
 import { fnv1a32, resolveFileDiffPath, resolveFileDiffPreviousPath } from "~/lib/diffRendering";
 import {
   buildDiffReviewComment,
@@ -75,6 +76,7 @@ interface AnnotatableCodeViewProps {
   environmentId?: EnvironmentId | undefined;
   projectId?: ProjectId | null | undefined;
   codeViewKey: string;
+  workspace: CodeDisplayWorkspace | null;
   files: ReadonlyArray<{
     fileDiff: FileDiffMetadata;
     filePath: string;
@@ -109,6 +111,7 @@ export function AnnotatableCodeView({
   environmentId,
   projectId,
   codeViewKey,
+  workspace,
   files,
   pendingFiles,
   sectionId,
@@ -259,6 +262,7 @@ export function AnnotatableCodeView({
   return (
     <StyledDiffCodeView<DiffCommentAnnotationGroup>
       key={codeViewKey}
+      workspace={workspace}
       {...(viewerRef ? { viewerRef } : {})}
       {...(className ? { className } : {})}
       {...(unsafeCSSExtra ? { unsafeCSSExtra } : {})}
