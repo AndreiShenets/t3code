@@ -19,6 +19,7 @@ import * as Sink from "effect/Sink";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 
 import {
   buildDesktopBundles,
@@ -129,6 +130,29 @@ function mockProcess(exitCode: number, stdout = "") {
     getOutputFd: () => Stream.empty,
   });
 }
+
+// Temporary workspaces have no local Vite+ installation. Run their build script with real Node.
+const withBuildFixtureCommand = Effect.fn("test.withBuildFixtureCommand")(function* <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+) {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  return yield* effect.pipe(
+    Effect.provideService(
+      ChildProcessSpawner.ChildProcessSpawner,
+      ChildProcessSpawner.make((command) =>
+        spawner.spawn(
+          command._tag === "StandardCommand" &&
+            (command.args.includes("build:desktop") || command.command.includes("build:desktop"))
+            ? ChildProcess.make(process.execPath, ["build.cjs"], {
+                ...command.options,
+                shell: false,
+              })
+            : command,
+        ),
+      ),
+    ),
+  );
+});
 
 const WINDOWS_PAYLOAD_FIXTURE_VERSION = "1.2.3";
 
@@ -310,7 +334,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       for (const relativePath of releasePackageFiles) {
         assert.equal(yield* fs.readFileString(path.join(root, relativePath)), original);
       }
-    }),
+    }).pipe(withBuildFixtureCommand),
   );
 
   it.effect("restores manifests and releases the checkout lock after interruption", () =>
@@ -452,7 +476,13 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         assert.isFalse(yield* fs.exists(path.join(root, "unexpected-build.txt")));
         assert.isFalse(yield* fs.exists(path.join(root, ".desktop-build.lock")));
         assert.equal(yield* fs.readFileString(path.join(root, "package.json")), packageJson);
-      }),
+      }).pipe(
+        withBuildFixtureCommand,
+        Effect.provideService(HostProcess.Platform, "win32"),
+        Effect.provideService(SpawnExecutableResolution, (command) =>
+          command === "vp" ? "C:\\fixture\\vp.cmd" : command,
+        ),
+      ),
   );
 
   it.effect("reports a restore failure while still restoring the remaining manifests", () =>
@@ -494,7 +524,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       for (const relativePath of releasePackageFiles.slice(1)) {
         assert.equal(yield* fs.readFileString(path.join(root, relativePath)), original);
       }
-    }),
+    }).pipe(withBuildFixtureCommand),
   );
 
   it.effect("omits update feeds for pull request preview builds", () =>
@@ -732,6 +762,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           "node_modules/node-pty/third_party/conpty/1.0.0/win10-arm64/OpenConsole.exe",
           "node_modules/node-pty/prebuilds/win32-x64/pty.node",
           "node_modules/node-pty/prebuilds/linux-x64/pty.node",
+          "node_modules/@yuuang/ffi-rs-win32-ia32-msvc/ffi-rs.win32-ia32-msvc.node",
+          "node_modules/@yuuang/ffi-rs-win32-x64-msvc/ffi-rs.win32-x64-msvc.node",
         ];
 
         for (const nativeFile of nativeFiles) {
@@ -743,6 +775,18 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         const asarPath = path.join(tempDir, "server.asar");
         yield* packWindowsServerAsar({ sourceDir, asarPath, arch: "x64" });
         const unpackedRoot = `${asarPath}.unpacked`;
+
+        assert.isFalse(
+          yield* fs.exists(path.join(unpackedRoot, "node_modules/@yuuang/ffi-rs-win32-ia32-msvc")),
+        );
+        assert.isTrue(
+          yield* fs.exists(
+            path.join(
+              unpackedRoot,
+              "node_modules/@yuuang/ffi-rs-win32-x64-msvc/ffi-rs.win32-x64-msvc.node",
+            ),
+          ),
+        );
 
         assert.isTrue(
           yield* fs.exists(
