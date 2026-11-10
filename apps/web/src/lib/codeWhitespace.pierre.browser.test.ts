@@ -163,9 +163,9 @@ describe("Pierre whitespace decoration", () => {
     const second = new File(replacement.options);
     const restored = new Editor("file", {}, "tab-size-test");
     try {
-      // React attaches the keyed editor before hydrating its replacement File.
-      restored.edit(second);
       second.render({ file, fileContainer: replacement.element });
+      await second.prepareForEditing();
+      restored.edit(second);
       expect(restored.getText()).toBe("\t const a = 1;\n");
       expect(restored.getViewState().selections).toEqual(view.selections);
       expect(restored.canUndo).toBe(true);
