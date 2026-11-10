@@ -202,7 +202,20 @@ function planProviderWorkspaceSnapshotRefresh(
   if (refresh) {
     return { state: { ...state, requestedAt: now }, refresh: true, recheckAt: null };
   }
-  return { state, refresh: false, recheckAt: pending ? retryNotBefore : null };
+  const snapshot = provider && resolveProviderWorkspaceSnapshot(provider, cwd);
+  const subscriptionRecheckAt =
+    snapshot?.subscriptionAccounts !== undefined
+      ? Date.parse(snapshot.checkedAt) + PROVIDER_WORKSPACE_SNAPSHOT_TTL_MS
+      : null;
+  return {
+    state,
+    refresh: false,
+    recheckAt: pending
+      ? retryNotBefore
+      : subscriptionRecheckAt !== null && subscriptionRecheckAt > now
+        ? subscriptionRecheckAt
+        : null,
+  };
 }
 
 /**
