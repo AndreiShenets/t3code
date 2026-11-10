@@ -62,12 +62,24 @@ function parseConfig(file: ConfigFile) {
   return parsed;
 }
 
+function useCodeDisplayRenderer(widthsKey: string) {
+  const showWhitespace = useClientSettings((settings) => settings.showWhitespace);
+  const tabSizes = new Map<string, number>(JSON.parse(widthsKey));
+  const onPostRender = (container: HTMLElement, filePath: string, phase: PostRenderPhase) =>
+    renderCodeDisplay(
+      container,
+      phase,
+      tabSizes.get(filePath) ?? DEFAULT_CODE_TAB_SIZE,
+      showWhitespace,
+    );
+  return { onPostRender, tabSizes, showWhitespace };
+}
+
 /** Shares configuration reads in the file's environment and displayed revision. */
 export function useCodeDisplay(
   workspace: CodeDisplayWorkspace | null | undefined,
   filePaths: ReadonlyArray<string>,
 ) {
-  const showWhitespace = useClientSettings((settings) => settings.showWhitespace);
   const environmentId = workspace?.environmentId ?? null;
   const cwd = workspace?.cwd ?? null;
   const { canReadFiles } = useFilesystemReadAccess(environmentId);
@@ -134,7 +146,7 @@ export function useCodeDisplay(
   const display = useAtomValue(displayAtom);
   const widthsKey = JSON.stringify([...display.tabSizes].sort(([a], [b]) => a.localeCompare(b)));
   // Query refreshes can return equivalent data; keep Pierre's render callback stable then.
-  const tabSizes = new Map<string, number>(JSON.parse(widthsKey));
+  const renderer = useCodeDisplayRenderer(widthsKey);
   useWorkspaceMutationRefresh({
     mutationId: workspace?.mutationId ?? null,
     refreshOnResourceChange: workspace?.snapshot === undefined,
@@ -143,12 +155,5 @@ export function useCodeDisplay(
       for (const query of display.queries) appAtomRegistry.refresh(query);
     },
   });
-  const onPostRender = (container: HTMLElement, filePath: string, phase: PostRenderPhase) =>
-    renderCodeDisplay(
-      container,
-      phase,
-      tabSizes.get(filePath) ?? DEFAULT_CODE_TAB_SIZE,
-      showWhitespace,
-    );
-  return { onPostRender, tabSizes, showWhitespace };
+  return renderer;
 }
