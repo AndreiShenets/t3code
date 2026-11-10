@@ -136,7 +136,7 @@ describe("ProviderModelPicker", () => {
     const legacyFavorite = page.getByRole("option", { name: /Legacy favorite/ });
     const currentFavorite = page.getByRole("option", { name: /Current favorite/ });
     const current = page.getByRole("option", { name: /Current model/ });
-    const legacySection = page.getByRole("option", { name: /Legacy models/ });
+    const legacySection = page.getByRole("option", { name: /^Show (more|less)$/ });
 
     await expect.element(legacyFavorite).toBeVisible();
     await expect.element(currentFavorite).toBeVisible();
@@ -153,7 +153,7 @@ describe("ProviderModelPicker", () => {
     await click(legacySection);
     await expect.element(legacyFavorite).toBeVisible();
     await expect.element(page.getByRole("option", { name: /Other legacy/ })).toBeVisible();
-    expect(legacyFavorite.element().getBoundingClientRect().top).toBeGreaterThan(
+    expect(legacyFavorite.element().getBoundingClientRect().top).toBeLessThan(
       legacySection.element().getBoundingClientRect().top,
     );
     await expect
@@ -168,7 +168,7 @@ describe("ProviderModelPicker", () => {
     await expect
       .element(page.getByRole("option", { name: /Other legacy/ }))
       .not.toBeInTheDocument();
-    await click(page.getByRole("option", { name: /Legacy models/ }));
+    await click(page.getByRole("option", { name: "Show more", exact: true }));
     await expect.element(page.getByRole("option", { name: /Other legacy/ })).toBeVisible();
   });
 
@@ -238,7 +238,7 @@ describe("ProviderModelPicker", () => {
       const trigger = page.getByRole("button", {
         name: "GPT-6.1 Sol (OpenCode · GitHub Copilot)",
       });
-      const model = trigger.getByText("GPT-6.1 Sol", { exact: true });
+      const model = trigger.getByText("6.1 Sol", { exact: true });
       const provider = trigger.getByText("OpenCode · GitHub Copilot", { exact: true });
       await expect.element(model).toBeVisible();
       await expect.element(provider).toBeVisible();
@@ -330,8 +330,7 @@ describe("ProviderModelPicker", () => {
         ],
       });
 
-      expect(label).toContain("Gemini Pro");
-      expect(label).not.toContain("Gemini Fast");
+      expect(label).toBe("ProGoogle Work");
       expect(label).not.toContain(ANTIGRAVITY_DEFAULT_MODEL);
     },
   );
