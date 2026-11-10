@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import { act, fakeTimers, render as renderUi } from "../../../test/render";
+import * as liveAnnouncements from "../../lib/announce";
 import type { RemoteOpenState } from "../../remoteOpen";
 
 const state = vi.hoisted(() => ({
@@ -171,6 +172,7 @@ async function setup() {
 describe("host editor access", () => {
   it("offers and opens installed Visual Studio without advertising it for other environments", async () => {
     await using fixture = await setup();
+    using _announcements = vi.spyOn(liveAnnouncements, "announce").mockImplementation(() => {});
     state.allowed.add(selected);
     await fixture.renderPicker(["vscode", "visual-studio"]);
     await userEvent.click(page.getByRole("button", { name: "Choose editor", exact: true }));
