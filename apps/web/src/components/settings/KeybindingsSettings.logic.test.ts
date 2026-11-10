@@ -379,6 +379,10 @@ describe("KeybindingsSettings.logic", () => {
         },
       },
     });
+    const previewOpenDraft = parseWhenExpressionDraft("previewOpen && !previewFocus");
+    assert(previewOpenDraft.ok);
+    expect(unknownWhenVariables(previewOpenDraft.value)).toEqual([]);
+    expect(buildWhenVariableOptions()).toContain("previewOpen");
     expect(parseWhenExpressionDraft("editorFocus &&")).toEqual({
       ok: false,
       message: "Use variables with !, &&, ||, and parentheses.",
