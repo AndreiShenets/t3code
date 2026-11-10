@@ -127,7 +127,7 @@ describe("diff path search", () => {
       type: "item",
       id: "file-1",
       align: "start",
-      offset: -48,
+      offset: 48,
       behavior: "smooth-auto",
     });
     expect(view.options.onRevealSearchMatch).not.toHaveBeenCalled();

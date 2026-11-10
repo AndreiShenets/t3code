@@ -1,4 +1,4 @@
-import { CodeView } from "@pierre/diffs";
+import { CodeView, DEFAULT_THEMES, preloadHighlighter } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { userEvent } from "vite-plus/test/browser";
@@ -226,4 +226,34 @@ it("leaves project-wide search alone", async () => {
   const { container } = screen;
   await userEvent.keyboard("{Control>}{Shift>}f{/Shift}{/Control}");
   expect(container!.querySelector("[data-search-panel]")).toBeNull();
+});
+
+it("keeps a folded filename match visible below the find panel", async () => {
+  await preloadHighlighter({ themes: Object.values(DEFAULT_THEMES), langs: ["text"] });
+  await using screen = await setup();
+  const { viewer, container } = screen;
+  const reveal = vi.fn();
+  viewer.setOptions({ onRevealSearchMatch: reveal, searchOptions: { scrollBehavior: "instant" } });
+  const fileDiff = parsePatchFiles(patch)[0]!.files[0]!;
+  viewer.setItems(
+    Array.from({ length: 60 }, (_, index) => ({
+      id: `file-${index}`,
+      type: "diff" as const,
+      collapsed: true,
+      fileDiff: { ...fileDiff, name: `src/file-${index}.ts`, cacheKey: `file-${index}` },
+    })),
+  );
+
+  viewer.openSearch({ query: "src/file-20.ts", scope: "all" });
+
+  await vi.waitFor(() => {
+    const ranges = Array.from(CSS.highlights.get("diffs-search-current") ?? []);
+    expect(ranges.map(String)).toEqual(["src/file-20.ts"]);
+    const match = ranges[0]!.getBoundingClientRect();
+    const viewport = container.getBoundingClientRect();
+    expect(match.top).toBeGreaterThanOrEqual(viewport.top + 40);
+    expect(match.bottom).toBeLessThanOrEqual(viewport.bottom);
+  });
+  expect(viewer.getItem("file-20")?.collapsed).toBe(true);
+  expect(reveal).not.toHaveBeenCalled();
 });
