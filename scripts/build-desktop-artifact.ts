@@ -2026,9 +2026,8 @@ function windowsVswherePrerequisiteScript(arch: typeof BuildArch.Type): string {
     "if (!$install) { exit 1 }",
     "$kitsRoot = Get-ItemPropertyValue 'HKLM:\\SOFTWARE\\Microsoft\\Windows Kits\\Installed Roots' -Name KitsRoot10 -ErrorAction SilentlyContinue",
     "if (!$kitsRoot -or !(Test-Path (Join-Path $kitsRoot 'Lib'))) { exit 1 }",
-    "$msvcToolset = Get-ChildItem (Join-Path $install 'VC\\Tools\\MSVC') -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1",
+    `$msvcToolset = Get-ChildItem (Join-Path $install 'VC\\Tools\\MSVC') -Directory | Where-Object { (Test-Path (Join-Path $_.FullName 'bin\\Hostx64\\${spectreArch}\\cl.exe')) -and (Test-Path (Join-Path $_.FullName 'lib\\spectre\\${spectreArch}')) } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1`,
     "if (!$msvcToolset) { exit 1 }",
-    `if (!(Test-Path (Join-Path $msvcToolset.FullName 'lib\\spectre\\${spectreArch}'))) { exit 1 }`,
   ].join("; ");
 }
 
