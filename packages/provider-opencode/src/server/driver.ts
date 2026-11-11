@@ -1,4 +1,4 @@
-import { ProviderDriverKind, settingsSecretLiteral } from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderMcpError, settingsSecretLiteral } from "@t3tools/contracts";
 import { OpenCodeSettings } from "../settings.ts";
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -47,6 +47,7 @@ import {
 import * as OpenCodeServerOwner from "./OpenCodeServerOwner.ts";
 import * as OpenCode2Client from "./v2/OpenCode2Client.ts";
 import * as OpenCode2Server from "./v2/OpenCode2Server.ts";
+import * as OpenCode2Mcp from "./v2/mcp.ts";
 import {
   defaultProviderContinuationIdentity,
   type ProviderDriver,
@@ -333,6 +334,17 @@ export const OpenCodeDriver: ProviderDriver<
         Effect.provideService(OpenCode2Server.OpenCode2Server, openCode2Server),
       ),
     });
+    const mcpManagement = yield* OpenCode2Mcp.make.pipe(
+      Effect.provideService(OpenCode2Server.OpenCode2Server, openCode2Server),
+    );
+    const requireOpenCode2 = runtimeProbe.get.pipe(
+      Effect.mapError((cause) => new ProviderMcpError({ reason: "request-failed", cause })),
+      Effect.flatMap((runtime) =>
+        runtime.generation === "v2"
+          ? Effect.void
+          : Effect.fail(new ProviderMcpError({ reason: "unsupported" })),
+      ),
+    );
     const loadOpenCode2Models = yield* makeOpenCode2ModelLoader(
       openCode2Server.withConnection(({ client }) => loadOpenCode2Catalog(client, host.paths.cwd)),
     );
@@ -594,6 +606,11 @@ export const OpenCodeDriver: ProviderDriver<
               ),
             ),
       orchestrationAdapter,
+      mcpManagement: {
+        list: (cwd) => requireOpenCode2.pipe(Effect.andThen(mcpManagement.list(cwd))),
+        setEnabled: (input) =>
+          requireOpenCode2.pipe(Effect.andThen(mcpManagement.setEnabled(input))),
+      },
       textGeneration,
     } satisfies ProviderInstance;
   }),
