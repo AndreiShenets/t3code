@@ -1032,10 +1032,13 @@ export function PullRequestsPage() {
     if (rightPanelState.isOpen) setMaximized((value) => !value);
   };
   const onGuideShown = () => setMaximized(true);
+  // updateSearch leaves selectedUrl out, so a reload does not reveal the link again.
+  const consumeLinkedUrl = useEffectEvent(() => updateSearch({}));
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the URL-linked pull request in the right panel store
   useEffect(() => {
     if (!pullRequestsSupported || rightPanelRef === null || linkedSelection === null) return;
     useRightPanelStore.getState().openPullRequest(rightPanelRef, linkedSelection);
+    if (linkedSelection.revealUrl !== undefined) consumeLinkedUrl();
   }, [linkedSelection, pullRequestsSupported, rightPanelRef]);
 
   const selected =
@@ -1533,6 +1536,13 @@ export function PullRequestsPage() {
                 useRightPanelStore
                   .getState()
                   .setPullRequestDetailTab(rightPanelRef, renderedPullRequestSurface.id, tab);
+              }}
+              revealUrl={renderedPullRequestSurface.revealUrl}
+              onRevealSettled={(revealUrl) => {
+                if (rightPanelRef === null) return;
+                useRightPanelStore
+                  .getState()
+                  .settlePullRequestReveal(rightPanelRef, renderedPullRequestSurface.id, revealUrl);
               }}
               environmentId={panelEnvironmentId}
               onGuideShown={onGuideShown}

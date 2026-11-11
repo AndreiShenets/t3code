@@ -4,7 +4,7 @@ import type { PullRequestReviewPosition, ScopedThreadRef } from "@t3tools/contra
 import { createStore } from "zustand/vanilla";
 
 import { useRightPanelStore, type PullRequestDetailTab } from "~/rightPanelStore";
-import type { DiffFoldOverride, DiffSlice } from "./pullRequestDiff.logic";
+import type { DiffFoldOverride, DiffSlice, FileDiffFoldChoices } from "./pullRequestDiff.logic";
 
 export interface PullRequestDraftAnchor {
   readonly headSha?: string | undefined;
@@ -26,7 +26,7 @@ export interface PullRequestViewState {
   code?: {
     scopeKey: string;
     slices: ReadonlyArray<DiffSlice>;
-    toggledFiles: ReadonlySet<string>;
+    foldChoices: FileDiffFoldChoices;
     foldOverride: DiffFoldOverride;
     visibleCommitCount: number;
     wordWrap: boolean;
