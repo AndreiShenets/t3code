@@ -2139,7 +2139,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         setPrompt("");
         promptRef.current = "";
       }
-      return;
+      return false;
     }
     if (
       noProviderAvailable ||
