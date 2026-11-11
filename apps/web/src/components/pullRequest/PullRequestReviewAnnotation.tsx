@@ -1,5 +1,6 @@
 import type {
   EnvironmentId,
+  PullRequestCapabilities,
   PullRequestDiffSide,
   PullRequestRef,
   PullRequestReviewPosition,
@@ -120,6 +121,7 @@ export function ReviewThreadCard({
   canReply,
   canResolve,
   canReact,
+  capabilities,
   environmentId,
   reference,
   completionScope,
@@ -140,6 +142,7 @@ export function ReviewThreadCard({
   canReply: boolean;
   canResolve: boolean;
   canReact: boolean;
+  capabilities: PullRequestCapabilities;
   environmentId: EnvironmentId;
   reference: PullRequestRef;
   completionScope: PullRequestCompletionScope | null;
@@ -304,6 +307,7 @@ export function ReviewThreadCard({
                     className="ml-auto justify-end"
                     reactions={comment.reactions ?? []}
                     canReact={canReact}
+                    capabilities={capabilities}
                     subjectId={comment.id}
                     environmentId={environmentId}
                     reference={reference}
