@@ -1,3 +1,7 @@
+import {
+  parsePullRequestAnchor,
+  pullRequestAnchorMatchesUrl,
+} from "@t3tools/shared/pullRequestAnchor";
 import { PullRequestEntryRow } from "./PullRequestEntryRow";
 import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
@@ -75,7 +79,10 @@ function TimelineComment({
   params: PullRequestParams;
   actions: CommentActions;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const target = parsePullRequestAnchor(params.navigationUrl);
+  const linked =
+    target?.kind === "timeline" && pullRequestAnchorMatchesUrl(target.anchor, comment.url);
+  const [expanded, setExpanded] = useState(linked);
   const { themeVariables: colors } = useAppearancePreferences();
   const long = comment.body.length > 450 || comment.body.split("\n").length > 8;
   const content = useMemo(
@@ -111,7 +118,13 @@ function TimelineComment({
         </Text>
       ) : null}
       {preview.trim() || content.attachments.length ? (
-        <View className="gap-2 overflow-hidden rounded-2xl bg-grouped-card p-3">
+        <View
+          className={
+            linked
+              ? "gap-2 overflow-hidden rounded-2xl border border-primary bg-primary/10 p-3"
+              : "gap-2 overflow-hidden rounded-2xl bg-grouped-card p-3"
+          }
+        >
           <View style={long && !expanded ? { maxHeight: 240, overflow: "hidden" } : undefined}>
             <PullRequestMarkdown
               markdown={long && !expanded ? comment.body.slice(0, 1200) : comment.body}
@@ -205,6 +218,7 @@ export function pullRequestTimelineRows(
   navigation: Pick<NavigationProp<ReactNavigation.RootParamList>, "navigate" | "dispatch">,
   actions: CommentActions,
 ) {
+  const linkTarget = parsePullRequestAnchor(params.navigationUrl);
   const discussionIds = new Set(
     activity.reviewThreads.flatMap((thread) => thread.comments.map((comment) => comment.id)),
   );
@@ -214,7 +228,19 @@ export function pullRequestTimelineRows(
       .map((comment) => ({
         key: `comment:${comment.id}`,
         date: comment.createdAt,
-        content: <TimelineComment comment={comment} params={params} actions={actions} />,
+        content: (
+          <TimelineComment
+            key={
+              linkTarget?.kind === "timeline" &&
+              pullRequestAnchorMatchesUrl(linkTarget.anchor, comment.url)
+                ? `${comment.id}:${params.navigationId ?? params.navigationUrl}`
+                : comment.id
+            }
+            comment={comment}
+            params={params}
+            actions={actions}
+          />
+        ),
       })),
     ...activity.reviewThreads.map((thread) => ({
       key: `discussion:${thread.id}`,
