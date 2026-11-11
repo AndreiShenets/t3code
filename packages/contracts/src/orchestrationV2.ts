@@ -2115,6 +2115,8 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   lineage: OrchestrationV2AppThreadLineage,
   forkedFrom: Schema.NullOr(OrchestrationV2AppThread.fields.forkedFrom),
   activeProviderThreadId: Schema.NullOr(ProviderThreadId),
+  /** USD cost of environment-local subagent descendants, including archived children. */
+  subagentCostUsd: Schema.optional(Schema.Number.check(Schema.isFinite())),
   historyOrigin: Schema.optional(OrchestrationV2ThreadHistoryOrigin),
   linkOrigin: Schema.optional(OrchestrationV2LinkOrigin),
   delegatedFrom: Schema.optional(OrchestrationV2DelegatedFrom),
@@ -2258,6 +2260,10 @@ export const OrchestrationV2ShellSnapshot = Schema.Struct({
 });
 export type OrchestrationV2ShellSnapshot = typeof OrchestrationV2ShellSnapshot.Type;
 
+const ShellAncestorCosts = Schema.optional(
+  Schema.Array(Schema.Struct({ threadId: ThreadId, costUsd: Schema.NullOr(Schema.Number) })),
+);
+
 export const OrchestrationV2ShellStreamItem = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("synchronized"),
@@ -2289,12 +2295,14 @@ export const OrchestrationV2ShellStreamItem = Schema.Union([
     sequence: NonNegativeInt,
     location: Schema.Literals(["active", "archive"]),
     thread: OrchestrationV2ThreadShell,
+    ancestorCosts: ShellAncestorCosts,
   }),
   Schema.Struct({
     kind: Schema.Literal("thread.removed"),
     sequence: NonNegativeInt,
     location: Schema.Literals(["active", "archive"]),
     threadId: ThreadId,
+    ancestorCosts: ShellAncestorCosts,
   }),
 ]);
 export type OrchestrationV2ShellStreamItem = typeof OrchestrationV2ShellStreamItem.Type;

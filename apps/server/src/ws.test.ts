@@ -465,7 +465,15 @@ it.effect("shell groups read distinct threads once and keep each event's own seq
       ) RETURNING sequence
     `.pipe(Effect.map(([row]) => row!.sequence));
     const shell = (id: string, archivedAt: string | null = null) =>
-      ({ id: ThreadId.make(id), archivedAt }) as unknown as OrchestrationV2ThreadShell;
+      ({
+        id: ThreadId.make(id),
+        archivedAt,
+        lineage: {
+          parentThreadId: null,
+          relationshipToParent: null,
+          rootThreadId: ThreadId.make(id),
+        },
+      }) as unknown as OrchestrationV2ThreadShell;
     const project = {
       id: ProjectId.make("project:group"),
     } as unknown as OrchestrationProjectShell;
