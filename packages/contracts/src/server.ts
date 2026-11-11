@@ -129,6 +129,16 @@ export const ServerProviderWorkspaceSnapshot = Schema.Struct({
   slashCommandsPending: Schema.optional(Schema.Boolean),
   skills: Schema.Array(ServerProviderSkill),
   optionDescriptors: Schema.optional(Schema.Array(ProviderOptionDescriptor)),
+  subscriptionAccounts: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        modelProviderId: TrimmedNonEmptyString,
+        driver: ProviderDriverKind,
+        email: TrimmedNonEmptyString,
+        workspaceId: TrimmedNonEmptyString,
+      }),
+    ),
+  ),
 });
 export type ServerProviderWorkspaceSnapshot = typeof ServerProviderWorkspaceSnapshot.Type;
 

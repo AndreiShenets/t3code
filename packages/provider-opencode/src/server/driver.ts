@@ -26,6 +26,7 @@ import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textG
 import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
 import { openCodeUsageReader, type OpenCodeUsageReaderEnv } from "./usage.ts";
 import { readOpenCodeGoUsageLimits } from "./usageLimits.ts";
+import { readOpenCodeSubscriptionAccounts } from "./subscriptionAccounts.ts";
 import { loadOpenCode2Catalog } from "./openCode2Catalog.ts";
 import {
   checkOpenCodeProviderStatus,
@@ -349,7 +350,7 @@ export const OpenCodeDriver: ProviderDriver<
       openCode2Server.withConnection(({ client }) => loadOpenCode2Catalog(client, host.paths.cwd)),
     );
     const listOpenCode2Workspace = (cwd: string) =>
-      openCode2Server.withConnection(({ client, events }) =>
+      openCode2Server.withConnection(({ client, events, external }) =>
         Effect.gen(function* () {
           const location = { directory: cwd };
           const scanned = yield* Deferred.make<void>();
@@ -369,7 +370,7 @@ export const OpenCodeDriver: ProviderDriver<
               Effect.forkScoped,
             );
           }
-          return yield* loadOpenCode2Workspace(
+          const inventory = yield* loadOpenCode2Workspace(
             Effect.all(
               {
                 skills: client.skill.list({ location }).pipe(Effect.map((list) => list.data)),
@@ -379,6 +380,25 @@ export const OpenCodeDriver: ProviderDriver<
             ),
             Deferred.await(scanned),
           );
+          const subscriptionAccounts = external
+            ? []
+            : yield* Effect.all({
+                providers: client.provider.list({ location }).pipe(Effect.map((list) => list.data)),
+                credentials: client.credential.list(),
+              }).pipe(
+                Effect.flatMap(({ providers, credentials }) =>
+                  readOpenCodeSubscriptionAccounts({
+                    providers,
+                    credentials,
+                    environment: processEnv,
+                  }),
+                ),
+                Effect.provideService(FileSystem.FileSystem, fileSystem),
+                Effect.provideService(Path.Path, pathService),
+                Effect.timeout("5 seconds"),
+                Effect.orElseSucceed(() => []),
+              );
+          return { ...inventory, subscriptionAccounts };
         }).pipe(Effect.scoped),
       );
     const serverOwner = yield* OpenCodeServerOwner.make({
@@ -573,8 +593,9 @@ export const OpenCodeDriver: ProviderDriver<
                       ),
                     ),
                   ]).pipe(
-                    Effect.map(([machineSnapshot, { skills, commands }]) => ({
+                    Effect.map(([machineSnapshot, { skills, commands, subscriptionAccounts }]) => ({
                       ...machineSnapshot,
+                      subscriptionAccounts,
                       skills: openCode2SkillsToServerProviderSkills(skills),
                       slashCommands: openCode2CommandsToServerProviderSlashCommands(commands),
                       // A finished scan lists at least the built-ins. None means it
