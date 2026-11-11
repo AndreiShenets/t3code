@@ -36,8 +36,11 @@ import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as IpcChannels from "../ipc/channels.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopUpdatePolicy from "./DesktopUpdatePolicy.ts";
-import { normalizeDesktopUpdateReleaseNotes } from "./releaseNotes.ts";
 import { isNightlyNotNewerThanCustomBuild } from "./customBuildRelease.ts";
+import {
+  normalizeDesktopUpdateReleaseNotes,
+  releaseNotesOfOfferedVersion,
+} from "./releaseNotes.ts";
 import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
 import { compareSemverVersions } from "@t3tools/shared/semver";
 import {
@@ -74,6 +77,7 @@ const UpdateInfo = Schema.Struct({
   // Malformed notes must not block update-state decoding; normalizeDesktopUpdateReleaseNotes validates separately.
   releaseNotes: Schema.optional(Schema.Unknown),
   releaseDate: Schema.optional(Schema.Unknown),
+  releaseName: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 const DownloadProgressInfo = Schema.Struct({
@@ -973,7 +977,7 @@ export const make = Effect.gen(function* () {
 
           const checkedAt = yield* currentIsoTimestamp;
           const { releaseNotes, omittedReleaseCount } = normalizeDesktopUpdateReleaseNotes(
-            info.releaseNotes,
+            releaseNotesOfOfferedVersion(info),
             info.version,
             state.channel,
             typeof info.releaseDate === "string" ? info.releaseDate : undefined,
