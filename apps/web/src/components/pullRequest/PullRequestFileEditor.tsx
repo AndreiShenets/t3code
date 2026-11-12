@@ -18,6 +18,7 @@ import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } fro
 
 const ignorePendingChange = () => {};
 const ignorePostRender = () => {};
+const ignoreEditorChange = () => {};
 
 export default function PullRequestFileEditor({
   environmentId,
@@ -81,6 +82,7 @@ export default function PullRequestFileEditor({
                 wordWrap={wordWrap}
                 onPostRender={ignorePostRender}
                 onPendingChange={ignorePendingChange}
+                onEditorChange={ignoreEditorChange}
               />
             </DiffWorkerPoolProvider>
           )}
