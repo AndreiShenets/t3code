@@ -4,7 +4,7 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { createPackageWithOptions, extractFile } from "@electron/asar";
-import { assert, it } from "@effect/vitest";
+import { assert, it, live } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
@@ -879,6 +879,116 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         assert.include(error.message, "Visual Studio Build Tools components");
       }),
     ),
+  );
+
+  it.effect.each([
+    { arch: "x64" as const, component: "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" },
+    { arch: "x64" as const, component: "Microsoft.VisualStudio.Component.VC.14.51.x86.x64" },
+    { arch: "arm64" as const, component: "Microsoft.VisualStudio.Component.VC.Tools.ARM64" },
+    { arch: "arm64" as const, component: "Microsoft.VisualStudio.Component.VC.14.51.ARM64" },
+  ])("accepts the installed Windows C++ component $component", ({ arch, component }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-versioned-msvc-" });
+        const pythonPath = path.join(tempDir, "python.exe");
+        yield* fs.writeFileString(pythonPath, "python");
+        yield* fs.writeFileString(
+          path.join(tempDir, "libstd-fixture.rlib"),
+          "rust standard library",
+        );
+        const spawner = Layer.succeed(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make((command) => {
+            const childProcess = command as unknown as {
+              readonly command: string;
+              readonly args: ReadonlyArray<string>;
+            };
+            if (childProcess.command === "rustc") {
+              return Effect.succeed(mockProcess(0, `${tempDir}\n`));
+            }
+            if (childProcess.command !== "powershell.exe") return Effect.succeed(mockProcess(0));
+            const script = childProcess.args.at(-1) ?? "";
+            const requiredComponent = /-requires (\S+) -property/.exec(script)?.[1];
+            return Effect.succeed(
+              mockProcess(
+                requiredComponent && NodePath.matchesGlob(component, requiredComponent) ? 0 : 1,
+              ),
+            );
+          }),
+        );
+        yield* preflightWindowsDesktopBuild({ arch, bundlesWslRuntime: true }).pipe(
+          Effect.provide(
+            Layer.merge(
+              spawner,
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({ env: { npm_config_python: pythonPath } }),
+              ),
+            ),
+          ),
+        );
+      }),
+    ),
+  );
+
+  live.skipIf(HostProcess.Platform.defaultValue() !== "win32")(
+    "accepts a complete Windows toolset beside a newer incomplete directory",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const nativeSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-incomplete-msvc-" });
+          const tools = path.join(root, "VC/Tools/MSVC");
+          yield* fs.makeDirectory(path.join(tools, "14.51.36231/bin/Hostx64/x64"), {
+            recursive: true,
+          });
+          yield* fs.makeDirectory(path.join(tools, "14.51.36231/lib/spectre/x64"), {
+            recursive: true,
+          });
+          yield* fs.writeFileString(path.join(tools, "14.51.36231/bin/Hostx64/x64/cl.exe"), "cl");
+          yield* fs.makeDirectory(path.join(tools, "14.52.37025"));
+          yield* fs.writeFileString(path.join(root, "python.exe"), "python");
+          yield* fs.writeFileString(path.join(root, "libstd-fixture.rlib"), "rust");
+          const spawner = Layer.succeed(
+            ChildProcessSpawner.ChildProcessSpawner,
+            ChildProcessSpawner.make((command) => {
+              const child = command as unknown as {
+                readonly command: string;
+                readonly args: ReadonlyArray<string>;
+              };
+              if (child.command === "rustc") return Effect.succeed(mockProcess(0, `${root}\n`));
+              if (child.command !== "powershell.exe") return Effect.succeed(mockProcess(0));
+              const script = child.args.at(-1) ?? "";
+              assert.include(script, "$msvcToolset =");
+              const selection = script.slice(script.indexOf("$msvcToolset ="));
+              return nativeSpawner.spawn(
+                ChildProcess.make("powershell.exe", [
+                  "-NoProfile",
+                  "-NonInteractive",
+                  "-Command",
+                  `$install = '${root.replaceAll("'", "''")}'; ${selection}`,
+                ]),
+              );
+            }),
+          );
+
+          yield* preflightWindowsDesktopBuild({ arch: "x64", bundlesWslRuntime: true }).pipe(
+            Effect.provide(
+              Layer.merge(
+                spawner,
+                ConfigProvider.layer(
+                  ConfigProvider.fromEnv({
+                    env: { npm_config_python: path.join(root, "python.exe") },
+                  }),
+                ),
+              ),
+            ),
+          );
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("does not require MSVC when reusing a prebuilt Windows resource monitor", () =>
