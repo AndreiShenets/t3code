@@ -223,7 +223,6 @@ function planProviderWorkspaceSnapshotRefresh(
   if (refresh) {
     return { state: { ...state, requestedAt: now }, refresh: true, recheckAt: null };
   }
-  const snapshot = provider && resolveProviderWorkspaceSnapshot(provider, cwd);
   const subscriptionRecheckAt =
     snapshot?.subscriptionAccounts !== undefined
       ? Date.parse(snapshot.checkedAt) + PROVIDER_WORKSPACE_SNAPSHOT_TTL_MS
