@@ -2,7 +2,7 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import type { EnvironmentId, PullRequestRef, PullRequestDiffResult } from "@t3tools/contracts";
 import { RegistryContext } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 
 import { getRenderablePatch, resolveFileDiffPath } from "~/lib/diffRendering";
 import { pullRequestEnvironment } from "~/state/pullRequests";
@@ -15,7 +15,6 @@ interface LoadedDiff {
   readonly cursor: string | null;
   readonly done: boolean;
   readonly files: ReadonlyMap<string, FileDiffMetadata>;
-  readonly folded: unknown;
 }
 
 const NO_FILES: ReadonlyMap<string, FileDiffMetadata> = new Map();
@@ -35,7 +34,7 @@ export function useGuideDiffFiles({
 }: {
   environmentId: EnvironmentId;
   reference: PullRequestRef;
-  headSha: string;
+  headSha: string | null;
   wantedPaths: ReadonlyArray<string>;
 }) {
   const key = `${environmentId}:${pullRequestReviewKey(reference)}:${headSha}`;
@@ -44,40 +43,78 @@ export function useGuideDiffFiles({
     cursor: null,
     done: false,
     files: NO_FILES,
-    folded: null,
   });
   const current: LoadedDiff =
-    loaded.key === key ? loaded : { key, cursor: null, done: false, files: NO_FILES, folded: null };
+    loaded.key === key ? loaded : { key, cursor: null, done: false, files: NO_FILES };
   const registry = useContext(RegistryContext);
-  const isMissing = (diff: LoadedDiff) => wantedPaths.some((path) => !diff.files.has(path));
-  const pageAtom = (cursor: string | null) =>
-    pullRequestEnvironment.diff({
-      environmentId,
-      input: { ...reference, ...(cursor === null ? {} : { cursor }) },
-    });
-  const loading = isMissing(current) && !current.done;
-  const query = useEnvironmentQuery(loading ? pageAtom(current.cursor) : null);
+  const refreshedPage = useRef<string | null>(null);
+  const missing = wantedPaths.some((path) => !current.files.has(path));
+  const loading = missing && !current.done;
+  const query = useEnvironmentQuery(
+    loading
+      ? pullRequestEnvironment.diff({
+          environmentId,
+          input: { ...reference, ...(current.cursor === null ? {} : { cursor: current.cursor }) },
+        })
+      : null,
+  );
 
-  // One update for every settled page: an update per page trips React's re-render limit.
-  let next = current;
-  let data = query.isPending ? null : query.data;
-  while (data !== null && !next.done && next.folded !== data && isMissing(next)) {
-    const parsed = getRenderablePatch(
-      data.patch,
-      `pull-request-guide:${key}:${next.cursor ?? "first"}`,
-    );
-    const files = new Map(next.files);
-    if (parsed?.kind === "files") {
-      for (const file of parsed.files) {
-        files.set(resolveFileDiffPath(file), file);
-        snapshots.set(file, { headSha: data.headSha, baseSha: data.baseSha });
-      }
+  const data = query.data;
+  const { isPending, isSuccess } = query;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- revalidates and retains asynchronous guide diff pages
+  useEffect(() => {
+    if (!loading) {
+      refreshedPage.current = null;
+      return;
     }
-    next = { key, cursor: data.nextCursor, done: data.nextCursor === null, files, folded: data };
-    const result = next.done || !isMissing(next) ? null : registry.get(pageAtom(next.cursor));
-    data = result === null || result.waiting ? null : AsyncResult.getOrElse(result, () => null);
-  }
-  if (next !== current) setLoaded(next);
+    let next = current;
+    // Batch settled pages without render-phase updates, even for long cached chains.
+    while (!next.done && wantedPaths.some((path) => !next.files.has(path))) {
+      const atom = pullRequestEnvironment.diff({
+        environmentId,
+        input: { ...reference, ...(next.cursor === null ? {} : { cursor: next.cursor }) },
+      });
+      let result = registry.get(atom);
+      const pageKey = JSON.stringify([key, next.cursor]);
+      if (refreshedPage.current !== pageKey) {
+        refreshedPage.current = pageKey;
+        // Unpinned cached pages have no revision stamp, including reused later cursors.
+        if (AsyncResult.getOrElse(result, () => null) !== null || !result.waiting) {
+          registry.refresh(atom);
+          result = registry.get(atom);
+        }
+      }
+      if (result.waiting || !AsyncResult.isSuccess(result)) break;
+      const page = result.value;
+      const parsed = getRenderablePatch(
+        page.patch,
+        `pull-request-guide:${key}:${next.cursor ?? "first"}`,
+      );
+      const files = new Map(next.files);
+      if (parsed?.kind === "files") {
+        for (const file of parsed.files) {
+          files.set(resolveFileDiffPath(file), file);
+          snapshots.set(file, { headSha: page.headSha, baseSha: page.baseSha });
+        }
+      }
+      next = { key, cursor: page.nextCursor, done: page.nextCursor === null, files };
+    }
+    if (next !== current) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Retain asynchronous query pages after advancing or unsubscribing.
+      setLoaded(next);
+    }
+  }, [
+    current,
+    data,
+    environmentId,
+    isPending,
+    isSuccess,
+    key,
+    loading,
+    reference,
+    registry,
+    wantedPaths,
+  ]);
 
   return {
     files: current.files,
