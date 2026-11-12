@@ -71,6 +71,7 @@ const harness = (
     );
     const quitting = yield* Ref.make(false);
     const backendReady = yield* Ref.make(true);
+    const canInstallUpdates = yield* Ref.make(true);
     const primaryBackendStartup = yield* SubscriptionRef.make<DesktopState.PrimaryBackendStartup>({
       _tag: "Ready",
     });
@@ -90,7 +91,12 @@ const harness = (
         customBuildStamp: options.currentStamp ?? null,
         path,
       } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]),
-      Layer.succeed(DesktopState.DesktopState, { quitting, backendReady, primaryBackendStartup }),
+      Layer.succeed(DesktopState.DesktopState, {
+        quitting,
+        backendReady,
+        canInstallUpdates,
+        primaryBackendStartup,
+      }),
       Layer.mock(ElectronWindow.ElectronWindow)({
         sendAll: () => Queue.offer(changes, undefined).pipe(Effect.asVoid),
       }),
