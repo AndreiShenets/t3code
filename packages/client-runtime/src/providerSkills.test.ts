@@ -271,15 +271,32 @@ describe("provider workspace snapshot refresh atom", () => {
     unmount();
   });
 
-  it("does not rescan a current snapshot, and rescans once it ages past the TTL", () => {
-    vi.useFakeTimers({ now: Date.parse("2026-01-01T00:01:00.000Z") });
-    const { registry, atom, run, unmount } = setup(withSnapshot("2026-01-01T00:00:00.000Z"));
-    expect(run).not.toHaveBeenCalled();
-    vi.setSystemTime(Date.parse("2026-01-01T00:05:00.000Z"));
-    registry.refresh(atom);
-    expect(run).toHaveBeenCalledTimes(1);
-    unmount();
-  });
+  it.each([false, true])(
+    "refreshes an expired snapshot (subscription timer: %s)",
+    async (subscription) => {
+      vi.useFakeTimers({ now: Date.parse("2026-01-01T00:01:00.000Z") });
+      const current = withSnapshot("2026-01-01T00:00:00.000Z").map((entry) =>
+        subscription
+          ? {
+              ...entry,
+              workspaceSnapshots: (entry.workspaceSnapshots ?? []).map((snapshot) => ({
+                ...snapshot,
+                subscriptionAccounts: [],
+              })),
+            }
+          : entry,
+      );
+      const { registry, atom, run, unmount } = setup(current);
+      expect(run).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(240_000);
+      if (!subscription) {
+        expect(run).not.toHaveBeenCalled();
+        registry.refresh(atom);
+      }
+      expect(run).toHaveBeenCalledTimes(1);
+      unmount();
+    },
+  );
 
   it("cools down a failed scan, then retries on its own while the scan stays pending", async () => {
     vi.useFakeTimers({ now: Date.parse("2026-01-01T00:00:00.000Z") });

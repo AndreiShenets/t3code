@@ -170,6 +170,9 @@ export function upsertProviderWorkspaceSnapshot(
     ...(scopedSnapshot.slashCommandsPending ? { slashCommandsPending: true } : {}),
     skills: scopedSnapshot.skills,
     ...(optionDescriptors === undefined ? {} : { optionDescriptors }),
+    ...(scopedSnapshot.subscriptionAccounts === undefined
+      ? {}
+      : { subscriptionAccounts: scopedSnapshot.subscriptionAccounts }),
     ...(models === undefined ? {} : { models }),
     ...(scopedSnapshot.workspaceModelsPending ? { modelsPending: true } : {}),
   } satisfies NonNullable<ServerProvider["workspaceSnapshots"]>[number];
@@ -999,11 +1002,19 @@ export const layer = Layer.effect(
     }) {
       if (input.fresh) {
         yield* updateProviders((providers) =>
-          providers.map((candidate) =>
-            candidate.instanceId === input.instanceId
-              ? candidate
-              : dropProviderWorkspaceSnapshot(candidate, input.cwd),
-          ),
+          providers.map((candidate) => {
+            if (candidate.instanceId !== input.instanceId)
+              return dropProviderWorkspaceSnapshot(candidate, input.cwd);
+            if (!candidate.workspaceSnapshots) return candidate;
+            return {
+              ...candidate,
+              workspaceSnapshots: candidate.workspaceSnapshots.map((snapshot) =>
+                snapshot.cwd === input.cwd
+                  ? { ...snapshot, subscriptionAccounts: undefined }
+                  : snapshot,
+              ),
+            };
+          }),
         );
       }
       const providers = yield* Ref.get(providersRef);
