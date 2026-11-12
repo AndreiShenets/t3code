@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./usageSeries": {
+      "types": "./src/usageSeries.ts",
+      "import": "./src/usageSeries.ts"
+    },
     "./pullRequestAnchor": {
       "types": "./src/pullRequestAnchor.ts",
       "import": "./src/pullRequestAnchor.ts"
