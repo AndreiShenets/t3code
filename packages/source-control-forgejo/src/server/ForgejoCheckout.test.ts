@@ -23,7 +23,7 @@ it.effect(
       const git = (yield* SourceControlHost.SourceControlHost).process;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-fj-checkout-" });
-      const source = path.join(root, "source");
+      const source = path.join(root, "source").replaceAll("\\", "/");
       const cwd = path.join(root, "checkout");
       yield* fs.makeDirectory(source);
       for (const args of [
