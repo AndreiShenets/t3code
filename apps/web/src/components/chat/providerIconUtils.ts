@@ -42,3 +42,18 @@ export function getTriggerDisplayModelName(
   const shortName = resolveModelShortName(model, driverKind);
   return getDisplayModelName({ ...model, shortName }, { preferShortName: true });
 }
+
+export function getProviderRowLabel(
+  providerDisplayName: string,
+  subProvider: string | undefined,
+): string {
+  const provider = providerDisplayName.trim();
+  const sub = subProvider?.trim();
+  if (!sub) {
+    return providerDisplayName;
+  }
+  if (provider && new RegExp(`^${escapeRegExp(provider)}\\s+\\S`, "i").test(sub)) {
+    return sub;
+  }
+  return `${providerDisplayName} · ${sub}`;
+}
