@@ -1,6 +1,8 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { EnvironmentId, PullRequestRef } from "@t3tools/contracts";
-import { useEffect, useRef, useState } from "react";
+import { RegistryContext } from "@effect/atom-react";
+import { AsyncResult } from "effect/reactivity";
+import { useContext, useEffect, useRef, useState } from "react";
 
 import { getRenderablePatch, resolveFileDiffPath } from "~/lib/diffRendering";
 import { pullRequestEnvironment } from "~/state/pullRequests";
@@ -37,6 +39,7 @@ export function useGuideDiffFiles({
   });
   const current: LoadedDiff =
     loaded.key === key ? loaded : { key, cursor: null, done: false, files: NO_FILES };
+  const registry = useContext(RegistryContext);
   const refreshedPage = useRef<string | null>(null);
   const missing = wantedPaths.some((path) => !current.files.has(path));
   const loading = missing && !current.done;
@@ -50,42 +53,58 @@ export function useGuideDiffFiles({
   );
 
   const data = query.data;
-  const cursor = current.cursor;
-  const pageKey = JSON.stringify([key, cursor]);
-  const { refresh, isPending, isSuccess } = query;
+  const { isPending, isSuccess } = query;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- revalidates and retains asynchronous guide diff pages
   useEffect(() => {
     if (!loading) {
       refreshedPage.current = null;
       return;
     }
-    // Whole-PR requests are unpinned. Refresh each page after a head change, even if
-    // its cursor is reused, and never absorb the previous value retained by SWR.
-    if (refreshedPage.current !== pageKey) {
-      refreshedPage.current = pageKey;
-      // An uncached page is already being fetched on mount. Cached pages have no
-      // revision stamp, so revalidate those even when opening a guide afresh.
-      if (data !== null || !isPending) refresh();
-      return;
-    }
-    if (data === null || isPending || !isSuccess) return;
-    // oxlint-disable-next-line react/set-state-in-effect -- Retain asynchronous query pages after advancing or unsubscribing.
-    setLoaded((previous) => {
-      const base =
-        previous.key === key ? previous : { key, cursor: null, done: false, files: NO_FILES };
-      // A page is absorbed once; the query hands the same answer back on every render.
-      if (base.cursor !== cursor || base.done) return base;
+    let next = current;
+    // Batch settled pages without render-phase updates, even for long cached chains.
+    while (!next.done && wantedPaths.some((path) => !next.files.has(path))) {
+      const atom = pullRequestEnvironment.diff({
+        environmentId,
+        input: { ...reference, ...(next.cursor === null ? {} : { cursor: next.cursor }) },
+      });
+      let result = registry.get(atom);
+      const pageKey = JSON.stringify([key, next.cursor]);
+      if (refreshedPage.current !== pageKey) {
+        refreshedPage.current = pageKey;
+        // Unpinned cached pages have no revision stamp, including reused later cursors.
+        if (AsyncResult.getOrElse(result, () => null) !== null || !result.waiting) {
+          registry.refresh(atom);
+          result = registry.get(atom);
+        }
+      }
+      if (result.waiting || !AsyncResult.isSuccess(result)) break;
+      const page = result.value;
       const parsed = getRenderablePatch(
-        data.patch,
-        `pull-request-guide:${key}:${cursor ?? "first"}`,
+        page.patch,
+        `pull-request-guide:${key}:${next.cursor ?? "first"}`,
       );
-      const files = new Map(base.files);
+      const files = new Map(next.files);
       if (parsed?.kind === "files") {
         for (const file of parsed.files) files.set(resolveFileDiffPath(file), file);
       }
-      return { key, cursor: data.nextCursor, done: data.nextCursor === null, files };
-    });
-  }, [cursor, data, isPending, isSuccess, key, loading, pageKey, refresh]);
+      next = { key, cursor: page.nextCursor, done: page.nextCursor === null, files };
+    }
+    if (next !== current) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Retain asynchronous query pages after advancing or unsubscribing.
+      setLoaded(next);
+    }
+  }, [
+    current,
+    data,
+    environmentId,
+    isPending,
+    isSuccess,
+    key,
+    loading,
+    reference,
+    registry,
+    wantedPaths,
+  ]);
 
   return {
     files: current.files,

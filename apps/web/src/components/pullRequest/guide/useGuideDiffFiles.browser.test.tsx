@@ -22,7 +22,7 @@ type PendingRead = {
   reject: (error: Error) => void;
 };
 const state = vi.hoisted(() => ({
-  pages: new Map<string | null, Atom.Writable<AsyncResult.AsyncResult<PullRequestDiffResult>>>(),
+  pages: new Map<string | null, Atom.Atom<AsyncResult.AsyncResult<PullRequestDiffResult>>>(),
   reads: [] as PendingRead[],
   renderStop: vi.fn<(props: ComponentProps<typeof GuideStop>) => null>(),
   readContents: vi.fn(),
@@ -87,11 +87,11 @@ const guide: PullRequestReviewGuide = {
 
 import { useGuideDiffFiles } from "./useGuideDiffFiles";
 
-function Probe({ wantedPaths }: { wantedPaths: string[] }) {
+function Probe({ wantedPaths, headSha = "new-head" }: { wantedPaths: string[]; headSha?: string }) {
   const diff = useGuideDiffFiles({
     environmentId: EnvironmentId.make("test"),
     reference: { projectId: ProjectId.make("project"), repository: "owner/repo", number: 1 },
-    headSha: "new-head",
+    headSha,
     wantedPaths,
   });
   return (
@@ -286,5 +286,85 @@ describe("guide whole-PR diff revisions", () => {
 
     await act(() => registry.set(first, AsyncResult.success(page("wanted.ts", "FRESH", null))));
     expect(result()).toEqual({ loading: false, files: [["wanted.ts", "FRESH\n"]] });
+  });
+});
+
+it("walks more cached pages than React's re-render limit and stops at the requested file", async () => {
+  using context = setup();
+  const registry = context.registry;
+  const pageCount = 30;
+  let revision = "head-A";
+  for (let index = 0; index < pageCount; index++) {
+    const last = index === pageCount - 1;
+    const atom = Atom.make((): AsyncResult.AsyncResult<PullRequestDiffResult> =>
+      AsyncResult.success(
+        page(last ? "wanted.ts" : `file-${index}.ts`, revision, `cursor-${index + 1}`),
+      ),
+    ).pipe(Atom.setIdleTTL(5 * 60_000));
+    state.pages.set(index === 0 ? null : `cursor-${index}`, atom);
+    registry.get(atom);
+  }
+  let pastPageReads = 0;
+  state.pages.set(
+    `cursor-${pageCount}`,
+    Atom.make((): AsyncResult.AsyncResult<PullRequestDiffResult> => {
+      pastPageReads++;
+      return AsyncResult.initial(true);
+    }),
+  );
+  await using screen = await render(
+    <RegistryContext.Provider value={registry}>
+      <Probe wantedPaths={["wanted.ts"]} headSha={revision} />
+    </RegistryContext.Provider>,
+  );
+  const result = () => JSON.parse(screen.container.querySelector("output")!.textContent!);
+  expect(result().loading).toBe(false);
+  expect(result().files).toContainEqual(["wanted.ts", "head-A\n"]);
+  expect(pastPageReads).toBe(0);
+
+  revision = "head-B";
+  await screen.rerender(
+    <RegistryContext.Provider value={registry}>
+      <Probe wantedPaths={["wanted.ts"]} headSha={revision} />
+    </RegistryContext.Provider>,
+  );
+  expect(result().loading).toBe(false);
+  expect(result().files).toHaveLength(pageCount);
+  expect(result().files.every(([, value]: [string, string]) => value === "head-B\n")).toBe(true);
+  expect(pastPageReads).toBe(0);
+});
+
+it("waits for a later cached page that is still refreshing", async () => {
+  using context = setup();
+  const registry = context.registry;
+  state.pages.set(
+    null,
+    Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(
+      AsyncResult.success(page("first.ts", "FIRST", "cursor-1")),
+    ),
+  );
+  const second = Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(
+    AsyncResult.success(page("other.ts", "STALE", "old-next"), { waiting: true }),
+  );
+  state.pages.set("cursor-1", second);
+  state.pages.set(
+    "old-next",
+    Atom.make<AsyncResult.AsyncResult<PullRequestDiffResult>>(AsyncResult.initial(true)),
+  );
+  await using screen = await render(
+    <RegistryContext.Provider value={registry}>
+      <Probe wantedPaths={["wanted.ts"]} />
+    </RegistryContext.Provider>,
+  );
+  const result = () => JSON.parse(screen.container.querySelector("output")!.textContent!);
+  expect(result()).toEqual({ loading: true, files: [["first.ts", "FIRST\n"]] });
+
+  await act(() => registry.set(second, AsyncResult.success(page("wanted.ts", "FRESH", null))));
+  expect(result()).toEqual({
+    loading: false,
+    files: [
+      ["first.ts", "FIRST\n"],
+      ["wanted.ts", "FRESH\n"],
+    ],
   });
 });
