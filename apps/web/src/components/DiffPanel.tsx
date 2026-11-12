@@ -1440,6 +1440,18 @@ export default function DiffPanel({
                 >
                   <AnnotatableCodeView
                     key={collapseScopeKey ?? reviewSectionId}
+                    workspace={
+                      activeThread && activeCwd
+                        ? {
+                            environmentId: activeThread.environmentId,
+                            cwd:
+                              (selectedTurn ? activeRepositoryRoot : branchDiffPreview.data?.cwd) ??
+                              activeRepositoryRoot ??
+                              activeCwd,
+                            mutationId: workspaceMutationId,
+                          }
+                        : null
+                    }
                     environmentId={activeThread?.environmentId}
                     projectId={activeThread?.projectId}
                     viewerRef={attachCodeView}
