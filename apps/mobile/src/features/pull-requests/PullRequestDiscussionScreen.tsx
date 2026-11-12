@@ -11,7 +11,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
-import type { PullRequestThreadComment } from "@t3tools/contracts";
+import { pullRequestConversationThreads, type PullRequestThreadComment } from "@t3tools/contracts";
 import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import { useRef, useState } from "react";
 import { ScrollView, View, type ScrollViewInstance } from "react-native";
@@ -61,7 +61,12 @@ function Discussion({ params }: { params: PullRequestParams & { readonly discuss
     reportFailure: false,
   });
   const loadMore = useAtomCommand(composerPullRequests.threadComments, { reportFailure: false });
-  const thread = activity.data?.reviewThreads.find((thread) => thread.id === params.discussionId);
+  const thread =
+    activity.data &&
+    pullRequestConversationThreads(activity.data).find(
+      (thread) => thread.id === params.discussionId,
+    );
+  const filePath = thread?.path ?? null;
   const [body, setBody] = useState("");
   const completions = usePullRequestCompletions({
     environmentId: params.environmentId,
@@ -201,20 +206,24 @@ function Discussion({ params }: { params: PullRequestParams & { readonly discuss
             {activity.isPending && !thread ? <AppActivityIndicator /> : null}
             {thread ? (
               <View className="gap-2 pb-4">
-                <Text selectable className="font-mono text-xs text-foreground-muted">
-                  {thread.path}
-                  {thread.line ? `:${thread.line}` : ""}
-                </Text>
+                {thread.path === null ? null : (
+                  <Text selectable className="font-mono text-xs text-foreground-muted">
+                    {thread.path}
+                    {thread.line ? `:${thread.line}` : ""}
+                  </Text>
+                )}
                 <Text className="text-xs text-foreground-muted">
                   {thread.isResolved ? "Resolved" : "Unresolved"}
                   {thread.isOutdated ? " · Outdated" : ""}
                 </Text>
-                <Button
-                  label="View file diff"
-                  onPress={() =>
-                    navigation.navigate("PullRequestFile", { ...params, path: thread.path })
-                  }
-                />
+                {filePath === null ? null : (
+                  <Button
+                    label="View file diff"
+                    onPress={() =>
+                      navigation.navigate("PullRequestFile", { ...params, path: filePath })
+                    }
+                  />
+                )}
               </View>
             ) : !activity.isPending ? (
               <Text>This discussion is no longer available.</Text>
