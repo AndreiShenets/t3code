@@ -53,6 +53,7 @@ const setup = Effect.gen(function* () {
   );
   const mcp = yield* Mcp.make.pipe(
     Effect.provideService(OpenCode2Server.OpenCode2Server, {
+      forget: Effect.void,
       withConnection: (use) =>
         use({ ...api, url: "http://opencode.test", version: "2.0.28", external: true }),
     }),
@@ -123,6 +124,7 @@ describe("OpenCode V2 MCP runtime management", () => {
       });
       const mcp = yield* Mcp.make.pipe(
         Effect.provideService(OpenCode2Server.OpenCode2Server, {
+          forget: Effect.void,
           withConnection: () => Effect.fail(cause),
         }),
       );
