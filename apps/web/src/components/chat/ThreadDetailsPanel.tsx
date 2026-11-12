@@ -4,8 +4,10 @@ import type {
   ProjectId,
   ProjectScript,
   ResolvedKeybindingsConfig,
+  ServerProvider,
   ThreadId,
 } from "@t3tools/contracts";
+import { supportsMcpManagement } from "@t3tools/client-runtime/mcpCommands";
 
 import type { DraftId } from "../../composerDraftStore";
 import { useT3ProjectFileScripts } from "../../hooks/useT3ProjectFileScripts";
@@ -22,6 +24,7 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { ThreadMcpControl } from "./ThreadMcpControl";
 import { ThreadServersPanel } from "./ThreadServersPanel";
 import {
   ThreadDetailsContext,
@@ -61,6 +64,7 @@ interface ThreadDetailsPanelProps extends Pick<
   showOpenInPicker: boolean;
   openInShortcutEnabled: boolean;
   gitCwd: string | null;
+  mcpProvider: ServerProvider | null;
   workspaceMutationId: string | null;
   isGitRepo: boolean;
   envLocked: boolean;
@@ -154,6 +158,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
           environment: density === "full" && visible.environment,
           openIn: density !== "essential" && visible.openIn && props.showOpenInPicker,
           scripts: visible.scripts && props.activeProjectScripts !== undefined,
+          mcp: props.gitCwd !== null && supportsMcpManagement(props.mcpProvider),
           branch: props.gitCwd !== null && props.isGitRepo && visible.branch,
           git:
             props.gitCwd !== null &&
@@ -163,7 +168,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         return (
           <>
             <div className="group/details-items">
-              {show.environment || show.openIn || show.scripts ? (
+              {show.environment || show.openIn || show.scripts || show.mcp ? (
                 <ThreadDetailsSection
                   headingId="thread-details-workspace-heading"
                   title="Workspace"
@@ -209,6 +214,16 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                         onDeleteScript={props.onDeleteProjectScript}
                       />
                     ) : null}
+                    <ThreadMcpControl
+                      key={JSON.stringify([
+                        props.environmentId,
+                        props.mcpProvider?.instanceId,
+                        props.gitCwd,
+                      ])}
+                      environmentId={props.environmentId}
+                      provider={props.mcpProvider}
+                      cwd={props.gitCwd}
+                    />
                   </div>
                 </ThreadDetailsSection>
               ) : null}
