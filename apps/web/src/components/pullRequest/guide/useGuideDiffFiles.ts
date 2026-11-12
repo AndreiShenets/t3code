@@ -84,6 +84,7 @@ export function useGuideDiffFiles({
           result = registry.get(atom);
         }
       }
+      if (next === current && (isPending || !isSuccess || data === null)) break;
       if (result.waiting || !AsyncResult.isSuccess(result)) break;
       const page = result.value;
       const parsed = getRenderablePatch(
