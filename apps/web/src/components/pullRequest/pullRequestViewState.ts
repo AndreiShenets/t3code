@@ -29,7 +29,7 @@ export interface PullRequestViewState {
     foldChoices: FileDiffFoldChoices;
     foldOverride: DiffFoldOverride;
     visibleCommitCount: number;
-    wordWrap: boolean;
+    wordWrap: boolean | null;
     ignoreWhitespace: boolean;
     draft?: PullRequestDraftAnchor | null;
     draftText?: string;
