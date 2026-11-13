@@ -34,6 +34,8 @@ import * as Schema from "effect/Schema";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
 import { AboutVersionTitle } from "./AboutVersionTitle";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
+import { CustomBuildSettingsRow } from "./CustomBuildSettingsRow";
+import { useCustomBuildUpdate } from "../../hooks/useCustomBuildUpdate";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
 import {
   canCheckForUpdate,
@@ -158,6 +160,7 @@ const QUIT_CONFIRMATION_MODE_LABELS: Record<QuitConfirmationMode, string> = {
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
 function AboutVersionSection() {
   const updateState = useDesktopUpdateState();
+  const { state: customBuildState } = useCustomBuildUpdate();
   const [switchChannel, setSwitchChannel] = useState<DesktopUpdateChannel | null>(null);
   const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
   const { environments } = useEnvironments();
@@ -183,7 +186,9 @@ function AboutVersionSection() {
   // A switch that failed part way leaves this app or a server on the other track.
   // With its updater off, a switch cannot move this app, so it is not counted.
   const appOffTrack =
-    updateState?.enabled !== false && desktopUpdateChannelOf(APP_VERSION) !== selectedUpdateChannel;
+    updateState?.enabled !== false &&
+    !(customBuildState?.currentBuild && selectedUpdateChannel === "nightly") &&
+    desktopUpdateChannelOf(APP_VERSION) !== selectedUpdateChannel;
   const unswitchedMachines =
     (appOffTrack ? 1 : 0) +
     environments.filter(
@@ -420,6 +425,7 @@ function AboutVersionSection() {
         />
       ) : null}
       {hasDesktopBridge ? <CliCommandSettingsRow /> : null}
+      {hasDesktopBridge ? <CustomBuildSettingsRow /> : null}
       {switchChannel === null ? null : (
         <UpdateTrackSwitchDialog channel={switchChannel} onClose={() => setSwitchChannel(null)} />
       )}

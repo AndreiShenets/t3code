@@ -205,9 +205,8 @@ export function normalizeMainWindowBounds(value: unknown): DesktopWindowBounds |
 
 function normalizeDesktopSettingsDocument(
   parsed: DesktopSettingsDocument,
-  appVersion: string,
+  defaultSettings: DesktopSettings,
 ): DesktopSettings {
-  const defaultSettings = resolveDefaultDesktopSettings(appVersion);
   const mainWindowBounds = normalizeMainWindowBounds(parsed.mainWindowBounds);
   const parsedUpdateChannel = Option.fromNullishOr(parsed.updateChannel);
   const isLegacySettings = parsed.updateChannelConfiguredByUser === undefined;
@@ -385,10 +384,8 @@ function applyWslWindowsFallback(settings: DesktopSettings): DesktopSettings {
 function readSettings(
   fileSystem: FileSystem.FileSystem,
   settingsPath: string,
-  appVersion: string,
+  defaultSettings: DesktopSettings,
 ): Effect.Effect<DesktopSettings, PlatformError.PlatformError> {
-  const defaultSettings = resolveDefaultDesktopSettings(appVersion);
-
   return fileSystem.readFileString(settingsPath).pipe(
     Effect.asSome,
     Effect.catchIf(
@@ -400,7 +397,7 @@ function readSettings(
         onNone: () => Effect.succeed(defaultSettings),
         onSome: (raw) =>
           decodeDesktopSettingsJson(raw).pipe(
-            Effect.map((parsed) => normalizeDesktopSettingsDocument(parsed, appVersion)),
+            Effect.map((parsed) => normalizeDesktopSettingsDocument(parsed, defaultSettings)),
             Effect.orElseSucceed(() => defaultSettings),
           ),
       }),
@@ -529,7 +526,7 @@ export const make = Effect.gen(function* () {
       const settings = yield* readSettings(
         fileSystem,
         environment.desktopSettingsPath,
-        environment.appVersion,
+        environment.defaultDesktopSettings,
       ).pipe(
         Effect.catch((cause) =>
           Effect.logWarning(
@@ -538,7 +535,7 @@ export const make = Effect.gen(function* () {
           ).pipe(
             Effect.annotateLogs({ settingsPath: environment.desktopSettingsPath }),
             Effect.andThen(Ref.set(persistenceEnabled, false)),
-            Effect.as(resolveDefaultDesktopSettings(environment.appVersion)),
+            Effect.as(environment.defaultDesktopSettings),
           ),
         ),
       );
