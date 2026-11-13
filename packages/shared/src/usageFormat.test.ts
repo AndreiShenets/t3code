@@ -8,6 +8,7 @@ import {
   formatHourShort,
   formatPercent,
   formatRelativeHourShort,
+  formatTokens,
   makeWindow,
   usageSourceMessages,
 } from "./usageFormat.ts";
@@ -360,5 +361,13 @@ describe("multi-day usage windows", () => {
     expect(window.untilDay).toBe("2026-10-17");
     expect(window.sinceTime).toBeUndefined();
     expect(window.untilTime).toBeUndefined();
+  });
+});
+
+describe("token formatting", () => {
+  it("moves to the next unit when rounding reaches it", () => {
+    expect(formatTokens(999_999)).toBe("1M");
+    expect(formatTokens(999_999_999)).toBe("1B");
+    expect(formatTokens(-999_999)).toBe("-1M");
   });
 });
