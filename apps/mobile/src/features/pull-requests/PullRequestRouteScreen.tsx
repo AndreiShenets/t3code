@@ -1,3 +1,4 @@
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import {
   parsePullRequestAnchor,
   pullRequestAnchorMatchesUrl,
@@ -230,7 +231,7 @@ function PullRequestIdentity(props: {
       <View className="flex-row items-center gap-2">
         <PullRequestAvatar actor={pr.author ?? null} size={20} />
         <Text className="min-w-0 flex-1 text-xs font-t3-medium" numberOfLines={1}>
-          {pr.author?.login ?? "Unknown author"}
+          {getPullRequestActorName(pr.author, "Unknown author")}
         </Text>
         <Text className="shrink text-right text-2xs text-foreground-muted" numberOfLines={1}>
           Updated <RelativeTime timestamp={pr.updatedAt} /> ago
@@ -1046,6 +1047,7 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
     if (!row || !file || !diffHead.sha || !canCommentOnDiff) return;
     const position = reviewPosition(row);
     if (!position) return;
+    const snapshot = result.snapshotForPath(file.path);
     const oldPath =
       parsed.kind === "files"
         ? parsed.files.find((entry) => entry.id === file.id)?.previousPath
@@ -1057,7 +1059,8 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
       path: file.path,
       ...(oldPath ? { oldPath } : {}),
       position,
-      headSha: diffHead.sha,
+      headSha: snapshot?.headSha ?? diffHead.sha,
+      ...(snapshot?.baseSha ? { baseSha: snapshot.baseSha } : {}),
       code: row.content ?? "",
     });
   };
