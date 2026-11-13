@@ -262,6 +262,14 @@ import { useSoftwareKeyboardOpen } from "../../hooks/useSoftwareKeyboardOpen";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { usePanelAnimationSettings } from "../../panelAnimations";
 import { readEnvironmentScope, readPreparedConnection } from "../../state/session";
+import {
+  MCP_COMMAND_USAGE,
+  parseMcpCommand,
+  supportsMcpManagement,
+  type McpCommand,
+  type McpManagementRequest,
+} from "@t3tools/client-runtime/mcpCommands";
+import { ComposerMcpDialog } from "./McpServerControls";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
 import { useComposerRestingTransition } from "./useComposerRestingTransition";
 import { ComposerCommandMenuLayer } from "./ComposerCommandMenuLayer";
@@ -931,6 +939,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         (multipleModelSelections === null ? providerSendBlockReason : null)));
   const isSendDisabled = sendDisabledReason !== null;
   const selectedProviderStatus = selectedProviderEntry?.snapshot ?? null;
+  const mcpAvailable = supportsMcpManagement(selectedProviderStatus) && gitCwd !== null;
+  const [mcpRequest, setMcpRequest] = useState<McpManagementRequest | null>(null);
+  const mcpTarget = gitCwd ? { instanceId: selectedInstanceId, cwd: gitCwd } : null;
+  const openMcp = (command: Exclude<McpCommand, { action: "invalid" }>) => {
+    if (mcpTarget) setMcpRequest({ environmentId, target: mcpTarget, command });
+  };
   const selectedProviderSkills = selectedProviderStatus
     ? resolveProviderSkillsForCwd(selectedProviderStatus, gitCwd)
     : NO_PROVIDER_SKILLS;
@@ -1118,6 +1132,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     pullRequestProjectId,
     pullRequestRepository,
     threadPullRequests,
+    mcpAvailable,
     sideChatAvailable: props.sideChatAvailable === true,
     sideChatDisabledReason: props.sideChatDisabledReason ?? null,
     freshSessionAvailable: props.onFreshSession !== undefined,
@@ -1899,6 +1914,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
     if (item.type === "slash-command") {
+      if (item.command === "mcp") {
+        const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
+          expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+          focusEditorAfterReplace: false,
+        });
+        if (applied) {
+          setComposerHighlightedItemId(null);
+          openMcp({ action: "list" });
+        }
+        return;
+      }
       if (item.command === "model") {
         const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
           expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
@@ -2116,6 +2142,23 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (voiceInputActive) {
       event?.preventDefault();
       submitAfterDictation(() => submitComposerRef.current(dispatchMode, submissionIntent));
+      return false;
+    }
+    const mcp = activePendingProgress ? null : parseMcpCommand(promptRef.current);
+    if (mcp !== null) {
+      event?.preventDefault();
+      if (!mcpAvailable || !mcpTarget) {
+        setComposerSubmissionError("MCP management requires OpenCode V2 and a workspace.");
+      } else if (mcp.action === "invalid") {
+        setComposerSubmissionError(MCP_COMMAND_USAGE);
+      } else if (composerImagesRef.current.length > 0 || composerFilesRef.current.length > 0) {
+        setComposerSubmissionError("Remove attachments before running an MCP command.");
+      } else {
+        setComposerSubmissionError(null);
+        openMcp(mcp);
+        setPrompt("");
+        promptRef.current = "";
+      }
       return false;
     }
     if (submissionBlocked || !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) {
@@ -3329,6 +3372,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
+      {mcpRequest ? (
+        <ComposerMcpDialog
+          key={JSON.stringify([mcpRequest.environmentId, mcpRequest.target])}
+          {...mcpRequest}
+          onClose={() => setMcpRequest(null)}
+        />
+      ) : null}
       <ComposerBanner.Dock>
         <ComposerBanner.Column>
           <ComposerBannerStack items={shelfItems} />

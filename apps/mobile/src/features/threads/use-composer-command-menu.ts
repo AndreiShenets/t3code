@@ -66,6 +66,7 @@ import {
 import type { ModelOption } from "../../lib/modelOptions";
 import type { ComposerCommandItem } from "./ComposerCommandPopover";
 import { matchesSlashSkillQuery } from "./composerSlashSkillSearch";
+import { supportsMcpManagement } from "@t3tools/client-runtime/mcpCommands";
 
 const idleWorkspaceSnapshotRefreshAtom: Atom.Atom<unknown> = Atom.make<void>(undefined).pipe(
   Atom.withLabel("mobile:provider-workspace-snapshot-refresh:idle"),
@@ -105,20 +106,33 @@ export function buildComposerSlashCommandItems(input: {
   /** T3's `/clear` replaces the provider's, which would clear a session T3 still treats as live. */
   readonly offersFreshSession?: boolean;
   readonly offersSideChat?: boolean;
-  readonly selectedProviderStatus: Pick<ServerProvider, "driver" | "slashCommands"> | null;
+  readonly selectedProviderStatus:
+    | (Pick<ServerProvider, "driver" | "slashCommands"> &
+        Partial<Pick<ServerProvider, "version" | "enabled">>)
+    | null;
 }): ComposerCommandItem[] {
   const query = input.query.toLowerCase();
-  const items: ComposerCommandItem[] = "model".includes(query)
-    ? [
-        {
-          id: "cmd:model",
-          type: "slash-command",
-          command: "model",
-          label: "/model",
-          description: "Switch model",
-        },
-      ]
-    : [];
+  const builtIn = [
+    ...(supportsMcpManagement(input.selectedProviderStatus)
+      ? [
+          {
+            id: "cmd:mcp",
+            type: "slash-command" as const,
+            command: "mcp",
+            label: "/mcp",
+            description: "Manage MCP connections for this workspace",
+          },
+        ]
+      : []),
+    {
+      id: "cmd:model",
+      type: "slash-command",
+      command: "model",
+      label: "/model",
+      description: "Switch model",
+    },
+  ] satisfies ComposerCommandItem[];
+  const items: ComposerCommandItem[] = builtIn.filter((item) => item.command.includes(query));
 
   // Providers expand commands only at the start of a message. T3 commands
   // change local state and do not have this restriction, except `/clear`.
@@ -255,6 +269,7 @@ export function useComposerCommandMenu({
   enabled = true,
   onChangeDraftMessage,
   onUsageLimits,
+  onMcp,
   modelOptions,
   modelProviders,
   onFreshSession,
@@ -279,6 +294,7 @@ export function useComposerCommandMenu({
   readonly enabled?: boolean;
   readonly onChangeDraftMessage: (value: string) => void;
   readonly onUsageLimits?: () => void;
+  readonly onMcp?: () => void;
   readonly modelOptions?: ReadonlyArray<ModelOption>;
   readonly modelProviders?: ReadonlyArray<ServerProvider>;
   /** Arms a fresh session for the next message; absent where `/clear` is unavailable. */
@@ -642,6 +658,14 @@ export function useComposerCommandMenu({
       setSelection({ start: cleared.cursor, end: cleared.cursor });
       onChangeDraftMessage(cleared.text);
       onUsageLimits();
+      return;
+    }
+
+    if (item.type === "slash-command" && item.command === "mcp" && onMcp) {
+      const cleared = replaceTextRange(draftMessage, trigger.rangeStart, trigger.rangeEnd, "");
+      setSelection({ start: cleared.cursor, end: cleared.cursor });
+      onChangeDraftMessage(cleared.text);
+      onMcp();
       return;
     }
 
