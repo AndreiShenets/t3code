@@ -24,6 +24,7 @@ import {
 import * as Schema from "effect/Schema";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
+import { useDiffSearchShortcut } from "./diffs/useDiffSearchShortcut";
 import { useCodeViewScrollRestore } from "./diffs/useCodeViewScrollRestore";
 import { useFilesystemReadAccess } from "~/state/filesystem";
 import { useOpenInPreferredEditor } from "../editorPreferences";
@@ -256,6 +257,8 @@ export default function DiffPanel({
   // The open commit menu keeps the list it opened with, so rows do not move under the pointer.
   const [openCommitMenu, setOpenCommitMenu] = useState<ReviewBranchCommitsResult | null>(null);
   const [codeViewRevision, setCodeViewRevision] = useState(0);
+  const [codeView, setCodeView] = useState<AnnotatableCodeViewHandle | null>(null);
+  useDiffSearchShortcut(codeView);
 
   const routeThreadRef = useThreadRouteRef();
   const activeThreadId = routeThreadRef?.threadId ?? null;
@@ -719,6 +722,7 @@ export default function DiffPanel({
   const attachCodeView = useStableCallback((handle: AnnotatableCodeViewHandle | null) => {
     codeViewScroll.attach(handle);
     codeViewReveal.attach(handle);
+    setCodeView(handle);
   });
   const flushCodeView = useStableCallback(() => {
     codeViewScroll.flush();
