@@ -29,6 +29,8 @@ import {
 import * as Schema from "effect/Schema";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
+import { useDiffSearchShortcut } from "./diffs/useDiffSearchShortcut";
+import { DiffFileFilter, useDiffFileFilter } from "./diffs/DiffFileFilter";
 import { useCodeViewScrollRestore } from "./diffs/useCodeViewScrollRestore";
 import { useFilesystemReadAccess } from "~/state/filesystem";
 import { useOpenInPreferredEditor } from "../editorPreferences";
@@ -261,6 +263,9 @@ export default function DiffPanel({
   // The open commit menu keeps the list it opened with, so rows do not move under the pointer.
   const [openCommitMenu, setOpenCommitMenu] = useState<ReviewBranchCommitsResult | null>(null);
   const [codeViewRevision, setCodeViewRevision] = useState(0);
+  const [codeView, setCodeView] = useState<AnnotatableCodeViewHandle | null>(null);
+  const fileFilter = useDiffFileFilter();
+  useDiffSearchShortcut(codeView);
 
   const routeThreadRef = useThreadRouteRef();
   const activeThreadId = routeThreadRef?.threadId ?? null;
@@ -682,7 +687,10 @@ export default function DiffPanel({
   // Hiding is display-only: lazy loading indexes into the full list. A requested file stays visible.
   const isFileShown = (file: FileDiffMetadata) => {
     const path = resolveFileDiffPath(file);
-    return !hideTestFiles || path === selectedFilePath || !isTestChangedFile(path);
+    return (
+      path === selectedFilePath ||
+      ((!hideTestFiles || !isTestChangedFile(path)) && fileFilter.matchesFile(file))
+    );
   };
   const shownFileEntries = renderableFileEntries.filter(({ fileDiff }) => isFileShown(fileDiff));
   const shownFileKeys = shownFileEntries.map((file) => file.fileKey);
@@ -729,6 +737,7 @@ export default function DiffPanel({
   const attachCodeView = useStableCallback((handle: AnnotatableCodeViewHandle | null) => {
     codeViewScroll.attach(handle);
     codeViewReveal.attach(handle);
+    setCodeView(handle);
   });
   const flushCodeView = useStableCallback(() => {
     codeViewScroll.flush();
@@ -1325,6 +1334,14 @@ export default function DiffPanel({
 
   return (
     <DiffPanelShell mode={mode} header={headerRow}>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-border/60 px-4 py-1">
+        {fileFilter.active && selectedFilePath && !fileFilter.matches(selectedFilePath) ? (
+          <span className="text-xs text-muted-foreground">Selected file shown outside filter</span>
+        ) : null}
+        <div className="w-full max-w-80">
+          <DiffFileFilter value={fileFilter.value} onChange={fileFilter.setValue} />
+        </div>
+      </div>
       {!activeThread ? (
         <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">
           Select a thread to inspect turn diffs.
@@ -1420,7 +1437,7 @@ export default function DiffPanel({
             ) : lazySource || renderablePatch?.kind === "files" ? (
               <div className="flex min-h-0 flex-1 overflow-hidden">
                 <div
-                  className="min-h-0 min-w-0 flex-1"
+                  className="relative min-h-0 min-w-0 flex-1"
                   onClickCapture={(event) => {
                     const headerFilePath = diffHeaderTogglePath(event.nativeEvent);
                     if (!headerFilePath) return;
@@ -1449,6 +1466,11 @@ export default function DiffPanel({
                     );
                   }}
                 >
+                  {codeViewFiles.length === 0 && fileFilter.active ? (
+                    <p className="pointer-events-none absolute inset-x-0 top-0 z-10 px-4 py-5 text-sm text-muted-foreground">
+                      No matching files.
+                    </p>
+                  ) : null}
                   <AnnotatableCodeView
                     key={collapseScopeKey ?? reviewSectionId}
                     workspace={

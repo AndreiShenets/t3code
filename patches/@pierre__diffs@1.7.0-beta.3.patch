@@ -17,7 +17,7 @@ index 774c1abbf4c00586b4fd3af0bf525a5d7c45d015..8e27d2982f5c593e7204bc8fdae9a7ad
     * Return an in-memory retention key for an item's editable draft and
     * undo/redo history. Called only when CodeView creates the item's editor.
 diff --git a/dist/components/CodeView.js b/dist/components/CodeView.js
-index 6ee5032aee523b4c3e10f70202874f141f28ff10..94cd3f4b2e16490994707c28fa45c4f43f0c6065 100644
+index 6ee5032aee523b4c3e10f70202874f141f28ff10..3f13332ba5bcd42bd6d73d44aadd2157a160e486 100644
 --- a/dist/components/CodeView.js
 +++ b/dist/components/CodeView.js
 @@ -213,7 +213,8 @@ var CodeView = class CodeView {
@@ -335,6 +335,34 @@ index a9905d43382de2ca03d6111ba9ab3725d8cb6981..294f537622b9a62d89111d7ed4a7c07c
  		}
  		if (this.#selections !== void 0 || this.#matches !== void 0 || this.#markerRenderer !== void 0) {
  			this.#updateSelections(this.#selections ?? []);
+diff --git a/dist/editor/platform.js b/dist/editor/platform.js
+index e425c8a258a03d0f89ab44482fdd5b0c15d2637c..515038db7ddc44251ec5b14aa5d67d76fa93b902 100644
+--- a/dist/editor/platform.js
++++ b/dist/editor/platform.js
+@@ -21,6 +21,10 @@ function isMoveCursorShortcut(e) {
+ 		else if (e.key === "Home") return "start";
+ 		else if (e.key === "End") return "end";
+ 	}
++	if (isMac && e.altKey && !e.ctrlKey && !e.metaKey) {
++		if (e.key === "ArrowLeft") return "wordLeft";
++		else if (e.key === "ArrowRight") return "wordRight";
++	}
+ 	if (!e.altKey && isPrimaryModifier(e, isMac)) {
+ 		if (e.key === "ArrowLeft") return isMac ? "textStart" : "wordLeft";
+ 		else if (e.key === "ArrowRight") return isMac ? "end" : "wordRight";
+diff --git a/dist/editor/selection.js b/dist/editor/selection.js
+index 79b7dd8e6cb55d098d43b251fc287a8fe67de782..e2a55bfae85c0739e09b20825d68974a45a22065 100644
+--- a/dist/editor/selection.js
++++ b/dist/editor/selection.js
+@@ -129,7 +129,7 @@ function mapCursorMove(textDocument, selections, shortcut, options = {}) {
+ 				if (line < maxLine) line = options.resolveRenderableLine == null ? line + 1 : Math.min(options.resolveRenderableLine(line + 1, "down") ?? line, maxLine);
+ 				else character = textDocument.getLineLength(line);
+ 			}
+-		} else if (isCollapsedSelection(selection)) {
++		} else if (isCollapsedSelection(selection) || shortcut === "wordLeft" || shortcut === "wordRight") {
+ 			const lineLength = textDocument.getLineLength(line);
+ 			character = Math.min(character, lineLength);
+ 			if (shortcut === "left" || shortcut === "wordLeft") {
 diff --git a/dist/editor/textMeasure.d.ts b/dist/editor/textMeasure.d.ts
 index 89e938d89eca77d351aeed65f3c5495383effd97..cde1d6ba89a97bbb1614754a48f8994388c186bd 100644
 --- a/dist/editor/textMeasure.d.ts
