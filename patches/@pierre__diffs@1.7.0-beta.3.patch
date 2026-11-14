@@ -1,5 +1,5 @@
 diff --git a/dist/components/CodeView.d.ts b/dist/components/CodeView.d.ts
-index 774c1ab..8e27d29 100644
+index 774c1abbf4c00586b4fd3af0bf525a5d7c45d015..8e27d2982f5c593e7204bc8fdae9a7ad5e8a85e4 100644
 --- a/dist/components/CodeView.d.ts
 +++ b/dist/components/CodeView.d.ts
 @@ -166,6 +166,13 @@ interface CodeViewOptions<LAnnotation, Caret> extends CodeViewPassThroughOptions
@@ -17,7 +17,7 @@ index 774c1ab..8e27d29 100644
     * Return an in-memory retention key for an item's editable draft and
     * undo/redo history. Called only when CodeView creates the item's editor.
 diff --git a/dist/components/CodeView.js b/dist/components/CodeView.js
-index 6ee5032..c3f183b 100644
+index 6ee5032aee523b4c3e10f70202874f141f28ff10..3f13332ba5bcd42bd6d73d44aadd2157a160e486 100644
 --- a/dist/components/CodeView.js
 +++ b/dist/components/CodeView.js
 @@ -213,7 +213,8 @@ var CodeView = class CodeView {
@@ -30,7 +30,7 @@ index 6ee5032..c3f183b 100644
  	};
  	searchMatchesDirty = false;
  	searchHighlighter;
-@@ -593,12 +594,32 @@ var CodeView = class CodeView {
+@@ -593,10 +594,29 @@ var CodeView = class CodeView {
  		this.searchState.centerNavigation = false;
  		this.searchMatchesDirty = false;
  		this.searchState.pendingHorizontalReveal = false;
@@ -38,7 +38,6 @@ index 6ee5032..c3f183b 100644
 +	}
 +	/** T3 patch: whether a diff match sits in collapsed context. Deletion cells carry their row's addition line. */
 +	isSearchMatchHidden(item, match) {
-+		if (match.headerField != null) return false;
 +		const lineNumber = match.side === "additions" ? match.lineNumber : match.revealLineNumber;
 +		return item.type === "diff" && lineNumber != null && !item.instance.isLineRenderable(lineNumber);
 +	}
@@ -60,21 +59,11 @@ index 6ee5032..c3f183b 100644
 -		if (item == null || item.type === "diff" && match.side === "additions" && !item.instance.isLineRenderable(match.lineNumber)) return false;
 +		if (item == null || this.isSearchMatchHidden(item, match)) return false;
  		const rect = this.getScrollTargetRect({
--			type: "line",
-+			type: match.headerField != null ? "item" : "line",
+ 			type: "line",
  			id: match.itemId,
- 			lineNumber: match.lineNumber,
- 			side: match.side,
-@@ -615,14 +636,28 @@ var CodeView = class CodeView {
- 	scrollToSearchMatch(match) {
+@@ -616,13 +636,21 @@ var CodeView = class CodeView {
  		this.searchState.pendingHorizontalReveal = true;
  		this.searchState.current = match;
-+		if (match.headerField != null) {
-+			this.searchState.pendingReveal = void 0;
-+			this.scrollTo({ type: "item", id: match.itemId, align: "start", offset: 48 + this.getStickyHeaderOffset(), behavior: this.options.searchOptions?.scrollBehavior ?? "smooth-auto" });
-+			this.render();
-+			return;
-+		}
  		this.render();
 -		if (!this.searchState.centerNavigation && this.isSearchMatchInView(match)) {
 +		const item = this.idToItem.get(match.itemId);
@@ -97,22 +86,7 @@ index 6ee5032..c3f183b 100644
  		this.scrollTo({
  			type: "line",
  			id: match.itemId,
-@@ -708,7 +743,13 @@ var CodeView = class CodeView {
- 			const item = this.items[index];
- 			const root = item.element?.shadowRoot;
- 			const itemMatches = this.searchState.matchesByItem.get(item.item.id);
--			if (root != null && itemMatches != null) highlighter.paint(root, (lineNumber, side) => itemMatches.get(`${side}:${lineNumber}`)?.map((match) => ({
-+			if (root == null || itemMatches == null) continue;
-+			for (const field of ["prevName", "name"]) {
-+				const element = root.querySelector(field === "name" ? "[data-title]" : "[data-prev-name]");
-+				const matches = itemMatches.get(`header:${field}`);
-+				if (element != null && matches != null) highlighter.paintLine(element, matches.map((match) => ({ ...match, current: this.searchState.current != null && areCodeViewSearchMatchesEqual(match, this.searchState.current) })));
-+			}
-+			highlighter.paint(root, (lineNumber, side) => itemMatches.get(`${side}:${lineNumber}`)?.map((match) => ({
- 				startCharacter: match.startCharacter,
- 				endCharacter: match.endCharacter,
- 				current: this.searchState.current != null && areCodeViewSearchMatchesEqual(match, this.searchState.current)
-@@ -732,19 +773,22 @@ var CodeView = class CodeView {
+@@ -732,9 +760,12 @@ var CodeView = class CodeView {
  		for (const item of items) {
  			const remaining = MAX_SEARCH_MATCHES - matches.length;
  			if (remaining <= 0) break;
@@ -126,10 +100,7 @@ index 6ee5032..c3f183b 100644
  			for (const match of nextMatches) {
  				const canBeRendered = firstVisible == null && bounds != null;
  				const canBeAfter = firstAfterRendered == null && lastRenderedItem != null && item.index >= lastRenderedItem.index;
--				const position = canBeRendered || canBeAfter && item === lastRenderedItem ? this.getLineScrollPosition(item, {
-+				const position = match.headerField != null ? { top: 0, height: this.itemMetricsCache.diffHeaderHeight } : canBeRendered || canBeAfter && item === lastRenderedItem ? this.getLineScrollPosition(item, {
- 					type: "line",
- 					id: match.itemId,
+@@ -744,7 +775,7 @@ var CodeView = class CodeView {
  					lineNumber: match.lineNumber,
  					side: match.side
  				}) : void 0;
@@ -138,7 +109,7 @@ index 6ee5032..c3f183b 100644
  					firstRendered ??= matches.length;
  					if (this.isSearchMatchInView(match)) firstVisible = matches.length;
  				}
-@@ -791,9 +835,16 @@ var CodeView = class CodeView {
+@@ -791,9 +822,10 @@ var CodeView = class CodeView {
  		const fileDiff = doc == null ? item.item.fileDiff : item.instance.getDiffForSearch() ?? item.item.fileDiff;
  		const scoped = this.searchState.scope?.itemId === item.item.id;
  		const diffStyle = this.options.diffStyle ?? "split";
@@ -147,17 +118,11 @@ index 6ee5032..c3f183b 100644
 +		const expandedHunks = scoped || this.options.expandUnchanged === true || this.options.onRevealSearchMatch != null ? true : item.instance.getExpandedHunksForSearch();
  		const lines = [];
 -		const addLine = (side, line) => {
-+		if (!scoped) {
-+			for (const headerField of fileDiff.prevName != null && fileDiff.prevName !== fileDiff.name ? ["prevName", "name"] : ["name"]) lines.push({
-+				text: fileDiff[headerField],
-+				metadata: { itemId: item.item.id, itemType: "diff", headerField, side: void 0, lineNumber: 0, lineIndex: -1 }
-+			});
-+		}
 +		const addLine = (side, line, revealLineNumber) => {
  			if (line === void 0) return;
  			const sourceLines = side === "additions" ? fileDiff.additionLines : fileDiff.deletionLines;
  			const text = side === "additions" && doc != null ? doc.getLineText(line.lineIndex, true) : sourceLines[line.lineIndex];
-@@ -805,7 +856,8 @@ var CodeView = class CodeView {
+@@ -805,7 +837,8 @@ var CodeView = class CodeView {
  					itemType: "diff",
  					side,
  					lineNumber: line.lineNumber,
@@ -167,7 +132,7 @@ index 6ee5032..c3f183b 100644
  				}
  			});
  		};
-@@ -824,7 +876,7 @@ var CodeView = class CodeView {
+@@ -824,7 +857,7 @@ var CodeView = class CodeView {
  					else addLine("deletions", deletionLine);
  					return;
  				}
@@ -176,7 +141,7 @@ index 6ee5032..c3f183b 100644
  				addLine("additions", additionLine);
  			}
  		});
-@@ -1081,6 +1133,9 @@ var CodeView = class CodeView {
+@@ -1081,6 +1114,9 @@ var CodeView = class CodeView {
  		this.resetSearchState();
  		if (searchPanel == null) return;
  		searchPanel.cleanup();
@@ -186,7 +151,7 @@ index 6ee5032..c3f183b 100644
  		const { onSearchStateChange } = this.options;
  		onSearchStateChange?.(void 0);
  	}
-@@ -2239,6 +2294,7 @@ var CodeView = class CodeView {
+@@ -2239,6 +2275,7 @@ var CodeView = class CodeView {
  		if (measured) this.validateStickyContainerHeight();
  		this.fixContainerFocus();
  		this.paintSearchHighlights();
@@ -194,7 +159,7 @@ index 6ee5032..c3f183b 100644
  		if (this.pendingScrollTarget == null) this.finishPendingScroll("settled");
  		if (fitPerfectly || this.scrollAnimation != null || this.renderState.measurementsPending) this.render();
  	};
-@@ -2340,6 +2396,7 @@ var CodeView = class CodeView {
+@@ -2340,6 +2377,7 @@ var CodeView = class CodeView {
  	clearPendingScroll = (event) => {
  		if (event != null && !isUserScrollInput(event)) return;
  		if (event != null) this.searchState.pendingHorizontalReveal = false;
@@ -202,15 +167,8 @@ index 6ee5032..c3f183b 100644
  		this.pendingLayoutAnchor = void 0;
  		this.cancelScroll();
  	};
-@@ -2740,4 +2797,4 @@ function getSlotItems(renderedItems, { hasHeaderRenderers, hasAnnotationRenderer
- //#endregion
- export { CODE_VIEW_DIFF_OPTION_KEYS, CODE_VIEW_FILE_OPTION_KEYS, CodeView };
- 
--//# sourceMappingURL=CodeView.js.map
-\ No newline at end of file
-+//# sourceMappingURL=CodeView.js.map
 diff --git a/dist/components/FileDiff.js b/dist/components/FileDiff.js
-index 734ff98..f18798a 100644
+index 734ff9862cdfe65b8082599c6c221c4886436e01..f18798a3d56dd0749550b5aff62a06fb0513b28e 100644
 --- a/dist/components/FileDiff.js
 +++ b/dist/components/FileDiff.js
 @@ -1,7 +1,8 @@
@@ -260,7 +218,7 @@ index 734ff98..f18798a 100644
  			} catch (error) {
  				if (disableErrorHandling) throw error;
 diff --git a/dist/components/VirtualizedFileDiff.js b/dist/components/VirtualizedFileDiff.js
-index 984f049..4d65999 100644
+index 984f049ff3694dd353fa6637b0f09fc7dce74992..4d6599905be0fe7b5b5c1a225c0b3ff8d810c72a 100644
 --- a/dist/components/VirtualizedFileDiff.js
 +++ b/dist/components/VirtualizedFileDiff.js
 @@ -264,7 +264,8 @@ var VirtualizedFileDiff = class extends FileDiff {
@@ -378,7 +336,7 @@ index a9905d43382de2ca03d6111ba9ab3725d8cb6981..294f537622b9a62d89111d7ed4a7c07c
  		if (this.#selections !== void 0 || this.#matches !== void 0 || this.#markerRenderer !== void 0) {
  			this.#updateSelections(this.#selections ?? []);
 diff --git a/dist/editor/platform.js b/dist/editor/platform.js
-index e425c8a..515038d 100644
+index e425c8a258a03d0f89ab44482fdd5b0c15d2637c..515038db7ddc44251ec5b14aa5d67d76fa93b902 100644
 --- a/dist/editor/platform.js
 +++ b/dist/editor/platform.js
 @@ -21,6 +21,10 @@ function isMoveCursorShortcut(e) {
@@ -392,15 +350,8 @@ index e425c8a..515038d 100644
  	if (!e.altKey && isPrimaryModifier(e, isMac)) {
  		if (e.key === "ArrowLeft") return isMac ? "textStart" : "wordLeft";
  		else if (e.key === "ArrowRight") return isMac ? "end" : "wordRight";
-@@ -29,4 +33,4 @@ function isMoveCursorShortcut(e) {
- //#endregion
- export { isLinux, isMacLike, isMoveCursorShortcut, isPrimaryModifier, isSafari, resetPlatformDetection };
- 
--//# sourceMappingURL=platform.js.map
-\ No newline at end of file
-+//# sourceMappingURL=platform.js.map
 diff --git a/dist/editor/selection.js b/dist/editor/selection.js
-index 79b7dd8..e2a55bf 100644
+index 79b7dd8e6cb55d098d43b251fc287a8fe67de782..e2a55bfae85c0739e09b20825d68974a45a22065 100644
 --- a/dist/editor/selection.js
 +++ b/dist/editor/selection.js
 @@ -129,7 +129,7 @@ function mapCursorMove(textDocument, selections, shortcut, options = {}) {
@@ -412,13 +363,6 @@ index 79b7dd8..e2a55bf 100644
  			const lineLength = textDocument.getLineLength(line);
  			character = Math.min(character, lineLength);
  			if (shortcut === "left" || shortcut === "wordLeft") {
-@@ -1670,4 +1670,4 @@ function fileText(textDocument, start, end) {
- //#endregion
- export { DirectionBackward, DirectionForward, DirectionNone, applyDeleteCharacterToSelections, applyDeleteHardLineForwardToSelections, applyDeleteSoftLineBackwardToSelections, applyDeleteWordBackwardToSelections, applyTextChangeToSelections, applyTextReplaceToSelections, applyTransposeToSelections, comparePosition, convertSelection, createSelectionFrom, createSelectionFromAnchorAndFocusOffsets, expandCollapsedSelectionToWord, extendSelection, extendSelections, findNextMatch, getAutoSurroundReplacementTexts, getCaretPosition, getDocumentBoundarySelection, getDocumentFullSelection, getSearchQueryFromSelection, getSelectedLineBlocks, getSelectionAnchor, getSelectionClipboardTexts, getSelectionText, isCollapsedSelection, isLineEditable, mapCursorMove, mapSelectionShift, mergeOverlappingSelections, remapOffsetThroughEdits, remapSelectionsAfterEdits, resolveDeleteCharacterRange, resolveIndentEdits, resolveSelectionCut, selectionIntersects, shiftSelectionLines, snapCharacterToGraphemeBoundary };
- 
--//# sourceMappingURL=selection.js.map
-\ No newline at end of file
-+//# sourceMappingURL=selection.js.map
 diff --git a/dist/editor/textMeasure.d.ts b/dist/editor/textMeasure.d.ts
 index 89e938d89eca77d351aeed65f3c5495383effd97..cde1d6ba89a97bbb1614754a48f8994388c186bd 100644
 --- a/dist/editor/textMeasure.d.ts
@@ -463,56 +407,8 @@ index 96d4fb137ea683b66381b1ce6e47e8708a89366c..13f2564897a5bf53a8f311300003b3ea
  	}
  	/**
  	* Re-measure the '0' character width against the font that is loaded right
-diff --git a/dist/search/codeViewSearch.d.ts b/dist/search/codeViewSearch.d.ts
-index 7365e0b..ab95181 100644
---- a/dist/search/codeViewSearch.d.ts
-+++ b/dist/search/codeViewSearch.d.ts
-@@ -4,6 +4,7 @@ import { CodeViewItem, SelectionSide } from "../types.js";
- interface CodeViewSearchLineMetadata {
-   itemId: string;
-   itemType: CodeViewItem<unknown>['type'];
-+  headerField?: 'name' | 'prevName';
-   side: SelectionSide | undefined;
-   lineNumber: number;
-   lineIndex: number;
-@@ -24,4 +25,4 @@ declare function areCodeViewSearchMatchArraysEqual(a: readonly CodeViewSearchMat
- declare function groupCodeViewSearchMatchesByItem(matches: readonly CodeViewSearchMatch[]): Map<string, CodeViewItemSearchMatches>;
- //#endregion
- export { CodeViewItemSearchMatches, CodeViewSearchLine, CodeViewSearchLineMetadata, CodeViewSearchMatch, areCodeViewSearchMatchArraysEqual, areCodeViewSearchMatchesEqual, areOptionalCodeViewSearchMatchesEqual, collectCodeViewLineMatches, groupCodeViewSearchMatchesByItem };
--//# sourceMappingURL=codeViewSearch.d.ts.map
-\ No newline at end of file
-+//# sourceMappingURL=codeViewSearch.d.ts.map
-diff --git a/dist/search/codeViewSearch.js b/dist/search/codeViewSearch.js
-index 180563d..3a8e82d 100644
---- a/dist/search/codeViewSearch.js
-+++ b/dist/search/codeViewSearch.js
-@@ -76,7 +76,7 @@ function trimLineEnding(text) {
- 	return end === text.length ? text : text.slice(0, end);
- }
- function areCodeViewSearchMatchesEqual(a, b) {
--	return a.itemId === b.itemId && a.itemType === b.itemType && a.side === b.side && a.lineNumber === b.lineNumber && a.lineIndex === b.lineIndex && a.startCharacter === b.startCharacter && a.endCharacter === b.endCharacter;
-+	return a.itemId === b.itemId && a.itemType === b.itemType && a.headerField === b.headerField && a.side === b.side && a.lineNumber === b.lineNumber && a.lineIndex === b.lineIndex && a.startCharacter === b.startCharacter && a.endCharacter === b.endCharacter;
- }
- function areOptionalCodeViewSearchMatchesEqual(a, b) {
- 	if (a === void 0 || b === void 0) return a === b;
-@@ -100,7 +100,7 @@ function groupCodeViewSearchMatchesByItem(matches) {
- 			itemMatches = /* @__PURE__ */ new Map();
- 			grouped.set(match.itemId, itemMatches);
- 		}
--		const key = `${match.side ?? "additions"}:${match.lineNumber}`;
-+		const key = match.headerField != null ? `header:${match.headerField}` : `${match.side ?? "additions"}:${match.lineNumber}`;
- 		const lineMatches = itemMatches.get(key);
- 		if (lineMatches == null) itemMatches.set(key, [match]);
- 		else lineMatches.push(match);
-@@ -110,4 +110,4 @@ function groupCodeViewSearchMatchesByItem(matches) {
- //#endregion
- export { areCodeViewSearchMatchArraysEqual, areCodeViewSearchMatchesEqual, areOptionalCodeViewSearchMatchesEqual, collectCodeViewLineMatches, groupCodeViewSearchMatchesByItem };
- 
--//# sourceMappingURL=codeViewSearch.js.map
-\ No newline at end of file
-+//# sourceMappingURL=codeViewSearch.js.map
 diff --git a/dist/utils/createFileHeaderElement.js b/dist/utils/createFileHeaderElement.js
-index 1993417..298b338 100644
+index 19934176d0787ae1304e771c707230d5c8837e83..298b3386eac5126a7c1ec985674e799aac0ffd42 100644
 --- a/dist/utils/createFileHeaderElement.js
 +++ b/dist/utils/createFileHeaderElement.js
 @@ -73,12 +73,12 @@ function createMetadataElement(fileDiff) {
@@ -531,7 +427,7 @@ index 1993417..298b338 100644
  		}));
  	}
 diff --git a/package.json b/package.json
-index 0a0acc4..935937d 100644
+index 0a0acc4c8734a61cf2d684162914002adf74960d..935937d68f52ed96b7af6b1dbb890dbf512eb0fe 100644
 --- a/package.json
 +++ b/package.json
 @@ -60,6 +60,18 @@

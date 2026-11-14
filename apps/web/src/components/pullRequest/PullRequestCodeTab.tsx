@@ -101,6 +101,7 @@ import { DiffPanelLoadingState } from "../DiffPanelShell";
 import { useDiffWorkerPool } from "../DiffWorkerPoolProvider";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { DiffFileTree } from "../diffs/DiffFileTree";
+import { DiffFileFilter, useDiffFileFilter } from "../diffs/DiffFileFilter";
 import { FileExplorerPane } from "../files/FileExplorerPane";
 import { useCodeViewFileReveal } from "../diffs/useCodeViewFileReveal";
 import { useDiffSearchShortcut } from "../diffs/useDiffSearchShortcut";
@@ -415,6 +416,7 @@ function PullRequestCodeTab({
     Schema.Boolean,
   );
   const [hideTestFiles, setHideTestFiles] = useHideTestFiles();
+  const fileFilter = useDiffFileFilter();
   const [selectedLines, setSelectedLines] = useState<{
     id: string;
     range: SelectedLineRange;
@@ -453,6 +455,7 @@ function PullRequestCodeTab({
     setFoldOverride(null);
     setVisibleCommitCount(COMMIT_PAGE_SIZE);
     setOrphansOpen(false);
+    fileFilter.setValue((previous) => ({ ...previous, query: "" }));
     setSliceState({ key: scopeKey, cursor: null, slices: NO_SLICES });
   }
 
@@ -628,13 +631,19 @@ function PullRequestCodeTab({
     isTestChangedFile(resolveFileDiffPath(file)),
   ).length;
   // A requested file stays visible so a jump to a hidden test still lands.
-  const files = hideTestFiles
+  const testFilteredFiles = hideTestFiles
     ? loadedFiles.filter((file) => {
         const path = resolveFileDiffPath(file);
         return path === revealRequest?.path || path === linkPath || !isTestChangedFile(path);
       })
     : loadedFiles;
-  const hiddenTestFileCount = loadedFiles.length - files.length;
+  const hiddenTestFileCount = loadedFiles.length - testFilteredFiles.length;
+  const files = testFilteredFiles.filter((file) => {
+    const path = resolveFileDiffPath(file);
+    return path === revealRequest?.path || path === linkPath || fileFilter.matchesFile(file);
+  });
+  const shownOutsideFilter =
+    fileFilter.active && files.some((file) => !fileFilter.matchesFile(file));
   const filePaths = files.map((file) => resolveFileDiffPath(file));
   const omittedFileStats = new Map(
     loadedSlices.flatMap((slice) =>
@@ -648,7 +657,7 @@ function PullRequestCodeTab({
     const placed = new Set<string>();
     // Commit diffs use different line coordinates; list conversations separately.
     if (commit !== null) return placed;
-    for (const file of files) {
+    for (const file of testFilteredFiles) {
       for (const thread of threadsByPath.get(resolveFileDiffPath(file)) ?? []) {
         if (thread.line !== null && isLineInFileDiff(file, thread.side, thread.line)) {
           placed.add(thread.id);
@@ -777,7 +786,7 @@ function PullRequestCodeTab({
       ? parsedSlices.flatMap((parsed) => (parsed?.kind === "raw" ? [parsed] : []))
       : [];
   const rawSlicesView =
-    files.length === 0 && rawSlices.length > 0 ? (
+    !fileFilter.active && files.length === 0 && rawSlices.length > 0 ? (
       <div className="space-y-4 px-4 py-5">
         {rawSlices.map((slice) => (
           <div key={`${slice.reason}:${slice.text.slice(0, 64)}`} className="space-y-2">
@@ -959,7 +968,7 @@ function PullRequestCodeTab({
   const renderCodeViewFooter = () =>
     nextCursor === null ? null : (
       <div
-        ref={sentinelRef}
+        ref={fileFilter.active ? undefined : sentinelRef}
         className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"
       >
         {diffQuery.error !== null ? (
@@ -971,6 +980,10 @@ function PullRequestCodeTab({
           </>
         ) : diffQuery.isPending ? (
           "Loading more files..."
+        ) : fileFilter.active ? (
+          <Button size="xs" variant="outline" onClick={loadNextSlice}>
+            Load more files
+          </Button>
         ) : null}
       </div>
     );
@@ -1208,7 +1221,7 @@ function PullRequestCodeTab({
     setSelectedLines(null);
   };
   const toolbar = (
-    <div className="@container flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background px-4 text-xs text-muted-foreground">
+    <div className="@container flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-background px-4 py-1 text-xs text-muted-foreground">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {orderedCommits.length > 0 ? (
           <DropdownMenu>
@@ -1259,7 +1272,9 @@ function PullRequestCodeTab({
         ) : null}
         <PullRequestMetaLine>
           <span className="shrink-0 tabular-nums">
-            {files.length} {files.length === 1 ? "file" : "files"}
+            {fileFilter.active
+              ? `${files.length} of ${testFilteredFiles.length} loaded files`
+              : `${files.length} ${files.length === 1 ? "file" : "files"}`}
             {nextCursor === null ? "" : "+"}
           </span>
           {hiddenTestFileCount > 0 ? (
@@ -1267,6 +1282,7 @@ function PullRequestCodeTab({
               {hiddenTestFileCount} test {hiddenTestFileCount === 1 ? "file" : "files"} hidden
             </Button>
           ) : null}
+          {shownOutsideFilter ? <span>Linked file shown outside filter</span> : null}
           {filesViewed.enabled && files.length > 0 ? (
             <span className="flex min-w-0 items-center gap-1 tabular-nums">
               <span className="shrink-0">
@@ -1347,6 +1363,9 @@ function PullRequestCodeTab({
             </Tooltip>
           ) : null}
         </PullRequestMetaLine>
+      </div>
+      <div className="order-last ml-auto w-full @5xl:order-none @5xl:w-80">
+        <DiffFileFilter value={fileFilter.value} onChange={fileFilter.setValue} />
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <DropdownMenu>
@@ -1616,6 +1635,15 @@ function PullRequestCodeTab({
     return withToolbar(rawSlicesView);
   }
 
+  if (items.length === 0 && fileFilter.active) {
+    return withToolbar(
+      <div>
+        <p className="px-4 py-5 text-sm text-muted-foreground">No matching files.</p>
+        {renderCodeViewFooter()}
+      </div>,
+    );
+  }
+
   if (items.length === 0 && nextCursor === null) {
     return withToolbar(
       <p className="px-4 py-5 text-sm text-muted-foreground">
@@ -1624,7 +1652,9 @@ function PullRequestCodeTab({
     );
   }
 
-  const orphanThreads = detail.reviewThreads.filter((thread) => !placedThreadIds.has(thread.id));
+  const orphanThreads = detail.reviewThreads.filter(
+    (thread) => !placedThreadIds.has(thread.id) && fileFilter.matches(thread.path),
+  );
   const orphanFiles = new Map<string, PullRequestReviewThread[]>();
   for (const thread of orphanThreads) {
     const existing = orphanFiles.get(thread.path);

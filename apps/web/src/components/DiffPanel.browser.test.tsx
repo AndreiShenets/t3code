@@ -270,6 +270,11 @@ it.each([false, true])(
     await expect.element(screen.getByText("after", { exact: true })).toBeVisible();
     await userEvent.click(loadedToggle);
     await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+    await screen.getByRole("searchbox", { name: "Filter files" }).fill("no-such-file");
+    await expect.element(screen.getByText("No matching files.")).toBeVisible();
+    await expect.element(toggle).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Clear file filter" }).click();
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
   },
 );
 
