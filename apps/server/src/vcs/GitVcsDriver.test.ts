@@ -205,6 +205,8 @@ it.effect.each(["interrupt", "timeout", "success"] as const)(
         Effect.sync(() =>
           NodeNet.createServer((socket) => {
             sockets.add(socket);
+            // Windows resets this socket when the Git filter exits or is interrupted.
+            socket.on("error", (error) => assert.propertyVal(error, "code", "ECONNRESET"));
             connected.resolve(socket);
             // Git can run the filter again while refreshing the staged entry.
             if (released) socket.end();

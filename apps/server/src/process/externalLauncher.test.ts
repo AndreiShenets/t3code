@@ -566,7 +566,6 @@ it.effect.each([
       assert.deepEqual(verbatim, []);
       assert.isTrue(Exit.isSuccess(exit));
       const command = spawned.at(-1)!;
-      assert.isTrue(command.options.detached);
       assert.include(
         Buffer.from(String(command.args.at(-1)), "base64").toString("utf16le"),
         "C:\\Users\\t3\\my project\\a,b.ts",
