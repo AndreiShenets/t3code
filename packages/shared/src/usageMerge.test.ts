@@ -108,7 +108,7 @@ describe("mergeUsage", () => {
       undefined,
     ]);
     const merged = mergeUsage(
-      [environment("a", decoded), environment("b", decoded)],
+      [environment("a", decoded), environment("b", decodeSummary(encodeSummary(input)))],
       USAGE_CONTRACT_VERSION,
     );
     expect(merged.models).toHaveLength(3);
