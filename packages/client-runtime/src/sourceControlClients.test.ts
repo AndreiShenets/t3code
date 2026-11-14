@@ -314,7 +314,7 @@ describe("sourceControlClients repository keys", () => {
       sourceControlClients.repositoryKeyFromRemote(
         "http://code.example:8080/tfs/Default%20Collection/Project/_git/Web.git",
       ),
-    ).toBe("code.example:8080/tfs/default%20collection/project/_git/web");
+    ).toBe("code.example:8080/tfs/default%20collection/project/_git/web.git");
     expect(
       sourceControlClients.repositoryKeyFromRemote(
         "https://dev.azure.com:8443/org/project/_git/web",
