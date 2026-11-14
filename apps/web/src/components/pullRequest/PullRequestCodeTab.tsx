@@ -1222,7 +1222,7 @@ function PullRequestCodeTab({
   };
   const toolbar = (
     <div className="@container flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-background px-4 py-1 text-xs text-muted-foreground">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex min-w-0 basis-full flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-1 @xl:basis-0 @xl:flex-nowrap">
         {orderedCommits.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -1367,7 +1367,7 @@ function PullRequestCodeTab({
       <div className="order-last ml-auto w-full @5xl:order-none @5xl:w-80">
         <DiffFileFilter value={fileFilter.value} onChange={fileFilter.setValue} />
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="ml-auto flex shrink-0 items-center gap-1">
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger

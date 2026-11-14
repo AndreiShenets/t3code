@@ -218,6 +218,7 @@ it("filters virtual files and the file tree, preserves folds, and clears on Esca
     },
   };
   const container = pagedContainer();
+  container.style.display = "block";
   await using screen = await render(tab(0), { container });
   await expect.element(screen.getByText("early-0.ts", { exact: true }).first()).toBeVisible();
   await screen.getByRole("button", { name: "Show file tree" }).click();
