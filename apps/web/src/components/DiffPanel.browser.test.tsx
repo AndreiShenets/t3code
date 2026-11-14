@@ -85,8 +85,14 @@ vi.mock("~/state/queries", () => ({
   useDebouncedValue: <A,>(value: A) => value,
 }));
 vi.mock("~/state/use-atom-command", () => ({ useAtomCommand: () => async () => {} }));
-vi.mock("~/editorPreferences", () => ({ useOpenInPreferredEditor: () => async () => {} }));
-vi.mock("~/fileContextMenu", () => ({ useFileContextMenuHandler: () => () => {} }));
+vi.mock("~/editorPreferences", () => ({
+  useOpenInPreferredEditor: () => async () => {},
+  usePreferredEditor: () => [null, () => {}],
+}));
+vi.mock("~/fileContextMenu", () => ({
+  resolveFileContextMenuAbsolutePath: () => null,
+  useFileContextMenuHandler: () => () => {},
+}));
 vi.mock("~/browser/useOpenLink", () => ({ useOpenLink: () => async () => {} }));
 vi.mock("./diffs/DiffCommentAnnotation", () => ({ DiffCommentAnnotation: () => null }));
 vi.mock("./diffs/DiffFileTree", () => ({ DiffFileTree: () => null }));
