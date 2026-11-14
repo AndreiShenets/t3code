@@ -82,7 +82,13 @@ export function deriveLatestContextWindowSnapshot(
   }>,
   liveUsage?: OrchestrationV2ProviderTurnTokenUsage | null,
   providerThread?: Pick<OrchestrationV2ProviderThread, "id" | "contextUsage" | "updatedAt"> | null,
+  subagentCostUsd?: number | null,
 ): ContextWindowSnapshot | null {
+  const ownCost = providerThread?.contextUsage?.cost;
+  const cost =
+    subagentCostUsd != null && (ownCost === undefined || ownCost.currency === "USD")
+      ? { amount: (ownCost?.amount ?? 0) + subagentCostUsd, currency: "USD" }
+      : (ownCost ?? null);
   if (liveUsage != null) {
     const usedTokens = Math.max(0, liveUsage.usedTokens);
     const maxTokens = liveUsage.maxTokens ?? null;
@@ -111,7 +117,7 @@ export function deriveLatestContextWindowSnapshot(
       durationMs: null,
       compactsAutomatically: true,
       autoCompactThreshold: liveUsage.autoCompactThreshold ?? null,
-      cost: null,
+      cost,
       updatedAt: liveUsage.updatedAt,
     };
   }
@@ -145,7 +151,7 @@ export function deriveLatestContextWindowSnapshot(
       toolUses: asFiniteNumber(providerUsage.toolUses),
       durationMs: asFiniteNumber(providerUsage.durationMs),
       compactsAutomatically: providerUsage.compactsAutomatically ?? null,
-      cost: providerUsage.cost ?? null,
+      cost,
       autoCompactThreshold: providerUsage.autoCompactThreshold ?? null,
       updatedAt: DateTime.formatIso(providerUsageUpdatedAt),
     };
@@ -196,7 +202,7 @@ export function deriveLatestContextWindowSnapshot(
       durationMs: null,
       compactsAutomatically: true,
       autoCompactThreshold: null,
-      cost: null,
+      cost,
       updatedAt: DateTime.formatIso(payload.startedAt ?? payload.updatedAt),
     };
   }
