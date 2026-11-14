@@ -342,7 +342,7 @@ export interface SourceControlDefinition {
    * apart from `normalizeGitRemoteUrl`: over SSH and the web, or with `.git` as part of the name.
    * Null when the key is not this host's. Persisted keys are built with it: output must not change.
    */
-  readonly repositoryKeyFromRemote?: (key: string) => string | null;
+  readonly repositoryKeyFromRemote?: (key: string, remoteUrl?: string) => string | null;
   /**
    * For a host with more than one spelling of a repository key: the one every spelling compares
    * equal under. Null when the key is not this host's.
@@ -806,7 +806,10 @@ export function makeSourceControlDefinitionRegistry(
       const written = parseGitRemoteRepository(remoteUrl, { keepGitSuffix: true });
       if (written === null) return key;
       for (const definition of definitions) {
-        const spelled = definition.repositoryKeyFromRemote?.(`${written.host}/${written.path}`);
+        const spelled = definition.repositoryKeyFromRemote?.(
+          `${written.host}/${written.path}`,
+          remoteUrl,
+        );
         if (spelled != null) return spelled;
       }
       return key;
