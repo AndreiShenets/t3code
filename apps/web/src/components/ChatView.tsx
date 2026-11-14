@@ -1434,6 +1434,8 @@ export default function ChatView(props: ChatViewProps) {
     environmentId,
     threadKey: routeThreadKey,
     panelKey: usageLimitsKey,
+    model: composerSelectedModelSelection?.model ?? activeThread?.modelSelection.model,
+    cwd: activeThread?.worktreePath ?? draftThread?.worktreePath ?? activeProject?.workspaceRoot,
     providerInstanceId: activeProviderInstanceId,
     providerDriver: activeProviderStatus?.driver ?? null,
     providers: providerStatuses,
@@ -3953,6 +3955,9 @@ export default function ChatView(props: ChatViewProps) {
                   onDeleteProjectScript={deleteProjectScriptStable}
                   usage={{
                     providerInstanceId: activeProviderInstanceId,
+                    model:
+                      composerSelectedModelSelection?.model ?? activeThread?.modelSelection.model,
+                    cwd: gitCwd,
                     providers: providerStatuses,
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
