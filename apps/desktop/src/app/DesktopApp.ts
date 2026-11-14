@@ -37,6 +37,7 @@ import * as DesktopStartupRecovery from "./DesktopStartupRecovery.ts";
 import * as DesktopState from "./DesktopState.ts";
 import * as DesktopRemoteUpdates from "../updates/DesktopRemoteUpdates.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
+import * as DesktopCustomBuildUpdates from "../updates/DesktopCustomBuildUpdates.ts";
 import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
@@ -337,6 +338,7 @@ const startup = Effect.gen(function* () {
   const preReadyElectronOptions = yield* DesktopPreReadyPlatform.DesktopPreReadyElectronOptions;
   const safeStorage = yield* ElectronSafeStorage.ElectronSafeStorage;
   const updates = yield* DesktopUpdates.DesktopUpdates;
+  const customBuildUpdates = yield* DesktopCustomBuildUpdates.DesktopCustomBuildUpdates;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const previewPasskeys = yield* PreviewPasskeys.PreviewPasskeys;
 
@@ -397,6 +399,7 @@ const startup = Effect.gen(function* () {
   yield* appIdentity.configure;
   // Sets canInstallUpdates, which the backend bootstrap payload reads.
   yield* updates.configure;
+  yield* customBuildUpdates.configure;
   yield* DesktopRemoteUpdates.listen;
   yield* DesktopStartupRecovery.listen;
   const backendStarted = yield* startLocalBackend.pipe(
