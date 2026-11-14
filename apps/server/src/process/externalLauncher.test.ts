@@ -524,6 +524,10 @@ it.effect.each([
     const path = yield* Path.Path;
     const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-editors-" });
     yield* fileSystem.writeFileString(path.join(binDir, "explorer.EXE"), "");
+    const windowsRoot = path.join(binDir, "Windows");
+    const powershell = `${windowsRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+    yield* fileSystem.makeDirectory(path.dirname(powershell), { recursive: true });
+    yield* fileSystem.writeFileString(powershell, "");
     const spawned: ChildProcess.StandardCommand[] = [];
     const verbatim: Array<readonly [string, ReadonlyArray<string>]> = [];
     const exit = yield* Effect.gen(function* () {
@@ -542,7 +546,7 @@ it.effect.each([
       Effect.provide(
         layerTest({
           platform: "win32",
-          env: { PATH: binDir, PATHEXT: ".COM;.EXE;.BAT;.CMD", SYSTEMROOT: "C:\\Windows" },
+          env: { PATH: binDir, PATHEXT: ".COM;.EXE;.BAT;.CMD", SYSTEMROOT: windowsRoot },
           onSpawn: (command) => spawned.push(command),
           spawnResult: (command) => (command.command.endsWith("reg.exe") ? registry : undefined),
         }),
@@ -551,25 +555,22 @@ it.effect.each([
 
     assert.deepEqual(
       spawned.map((command) => command.command),
-      ["C:\\Windows\\System32\\reg.exe"],
+      [`${windowsRoot}\\System32\\reg.exe`, ...(native ? [] : [powershell])],
     );
     if (native) {
       assert.isTrue(Exit.isSuccess(exit));
       assert.deepEqual(verbatim, [
-        ["C:\\Windows\\explorer.exe", ['/select,"C:\\Users\\t3\\my project\\a,b.ts"']],
+        [`${windowsRoot}\\explorer.exe`, ['/select,"C:\\Users\\t3\\my project\\a,b.ts"']],
       ]);
     } else {
       assert.deepEqual(verbatim, []);
-      // The PowerShell launch is reached; this host has no powershell.exe to run it.
-      assert.isTrue(Exit.isFailure(exit));
-      if (Exit.isFailure(exit)) {
-        const error = Cause.squash(exit.cause);
-        assert.instanceOf(error, ExternalLauncher.ExternalLauncherCommandNotFoundError);
-        assert.equal(
-          (error as ExternalLauncher.ExternalLauncherCommandNotFoundError).command,
-          "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-        );
-      }
+      assert.isTrue(Exit.isSuccess(exit));
+      const command = spawned.at(-1)!;
+      assert.isTrue(command.options.detached);
+      assert.include(
+        Buffer.from(String(command.args.at(-1)), "base64").toString("utf16le"),
+        "C:\\Users\\t3\\my project\\a,b.ts",
+      );
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
