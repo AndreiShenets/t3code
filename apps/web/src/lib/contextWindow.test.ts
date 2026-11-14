@@ -78,6 +78,7 @@ describe("live provider-turn usage (#8144)", () => {
       [],
       decodeTokenUsage({ usedTokens: 42_000, updatedAt: "2026-10-22T12:00:00.000Z" }),
       {
+        id: ProviderThreadId.make("provider-thread"),
         contextUsage: { usedTokens: 42_000, cost: { amount: 0, currency: "USD" } },
         updatedAt: DateTime.makeUnsafe("2026-10-22T11:59:00.000Z"),
       },
@@ -92,6 +93,7 @@ describe("live provider-turn usage (#8144)", () => {
       [],
       decodeTokenUsage({ usedTokens: 42_000, updatedAt: "2026-10-22T12:00:00.000Z" }),
       {
+        id: ProviderThreadId.make("provider-thread"),
         contextUsage: { usedTokens: 0, cost: { amount, currency: "USD" } },
         updatedAt: DateTime.makeUnsafe("2026-10-22T11:59:00.000Z"),
       },
