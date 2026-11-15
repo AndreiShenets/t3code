@@ -2549,8 +2549,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           type: "approval_request",
           requestKind: openCodePermissionRequestKind(data.action, toolName),
           prompt:
-            data.resources.length === 0 ||
-            (data.resources.length === 1 && data.resources[0] === "*")
+            data.resources.length === 0 || data.resources.some((resource) => resource.includes("*"))
               ? data.action
               : data.resources.join("\n"),
           options: [
