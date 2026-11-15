@@ -119,6 +119,10 @@ const NativeTodoList = Schema.Struct({
 });
 const isNativeTodoList = Schema.is(NativeTodoList);
 
+const encodePermissionInput = Schema.encodeOption(
+  Schema.fromJsonString(Schema.Unknown, { space: 2 }),
+);
+
 const OpenCode2ProviderCapabilities = {
   sessions: {
     supportsMultipleProviderThreadsPerSession: true,
@@ -2548,7 +2552,16 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
         {
           type: "approval_request",
           requestKind: openCodePermissionRequestKind(data.action, toolName),
-          prompt: data.resources.length === 0 ? data.action : data.resources.join("\n"),
+          prompt:
+            data.resources.length === 1 && data.resources[0] === "*"
+              ? [
+                  data.action,
+                  ...Option.toArray(encodePermissionInput(data.metadata?.input)),
+                  "Resource: *",
+                ].join("\n")
+              : data.resources.length === 0
+                ? data.action
+                : data.resources.join("\n"),
           options: [
             { decision: "cancel", label: "Cancel" },
             { decision: "decline", label: "Decline" },
