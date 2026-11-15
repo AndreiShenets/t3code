@@ -3064,14 +3064,13 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       action: "github_create_issue",
       resources: ["*"],
       metadata: { input: { title: "Fix approvals", labels: ["bug"] } },
-      prompt:
-        'github_create_issue\n{\n  "title": "Fix approvals",\n  "labels": [\n    "bug"\n  ]\n}\nResource: *',
+      prompt: "github_create_issue",
     },
     {
       action: "github_create_issue",
       resources: ["*"],
       metadata: {},
-      prompt: "github_create_issue\nResource: *",
+      prompt: "github_create_issue",
     },
     {
       action: "shell",
