@@ -3065,6 +3065,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       resources: ["*"],
       metadata: { input: { title: "Fix approvals", labels: ["bug"] } },
       prompt: "github_create_issue",
+      sourceTool: "execute",
     },
     {
       action: "github_create_issue",
@@ -3087,11 +3088,21 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
     { action: "custom", resources: [], metadata: {}, prompt: "custom" },
   ])(
     "identifies a $action permission on $resources without changing its scope",
-    ({ prompt, ...permission }) =>
+    ({ prompt, sourceTool, ...permission }) =>
       Effect.gen(function* () {
         const { runtime, thread } = yield* resumed([
           out("session.prompt", { sessionID: SESSION, text: "<any>" }),
           promptAccepted,
+          ...(sourceTool === undefined
+            ? []
+            : [
+                event("session.tool.input.started", {
+                  sessionID: SESSION,
+                  assistantMessageID: shellAsk.data.source.messageID,
+                  id: shellAsk.data.source.id,
+                  name: sourceTool,
+                }),
+              ]),
           event("permission.asked", { ...shellAsk.data, ...permission, save: ["*"] }),
           out("permission.reply", {
             sessionID: SESSION,
