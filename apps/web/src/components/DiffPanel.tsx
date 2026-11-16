@@ -249,7 +249,6 @@ export default function DiffPanel({
   const [baseRefQuery, setBaseRefQuery] = useState("");
   // The open commit menu keeps the list it opened with, so rows do not move under the pointer.
   const [openCommitMenu, setOpenCommitMenu] = useState<ReviewBranchCommitsResult | null>(null);
-  const [codeViewRevision, setCodeViewRevision] = useState(0);
   const [codeView, setCodeView] = useState<AnnotatableCodeViewHandle | null>(null);
   const fileFilter = useDiffFileFilter();
   useDiffSearchShortcut(codeView);
@@ -269,14 +268,6 @@ export default function DiffPanel({
       : null,
   );
   const activeCwd = activeThread?.worktreePath ?? activeProject?.workspaceRoot;
-  const activeRepositoryRoot = activeThread?.worktreePath
-    ? undefined
-    : activeProject?.repositoryIdentity?.rootPath;
-  const getEditorAction = useDiffEditorAction(
-    activeThread?.environmentId ?? null,
-    activeCwd,
-    activeRepositoryRoot,
-  );
   const serverConfig = useAtomValue(
     serverEnvironment.configValueAtom(activeThread?.environmentId ?? null),
   );
@@ -307,6 +298,11 @@ export default function DiffPanel({
   // Turn and git diffs name files from the repository root; a tool call's diff names them as
   // its provider recorded them, absolute or relative to the workspace.
   const diffPathRepositoryRoot = toolCallSelection ? undefined : activeRepositoryRoot;
+  const getEditorAction = useDiffEditorAction(
+    activeThread?.environmentId ?? null,
+    activeCwd,
+    diffPathRepositoryRoot,
+  );
   const isGitSelection =
     diffSelection.kind === "branch" ||
     diffSelection.kind === "unstaged" ||

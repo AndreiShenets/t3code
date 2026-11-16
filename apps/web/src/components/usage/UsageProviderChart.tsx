@@ -545,12 +545,12 @@ export function UsageProviderChart({
         <thead>
           <tr>
             <th scope="col">{resolution === "hour" ? "Hour" : "Day"}</th>
-            {providers.map((provider) => (
-              <th key={provider} scope="col">
-                {PROVIDER_PRESENTATION[provider].label}
+            {series.map((entry) => (
+              <th key={usageSeriesKey(entry)} scope="col">
+                {usagePresentation(entry).label}
               </th>
             ))}
-            {providers.length > 1 ? <th scope="col">Total</th> : null}
+            {series.length > 1 ? <th scope="col">Total</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -559,12 +559,15 @@ export function UsageProviderChart({
             return (
               <tr key={period}>
                 <th scope="row">{formatTooltipPeriod(period)}</th>
-                {providers.map((provider) => (
-                  <td key={provider}>
-                    {format(column?.bands.find((band) => band.provider === provider)?.value ?? 0)}
+                {series.map((entry) => (
+                  <td key={usageSeriesKey(entry)}>
+                    {format(
+                      column?.bands.find((band) => usageSeriesKey(band) === usageSeriesKey(entry))
+                        ?.value ?? 0,
+                    )}
                   </td>
                 ))}
-                {providers.length > 1 ? <td>{format(column?.total ?? 0)}</td> : null}
+                {series.length > 1 ? <td>{format(column?.total ?? 0)}</td> : null}
               </tr>
             );
           })}

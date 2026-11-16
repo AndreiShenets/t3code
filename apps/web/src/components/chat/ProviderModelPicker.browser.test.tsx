@@ -651,7 +651,7 @@ it("keeps the touch keyboard down while choosing a provider", async () => {
       : matchMedia(query),
   );
 
-  await using screen = await render(
+  await using screen = await renderUi(
     <ProviderModelPicker
       environmentId={null}
       activeInstanceId={codex!.instanceId}
