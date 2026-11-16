@@ -69,7 +69,8 @@ import {
 } from "../state/entities";
 import { useClientSettings, updateClientSettings } from "../hooks/useSettings";
 import { formatRelativeTimeLabel, formatShortTimestamp } from "../timestampFormat";
-import { DiffFilePathCopyButton } from "./DiffFilePathCopyButton";
+import { DiffFileHeaderActions, type DiffFileEditorAction } from "./diffs/DiffFileHeaderActions";
+import { useDiffEditorAction } from "./diffs/useDiffEditorAction";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/AnnotatableCodeView";
@@ -182,6 +183,8 @@ function DiffFileHeaderSuffix({
   error,
   truncated,
   onRetry,
+  onOpenFile,
+  editorAction,
 }: {
   filePath: string;
   workspaceRoot: string | undefined;
@@ -189,11 +192,18 @@ function DiffFileHeaderSuffix({
   error: boolean;
   truncated: boolean;
   onRetry: (path: string) => void;
+  onOpenFile: (path: string) => void;
+  editorAction: DiffFileEditorAction | null;
 }) {
   return (
     <>
       <span data-diff-copy-path className="inline-flex">
-        <DiffFilePathCopyButton filePath={filePath} workspaceRoot={workspaceRoot} />
+        <DiffFileHeaderActions
+          filePath={filePath}
+          workspaceRoot={workspaceRoot}
+          onOpenFile={onOpenFile}
+          editorAction={editorAction}
+        />
       </span>
       {hasStat ? (
         <DiffFileStatus error={error} truncated={truncated} retry={() => onRetry(filePath)} />
@@ -253,6 +263,14 @@ export default function DiffPanel({
       : null,
   );
   const activeCwd = activeThread?.worktreePath ?? activeProject?.workspaceRoot;
+  const activeRepositoryRoot = activeThread?.worktreePath
+    ? undefined
+    : activeProject?.repositoryIdentity?.rootPath;
+  const getEditorAction = useDiffEditorAction(
+    activeThread?.environmentId ?? null,
+    activeCwd,
+    activeRepositoryRoot,
+  );
   const serverConfig = useAtomValue(
     serverEnvironment.configValueAtom(activeThread?.environmentId ?? null),
   );
@@ -1444,6 +1462,8 @@ export default function DiffPanel({
                           error={state?.error ?? false}
                           truncated={state?.truncated ?? false}
                           onRetry={retry}
+                          onOpenFile={openDiffFile}
+                          editorAction={getEditorAction(path)}
                         />
                       );
                     }}
