@@ -164,6 +164,17 @@ export const KiroIcon: Icon = (props) => (
   </svg>
 );
 
+export const VisualStudioIcon: Icon = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" {...props}>
+    <path
+      fill="#9856D8"
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="m17 0 7 3.5v17L17 24 7 14l-4 3-3-1.5v-7L3 7l4 3L17 0Zm0 7-7 5 7 5V7ZM3 10v4l2-2-2-2Z"
+    />
+  </svg>
+);
+
 export const VisualStudioCode: Icon = (props) => {
   const id = useId();
   const maskId = `${id}-vscode-a`;
