@@ -688,6 +688,7 @@ export const make = Effect.gen(function* () {
           : last.at,
       fingerprint: group.fingerprint,
       inFlight:
+        detail.checksIncomplete === true ||
         detail.mergeability === "unknown" ||
         detail.checks.some((check) => check.status === "pending"),
       remarksComplete: plan.activity ? remarks !== null : (last?.remarksComplete ?? false),
