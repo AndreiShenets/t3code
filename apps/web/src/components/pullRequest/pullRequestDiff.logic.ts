@@ -68,6 +68,7 @@ export function reconcileDiffSlices(slices: ReadonlyArray<DiffSlice>, answer: Di
     existing.baseSha === answer.baseSha &&
     existing.truncated === answer.truncated &&
     existing.nextCursor === answer.nextCursor &&
+    existing.source.withheldFilesReadable === answer.source.withheldFilesReadable &&
     existing.omittedFileStats.length === answer.omittedFileStats.length &&
     existing.omittedFileStats.every((file, index) => {
       const refreshed = answer.omittedFileStats[index];

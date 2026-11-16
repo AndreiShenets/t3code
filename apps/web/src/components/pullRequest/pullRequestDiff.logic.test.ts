@@ -85,6 +85,7 @@ describe("reconcileDiffSlices", () => {
       { ...loaded[0]!, baseSha: "new-base" },
       { ...loaded[0]!, nextCursor: "new-cursor" },
       { ...loaded[0]!, truncated: true },
+      { ...loaded[0]!, source: { ...loaded[0]!.source, withheldFilesReadable: true } },
       { ...loaded[0]!, omittedFileStats: [{ path: "large.ts", additions: 20, deletions: 0 }] },
     ]) {
       expect(reconcileDiffSlices(loaded, changed).slices).toEqual([changed]);
