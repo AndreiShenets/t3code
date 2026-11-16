@@ -53,7 +53,13 @@ import {
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { threadContextsOutsideEnvironment } from "@t3tools/shared/composerContextReferences";
-
+import { ComposerMcpSheet } from "./ComposerMcpSheet";
+import {
+  MCP_COMMAND_USAGE,
+  parseMcpCommand,
+  supportsMcpManagement,
+  type McpManagementRequest,
+} from "@t3tools/client-runtime/mcpCommands";
 import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
 
 import {
@@ -368,6 +374,11 @@ export function NewTaskDraftScreen(props: {
   };
   const cycleEnvironmentCommands = environments.length > 1 ? (["cycleHost"] as const) : [];
   useHardwareKeyboardCommand(cycleEnvironmentCommands, cycleEnvironment);
+  const composerWorkspaceCwd =
+    (flow.workspaceMode === "worktree"
+      ? selectedProject?.workspaceRoot
+      : (flow.selectedWorktreePath ?? selectedProject?.workspaceRoot)) || null;
+  const [mcpRequest, setMcpRequest] = useState<McpManagementRequest | null>(null);
   const preventRemove =
     (isIncomingShareHoldingRoute && !isProjectPickerReturnActive) || flow.submitting;
   usePreventRemove(preventRemove, () => undefined);
@@ -596,6 +607,28 @@ export function NewTaskDraftScreen(props: {
     const workspaceMode = workspaceSelection.mode;
     const selectedBranchName = workspaceSelection.branch;
     const initialMessageText = draft.text.trim();
+    const mcp = parseMcpCommand(initialMessageText);
+    if (mcp !== null) {
+      if (
+        !supportsMcpManagement(flow.selectedProviderStatus) ||
+        !flow.selectedProviderStatus ||
+        !composerWorkspaceCwd
+      ) {
+        Dialog.alert("MCP unavailable", "MCP management requires OpenCode V2 and a workspace.");
+      } else if (mcp.action === "invalid") {
+        Dialog.alert("MCP command", MCP_COMMAND_USAGE);
+      } else if (draft.attachments.length > 0) {
+        Dialog.alert("MCP command", "Remove attachments before running an MCP command.");
+      } else {
+        setMcpRequest({
+          environmentId: selectedProject.environmentId,
+          target: { instanceId: flow.selectedProviderStatus.instanceId, cwd: composerWorkspaceCwd },
+          command: mcp,
+        });
+        flow.setPrompt("");
+      }
+      return null;
+    }
 
     if (
       attachmentBlockReason !== null ||
@@ -964,6 +997,13 @@ export function NewTaskDraftScreen(props: {
   });
   return (
     <>
+      {mcpRequest ? (
+        <ComposerMcpSheet
+          key={JSON.stringify([mcpRequest.environmentId, mcpRequest.target])}
+          {...mcpRequest}
+          onClose={() => setMcpRequest(null)}
+        />
+      ) : null}
       <ThreadScreenBinding
         environmentId={selectedProject.environmentId}
         header={
