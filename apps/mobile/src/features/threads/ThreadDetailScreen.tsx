@@ -990,6 +990,10 @@ function ThreadDetailBody(
           props.serverConfig?.providers ?? [],
           props.serverConfig?.usageLimitSources ?? [],
           usageLimitsPanel.now,
+          {
+            model: props.selectedThread.modelSelection.model,
+            cwd: props.threadCwd ?? props.projectWorkspaceRoot,
+          },
         )
       : null;
   const showUsageLimits = (report: UsageLimitsReport | null) =>

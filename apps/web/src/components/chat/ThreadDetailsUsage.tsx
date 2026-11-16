@@ -11,6 +11,7 @@ import {
   limitsNotice,
   paceOf,
   remainingPercent,
+  resolveProviderUsageLimitSource,
 } from "@t3tools/shared/usageLimits";
 import type { ReactNode } from "react";
 
@@ -35,6 +36,8 @@ export interface ThreadDetailsUsageInput {
   readonly providers: readonly ServerProvider[];
   readonly sources: UsageLimitSourceSnapshots;
   readonly contextWindow: ContextWindowSnapshot | null;
+  readonly model?: string | null | undefined;
+  readonly cwd?: string | null | undefined;
 }
 
 type UsageTone = "error" | "warning" | null;
@@ -44,18 +47,24 @@ export function ThreadDetailsUsage({
   providerInstanceId,
   providers,
   sources,
+  model,
+  cwd,
 }: Omit<ThreadDetailsUsageInput, "contextWindow">) {
   const nowMinute = useNowMinute();
   const now = Date.parse(`${nowMinute}:00Z`);
+  const source =
+    providerInstanceId !== null
+      ? resolveProviderUsageLimitSource(providerInstanceId, providers, now, { model, cwd })
+      : undefined;
   const report =
     providerInstanceId !== null
-      ? collectProviderUsageLimits(providerInstanceId, providers, sources, now)
+      ? collectProviderUsageLimits(providerInstanceId, providers, sources, now, { model, cwd })
       : null;
   // Only this instance's data: the report keeps one instance per login, and any other entry may be
   // a different login or workspace, so fall back to the instance's own snapshot.
   const limits =
-    report?.accounts.find((entry) => entry.instanceId === providerInstanceId)?.limits ??
-    providers.find((provider) => provider.instanceId === providerInstanceId)?.usageLimits;
+    report?.accounts.find((entry) => entry.instanceId === source?.instanceId)?.limits ??
+    source?.usageLimits;
   if (!limits) return null;
   const notice = limitsNotice(limits);
 
@@ -75,7 +84,18 @@ export function ThreadDetailsUsage({
             tooltip={<span className="text-foreground">{notice}</span>}
           />
         ) : (
-          limits.windows.map((window) => <LimitRow key={window.id} window={window} now={now} />)
+          limits.windows.map((window) => (
+            <LimitRow
+              key={window.id}
+              window={window}
+              now={now}
+              sourceLabel={
+                source?.instanceId !== providerInstanceId
+                  ? (source?.displayName ?? source?.driver)
+                  : undefined
+              }
+            />
+          ))
         )}
       </div>
     </ThreadDetailsSection>
@@ -141,9 +161,11 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
 function LimitRow({
   window,
   now,
+  sourceLabel,
 }: {
   readonly window: ServerProviderUsageWindow;
   readonly now: number;
+  readonly sourceLabel?: string | undefined;
 }) {
   const timestampFormat = usePrimarySettings((settings) => settings.timestampFormat);
   const left = remainingPercent(window);
@@ -158,6 +180,9 @@ function LimitRow({
       ariaValue={`${left}% left`}
       tooltip={
         <>
+          {sourceLabel ? (
+            <span className="text-muted-foreground">{sourceLabel} subscription</span>
+          ) : null}
           <span className="text-foreground">
             {window.label}: {left}% left
           </span>
