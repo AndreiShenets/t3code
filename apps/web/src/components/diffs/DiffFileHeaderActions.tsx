@@ -15,16 +15,18 @@ export interface DiffFileEditorAction {
 
 export function DiffFileHeaderActions({
   filePath,
+  workspaceRoot,
   onOpenFile,
   editorAction,
 }: {
   filePath: string;
+  workspaceRoot?: string | undefined;
   onOpenFile?: ((path: string) => void) | undefined;
   editorAction?: DiffFileEditorAction | null | undefined;
 }) {
   return (
     <>
-      <DiffFilePathCopyButton filePath={filePath} />
+      <DiffFilePathCopyButton filePath={filePath} workspaceRoot={workspaceRoot} />
       {onOpenFile ? (
         <Tooltip>
           <TooltipTrigger
