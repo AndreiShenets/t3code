@@ -8,6 +8,7 @@ import {
   type PullRequestDiffResult,
 } from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 import { __setClientSettingsForTests } from "../../hooks/useSettings";
@@ -207,6 +208,49 @@ it("keeps the diff after a refresh that brings back the same page", async () => 
   await expect.element(screen.getByText("1 file", { exact: true })).toBeVisible();
 });
 
+it("filters virtual files and the file tree, preserves folds, and clears on Escape", async () => {
+  setup({ paged: true });
+  __setClientSettingsForTests({ ...DEFAULT_CLIENT_SETTINGS, diffFilesCollapsed: true });
+  using _preferences = {
+    [Symbol.dispose]() {
+      window.localStorage.removeItem("t3code.pullRequestFileTreeOpen");
+      __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
+    },
+  };
+  const container = pagedContainer();
+  container.style.display = "block";
+  await using screen = await render(tab(0), { container });
+  await expect.element(screen.getByText("early-0.ts", { exact: true }).first()).toBeVisible();
+  await screen.getByRole("button", { name: "Show file tree" }).click();
+  await screen.getByRole("searchbox", { name: "Filter files" }).fill("early-39.ts");
+
+  await expect.element(screen.getByText("1 of 40 loaded files+")).toBeVisible();
+  await expect.element(screen.getByText("early-0.ts", { exact: true })).not.toBeInTheDocument();
+  await expect.element(screen.getByText("early-39.ts", { exact: true }).first()).toBeVisible();
+  await expect.element(screen.getByRole("button", { name: "Expand diff" })).toBeVisible();
+
+  await screen.getByRole("searchbox", { name: "Filter files" }).fill("no-such-file");
+  await expect.element(screen.getByText("No matching files.")).toBeVisible();
+  await expect.element(screen.getByRole("button", { name: "Load more files" })).toBeVisible();
+  await screen.getByRole("button", { name: "Load more files" }).click();
+  await expect.element(screen.getByText("0 of 41 loaded files")).toBeVisible();
+  await screen.getByRole("searchbox", { name: "Filter files" }).fill("late.test.ts");
+  await expect.element(screen.getByText("late.test.ts", { exact: true }).first()).toBeVisible();
+
+  await screen.getByRole("searchbox", { name: "Filter files" }).fill("no-such-file");
+  await userEvent.keyboard("{Escape}");
+  await expect.element(screen.getByRole("searchbox", { name: "Filter files" })).toHaveValue("");
+  await expect.element(screen.getByText("early-0.ts", { exact: true }).first()).toBeVisible();
+  container.style.width = "360px";
+  await vi.waitFor(() => {
+    const bounds = container.getBoundingClientRect();
+    const input = screen.getByRole("searchbox", { name: "Filter files" }).element();
+    const clear = screen.getByRole("button", { name: "Clear file filter" }).element();
+    expect(input.getBoundingClientRect().left).toBeGreaterThanOrEqual(bounds.left);
+    expect(clear.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+  });
+});
+
 // regression: #13279 a Viewed answer that lands after a link reveals a file must not fold it
 it("keeps a revealed file open when its Viewed mark loads afterwards", async () => {
   setup({ paged: false });
@@ -273,6 +317,8 @@ it("pages forward to a file asked for that is not loaded yet, then scrolls to it
   await using screen = await render(tab(0), { container });
   await expect.element(screen.getByText("early-0.ts", { exact: true }).first()).toBeVisible();
   await screen.getByRole("button", { name: "Hide test files" }).click();
+  await screen.getByRole("searchbox", { name: "Filter files" }).fill("not-the-linked-file");
+  await expect.element(screen.getByText("No matching files.")).toBeVisible();
 
   const url = `${detail.url}/files#diff-${bytesToHex(sha256(new TextEncoder().encode("late.test.ts")))}R4-R5`;
   const settled = vi.fn();
