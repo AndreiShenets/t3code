@@ -808,7 +808,9 @@ export function EditableFileSurface({
   const promptCommentIds = new Set(
     useComposerDraftStore(
       (store) =>
-        store.getComposerDraft(composerDraftTarget)?.reviewComments ?? EMPTY_REVIEW_COMMENTS,
+        (composerDraftTarget === null
+          ? undefined
+          : store.getComposerDraft(composerDraftTarget)?.reviewComments) ?? EMPTY_REVIEW_COMMENTS,
     ).map((comment) => comment.id),
   );
   const [lineAnnotations, setLineAnnotations] = useState<FileCommentLineAnnotation[]>([]);

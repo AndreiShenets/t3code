@@ -263,14 +263,6 @@ export default function DiffPanel({
       : null,
   );
   const activeCwd = activeThread?.worktreePath ?? activeProject?.workspaceRoot;
-  const activeRepositoryRoot = activeThread?.worktreePath
-    ? undefined
-    : activeProject?.repositoryIdentity?.rootPath;
-  const getEditorAction = useDiffEditorAction(
-    activeThread?.environmentId ?? null,
-    activeCwd,
-    activeRepositoryRoot,
-  );
   const serverConfig = useAtomValue(
     serverEnvironment.configValueAtom(activeThread?.environmentId ?? null),
   );
@@ -301,6 +293,11 @@ export default function DiffPanel({
   // Turn and git diffs name files from the repository root; a tool call's diff names them as
   // its provider recorded them, absolute or relative to the workspace.
   const diffPathRepositoryRoot = toolCallSelection ? undefined : activeRepositoryRoot;
+  const getEditorAction = useDiffEditorAction(
+    activeThread?.environmentId ?? null,
+    activeCwd,
+    diffPathRepositoryRoot,
+  );
   const isGitSelection =
     diffSelection.kind === "branch" ||
     diffSelection.kind === "unstaged" ||
