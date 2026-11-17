@@ -487,8 +487,7 @@ function PullRequestCodeTab({
   const [foldOverride, setFoldOverride] = useState<DiffFoldOverride>(
     savedCode?.foldOverride ?? null,
   );
-  const effectiveFoldOverride =
-    foldOverride ?? (settings.diffFilesCollapsed ? "folded" : null);
+  const effectiveFoldOverride = foldOverride ?? (settings.diffFilesCollapsed ? "folded" : null);
   const diffLayout = settings.diffLayout;
   const [wordWrapOverride, setWordWrapOverride] = useState<boolean | null>(
     savedCode?.wordWrap ?? null,

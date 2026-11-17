@@ -28,7 +28,8 @@ import {
 const PILL_CLASS =
   "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
-const EMPTY_PENDING: ReadonlyMap<PullRequestReactionContent, PendingPullRequestReaction> = new Map();
+const EMPTY_PENDING: ReadonlyMap<PullRequestReactionContent, PendingPullRequestReaction> =
+  new Map();
 
 /** Reaction pills with a picker. `onReact` resolves to whether the host saved the change. */
 export function ReactionBar({
@@ -176,7 +177,9 @@ export function PullRequestReactionBar({
   return (
     <ReactionBar
       reactions={reactions}
-      canReact={canReact && (subjectId !== undefined || capabilities?.descriptionReactions !== false)}
+      canReact={
+        canReact && (subjectId !== undefined || capabilities?.descriptionReactions !== false)
+      }
       reactionContents={capabilities?.reactionContents}
       className={className}
       onReact={async (content, reacted) => {
