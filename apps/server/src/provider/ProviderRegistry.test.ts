@@ -552,6 +552,8 @@ const buildRegistryOverSnapshot = Effect.fn("buildRegistryOverSnapshot")(functio
 });
 
 const layerTestNodeServices = Layer.mergeAll(
+  Layer.succeed(WindowsShellEnvironment, () => Effect.succeed({})),
+  Layer.succeed(HostProcess.Environment, { PATH: "C:\\Windows" }),
   ProviderLatestVersions.layer,
   NodeServices.layer,
   NodeCrypto.layer,
@@ -1703,8 +1705,6 @@ it.layer(
                 prefix: "t3-pi-model-cache-",
               }).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
             ),
-            Effect.provideService(WindowsShellEnvironment, () => Effect.succeed({})),
-            Effect.provideService(HostProcess.Environment, { PATH: "C:\\Windows" }),
           ),
       );
     });
