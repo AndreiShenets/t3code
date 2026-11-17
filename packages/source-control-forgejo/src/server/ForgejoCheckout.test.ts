@@ -23,7 +23,7 @@ it.effect(
       const git = (yield* SourceControlHost.SourceControlHost).process;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-fj-checkout-" });
-      const source = path.join(root, "source");
+      const source = path.join(root, "source").replaceAll("\\", "/");
       const cwd = path.join(root, "checkout");
       yield* fs.makeDirectory(source);
       for (const args of [
@@ -33,8 +33,9 @@ it.effect(
       ])
         yield* git.run({ operation: "test.setup", command: "git", cwd: source, args });
       yield* fs.writeFileString(path.join(source, "base.txt"), "base\n");
+      yield* fs.writeFileString(path.join(source, ".gitattributes"), "*.txt -text\n");
       for (const args of [
-        ["add", "base.txt"],
+        ["add", "base.txt", ".gitattributes"],
         ["commit", "-m", "base"],
       ])
         yield* git.run({ operation: "test.setup", command: "git", cwd: source, args });
@@ -44,12 +45,14 @@ it.effect(
         cwd: source,
         args: ["rev-parse", "HEAD"],
       })).stdout.trim();
-      yield* git.run({
+      const cloned = yield* git.run({
         operation: "test.setup",
         command: "git",
         cwd: root,
         args: ["clone", source, cwd],
+        allowNonZeroExit: true,
       });
+      assert.strictEqual(cloned.exitCode, 0, cloned.stderr);
       yield* fs.writeFileString(path.join(source, "feature.txt"), "pull request change\n");
       for (const args of [
         ["add", "feature.txt"],
