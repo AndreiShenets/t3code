@@ -235,6 +235,7 @@ import {
   PullRequestLabelChangeInput,
   PullRequestSetFilesViewedInput,
   PullRequestSubmitReviewInput,
+  PullRequestSubmitReviewResult,
   PullRequestThreadCommentsInput,
   PullRequestThreadCommentsResult,
   PullRequestThreadReplyInput,
@@ -1245,7 +1246,7 @@ const WsPullRequestsUpdateCommentRpc = Rpc.make(WS_METHODS.pullRequestsUpdateCom
 
 const WsPullRequestsSubmitReviewRpc = Rpc.make(WS_METHODS.pullRequestsSubmitReview, {
   payload: PullRequestSubmitReviewInput,
-  success: Schema.Void,
+  success: PullRequestSubmitReviewResult,
   error: PullRequestRpcError,
 });
 

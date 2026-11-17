@@ -4,6 +4,7 @@ import type {
   PullRequestReaction,
   PullRequestReactionContent,
   PullRequestRef,
+  PullRequestCapabilities,
 } from "@t3tools/contracts";
 import { SmilePlusIcon } from "lucide-react";
 import { useState } from "react";
@@ -27,18 +28,19 @@ import {
 const PILL_CLASS =
   "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
-const EMPTY_PENDING: ReadonlyMap<PullRequestReactionContent, PendingPullRequestReaction> =
-  new Map();
+const EMPTY_PENDING: ReadonlyMap<PullRequestReactionContent, PendingPullRequestReaction> = new Map();
 
 /** Reaction pills with a picker. `onReact` resolves to whether the host saved the change. */
 export function ReactionBar({
   reactions,
   canReact,
+  reactionContents,
   onReact,
   className,
 }: {
   readonly reactions: ReadonlyArray<PullRequestReaction>;
   readonly canReact: boolean;
+  readonly reactionContents?: PullRequestCapabilities["reactionContents"] | undefined;
   readonly onReact: (content: PullRequestReactionContent, reacted: boolean) => Promise<boolean>;
   readonly className?: string | undefined;
 }) {
@@ -51,8 +53,12 @@ export function ReactionBar({
   const signature = pullRequestReactionsSignature(reactions);
   const values = pending.signature === signature ? pending.values : EMPTY_PENDING;
   const shown = applyPendingPullRequestReactions(reactions, values);
+  const allowed = PULL_REQUEST_REACTION_ORDER.filter(
+    (content) => reactionContents?.includes(content) ?? true,
+  );
 
   const toggle = async (content: PullRequestReactionContent, reacted: boolean) => {
+    if (!canReact || !allowed.includes(content)) return;
     const entry: PendingPullRequestReaction = { reacted };
     setPending({ signature, values: new Map([...values, [content, entry]]) });
     if (await onReact(content, reacted)) return;
@@ -65,7 +71,7 @@ export function ReactionBar({
     toastManager.add({ type: "error", title: "The reaction could not be saved" });
   };
 
-  if (shown.length === 0 && !canReact) return null;
+  if (shown.length === 0 && (!canReact || allowed.length === 0)) return null;
 
   return (
     <div className={cn("flex min-w-0 max-w-full flex-wrap items-center gap-1", className)}>
@@ -77,7 +83,7 @@ export function ReactionBar({
                 type="button"
                 aria-pressed={reaction.viewerHasReacted}
                 aria-label={`${pullRequestReactionName(reaction.content)}, ${reaction.count}`}
-                disabled={!canReact}
+                disabled={!canReact || !allowed.includes(reaction.content)}
                 className={cn(
                   PILL_CLASS,
                   reaction.viewerHasReacted
@@ -96,7 +102,7 @@ export function ReactionBar({
         </Tooltip>
       ))}
 
-      {canReact ? (
+      {canReact && allowed.length > 0 ? (
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger
             render={
@@ -114,7 +120,7 @@ export function ReactionBar({
           </PopoverTrigger>
           <PopoverPopup align="start" side="top" padding="compact">
             <div className="flex items-center gap-0.5">
-              {PULL_REQUEST_REACTION_ORDER.map((content) => {
+              {allowed.map((content) => {
                 const reacted =
                   shown.find((reaction) => reaction.content === content)?.viewerHasReacted ?? false;
                 return (
@@ -147,6 +153,7 @@ export function ReactionBar({
 export function PullRequestReactionBar({
   reactions,
   canReact,
+  capabilities,
   subjectId,
   environmentId,
   reference,
@@ -155,6 +162,7 @@ export function PullRequestReactionBar({
 }: {
   readonly reactions: ReadonlyArray<PullRequestReaction>;
   readonly canReact: boolean;
+  readonly capabilities?: PullRequestCapabilities | undefined;
   /** Omit to react to the pull request description. */
   readonly subjectId?: string | undefined;
   readonly environmentId: EnvironmentId;
@@ -168,7 +176,8 @@ export function PullRequestReactionBar({
   return (
     <ReactionBar
       reactions={reactions}
-      canReact={canReact}
+      canReact={canReact && (subjectId !== undefined || capabilities?.descriptionReactions !== false)}
+      reactionContents={capabilities?.reactionContents}
       className={className}
       onReact={async (content, reacted) => {
         const result = await setReaction({
