@@ -22,6 +22,10 @@ type PendingRead = {
   reject: (error: Error) => void;
 };
 const state = vi.hoisted(() => ({
+  heads: new Map<
+    string,
+    Map<string | null, Atom.Atom<AsyncResult.AsyncResult<PullRequestDiffResult>>>
+  >(),
   pages: new Map<string | null, Atom.Atom<AsyncResult.AsyncResult<PullRequestDiffResult>>>(),
   reads: [] as PendingRead[],
   renderStop: vi.fn<(props: ComponentProps<typeof GuideStop>) => null>(),
@@ -50,7 +54,9 @@ vi.mock("~/state/pullRequests", async () => {
   return {
     pullRequestEnvironment: {
       diff: (target: Target) =>
-        state.pages.get(target.input.cursor ?? null) ?? pages(JSON.stringify(target)),
+        (state.heads.get(target.input.cacheHeadSha ?? "") ?? state.pages).get(
+          target.input.cursor ?? null,
+        ) ?? pages(JSON.stringify(target)),
       diffFileContents: {},
     },
   };
@@ -158,6 +164,7 @@ async function loadA(registry: AtomRegistry.AtomRegistry) {
 function setup() {
   const registry = AtomRegistry.make();
   state.pages.clear();
+  state.heads.clear();
   state.reads = [];
   state.renderStop.mockReset().mockReturnValue(null);
   state.readContents
@@ -204,10 +211,10 @@ describe("guide whole-PR diff revisions", () => {
     ]);
     expect(stop().diffLoading).toBe(false);
     expect(state.reads.map(({ target }) => target.input)).toEqual([
-      reference,
-      { ...reference, cursor: "next" },
-      reference,
-      { ...reference, cursor: "next" },
+      { ...reference, cacheHeadSha: "head-A" },
+      { ...reference, cacheHeadSha: "head-A", cursor: "next" },
+      { ...reference, cacheHeadSha: "head-B" },
+      { ...reference, cacheHeadSha: "head-B", cursor: "next" },
     ]);
     const expandedB = await stop().loadDiffFiles(stop().files.get("a.ts")!);
     expect(expandedB.newFile.cacheKey).not.toBe(expandedA.newFile.cacheKey);
@@ -367,4 +374,23 @@ it("waits for a later cached page that is still refreshing", async () => {
       ["wanted.ts", "FRESH\n"],
     ],
   });
+});
+
+it("reads the guide head's pages instead of the previous push's cached ones", async () => {
+  setup();
+  await using stack = new AsyncDisposableStack();
+  const registry = stack.adopt(AtomRegistry.make(), (value) => value.dispose());
+  state.pages.set(null, Atom.make(AsyncResult.success(page("wanted.ts", "OLD_HEAD", null))));
+  state.heads.set(
+    "new-head",
+    new Map([[null, Atom.make(AsyncResult.success(page("wanted.ts", "NEW_HEAD", null)))]]),
+  );
+  await using screen = await render(
+    <RegistryContext.Provider value={registry}>
+      <Probe wantedPaths={["wanted.ts"]} />
+    </RegistryContext.Provider>,
+  );
+  expect(JSON.parse(screen.container.querySelector("output")!.textContent!).files).toEqual([
+    ["wanted.ts", "NEW_HEAD\n"],
+  ]);
 });

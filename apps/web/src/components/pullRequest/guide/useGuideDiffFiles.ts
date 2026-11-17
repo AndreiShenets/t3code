@@ -47,7 +47,11 @@ export function useGuideDiffFiles({
     loading
       ? pullRequestEnvironment.diff({
           environmentId,
-          input: { ...reference, ...(current.cursor === null ? {} : { cursor: current.cursor }) },
+          input: {
+            ...reference,
+            cacheHeadSha: headSha,
+            ...(current.cursor === null ? {} : { cursor: current.cursor }),
+          },
         })
       : null,
   );
@@ -65,13 +69,17 @@ export function useGuideDiffFiles({
     while (!next.done && wantedPaths.some((path) => !next.files.has(path))) {
       const atom = pullRequestEnvironment.diff({
         environmentId,
-        input: { ...reference, ...(next.cursor === null ? {} : { cursor: next.cursor }) },
+        input: {
+          ...reference,
+          cacheHeadSha: headSha,
+          ...(next.cursor === null ? {} : { cursor: next.cursor }),
+        },
       });
       let result = registry.get(atom);
       const pageKey = JSON.stringify([key, next.cursor]);
       if (refreshedPage.current !== pageKey) {
         refreshedPage.current = pageKey;
-        // Unpinned cached pages have no revision stamp, including reused later cursors.
+        // Revalidate each cached page once when loading this guide revision.
         if (AsyncResult.getOrElse(result, () => null) !== null || !result.waiting) {
           registry.refresh(atom);
           result = registry.get(atom);
@@ -98,6 +106,7 @@ export function useGuideDiffFiles({
     current,
     data,
     environmentId,
+    headSha,
     isPending,
     isSuccess,
     key,
