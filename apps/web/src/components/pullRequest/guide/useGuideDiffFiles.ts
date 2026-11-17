@@ -56,7 +56,7 @@ export function useGuideDiffFiles({
           environmentId,
           input: {
             ...reference,
-            cacheHeadSha: headSha,
+            ...(headSha === null ? {} : { cacheHeadSha: headSha }),
             ...(current.cursor === null ? {} : { cursor: current.cursor }),
           },
         })
@@ -78,7 +78,7 @@ export function useGuideDiffFiles({
         environmentId,
         input: {
           ...reference,
-          cacheHeadSha: headSha,
+          ...(headSha === null ? {} : { cacheHeadSha: headSha }),
           ...(next.cursor === null ? {} : { cursor: next.cursor }),
         },
       });

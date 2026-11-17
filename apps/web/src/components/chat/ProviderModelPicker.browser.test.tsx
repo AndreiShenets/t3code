@@ -608,7 +608,7 @@ it("lists a model reported twice by one provider once, with contiguous jump shor
     })),
   );
 
-  await using screen = await render(
+  await using screen = await renderUi(
     <ProviderModelPicker
       environmentId={null}
       activeInstanceId={instanceId}
