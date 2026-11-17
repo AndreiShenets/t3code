@@ -65,6 +65,8 @@ export const definition = defineSourceControl({
       : `${remoteWebOrigin(host, remoteUrl)}/${repository}/pullrequest/${number}`,
   checkoutCommand: () => null,
   checkoutCommandArgument: () => null,
+  parseIssueUrl: () => null,
+  issueScope: () => null,
   isChangeRequestReference: isCustomUrl,
   parseChangeRequestUrl: (url) =>
     isCustomUrl(url.href) ? cloudDefinition.parseChangeRequestUrl(url) : null,

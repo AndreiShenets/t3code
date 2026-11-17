@@ -61,6 +61,9 @@ describe("Azure DevOps Server client", () => {
       }),
     ).toBe(false);
     expect(definition.canReadChangeRequestOnHost()).toBe(false);
+    expect(
+      definition.parseIssueUrl(new URL("https://dev.azure.com/acme/Web%20App/_workitems/edit/9")),
+    ).toBeNull();
   });
 
   it("preserves the configured browser URL and remote HTTP origin", () => {
