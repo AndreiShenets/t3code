@@ -24,6 +24,7 @@ import {
   TraeIcon,
   VisualStudioCode,
   VisualStudioCodeInsiders,
+  VisualStudioIcon,
   VSCodium,
   Zed,
 } from "../Icons";
@@ -75,6 +76,7 @@ const resolveOpenInOptions = (platform: string, availableEditors: ReadonlyArray<
     { Icon: RubyMineIcon, value: "rubymine", kind: "brand" },
     { Icon: RustRoverIcon, value: "rustrover", kind: "brand" },
     { Icon: WebStormIcon, value: "webstorm", kind: "brand" },
+    { Icon: VisualStudioIcon, value: "visual-studio", kind: "brand" },
     {
       Icon: isMacPlatform(platform)
         ? FinderIcon
