@@ -4,7 +4,11 @@ import type { PullRequestReviewPosition, ScopedThreadRef } from "@t3tools/contra
 import { createStore } from "zustand/vanilla";
 
 import { useRightPanelStore, type PullRequestDetailTab } from "~/rightPanelStore";
-import type { DiffFoldOverride, DiffSlice, FileDiffFoldChoices } from "./pullRequestDiff.logic";
+import type {
+  DiffFoldOverride,
+  FileDiffFoldChoices,
+} from "@t3tools/client-runtime/pull-request-diff-fold";
+import type { DiffSlice } from "./pullRequestDiff.logic";
 
 export interface PullRequestDraftAnchor {
   readonly headSha?: string | undefined;

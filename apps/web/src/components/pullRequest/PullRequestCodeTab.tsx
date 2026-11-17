@@ -1,4 +1,10 @@
 import {
+  isFileDiffCollapsed,
+  withFileDiffFold,
+  type DiffFoldOverride,
+  type FileDiffFoldChoices,
+} from "@t3tools/client-runtime/pull-request-diff-fold";
+import {
   parsePullRequestAnchor,
   pullRequestDiffPathMatches,
   pullRequestLinkCommit,
@@ -93,6 +99,7 @@ import { cn } from "~/lib/utils";
 import { createPullRequestDiffFileContentsLoader } from "~/lib/diffFileContents";
 import {
   buildDiffReviewComment,
+  diffReviewSelectionId,
   resolveDiffReviewAnchor,
   type ReviewCommentContext,
 } from "~/reviewCommentContext";
@@ -136,13 +143,9 @@ import {
 import { pullRequestCompletionScope } from "./PullRequestMarkdownTextarea";
 import {
   getFileViewedRange,
-  isFileDiffCollapsed,
   isLineInFileDiff,
   reconcileDiffSlices,
   type DiffSlice,
-  withFileDiffFold,
-  type DiffFoldOverride,
-  type FileDiffFoldChoices,
 } from "./pullRequestDiff.logic";
 import type { PullRequestDraftAnchor, PullRequestViewStateStore } from "./pullRequestViewState";
 import { PullRequestDiffStat, PullRequestMetaLine } from "./pullRequestPresentation";
@@ -471,7 +474,7 @@ function PullRequestCodeTab({
     savedCode?.foldOverride ?? null,
   );
   const effectiveFoldOverride =
-    foldOverride ?? (settings.diffFilesCollapsed ? "folded" : "expanded");
+    foldOverride ?? (settings.diffFilesCollapsed ? "folded" : null);
   const diffLayout = settings.diffLayout;
   const [wordWrapOverride, setWordWrapOverride] = useState<boolean | null>(
     savedCode?.wordWrap ?? null,
@@ -1008,9 +1011,8 @@ function PullRequestCodeTab({
       </div>
     );
 
-  // A stale mark means the file changed since it was viewed; Fold all and Expand all outrank marks.
   const foldsAsViewed = (path: string) =>
-    foldOverride === null && filesViewedEnabled && isFileViewed(path) && !isFileViewedStale(path);
+    filesViewedEnabled && isFileViewed(path) && !isFileViewedStale(path);
   const items: CodeViewDiffItem<ReviewAnnotationGroup>[] = annotatedFiles.map(
     ({ fileKey, path, fileDiff, annotations, annotationsVersion }) => {
       const collapsed = isFileDiffCollapsed(
@@ -1086,7 +1088,11 @@ function PullRequestCodeTab({
       setViewed(file.path, viewed, commit === null ? file.fileDiff.newObjectId : undefined);
     }
     setFoldChoices((current) =>
-      range.reduce((next, file) => withFileDiffFold(next, file.fileKey, viewed), current),
+      range.reduce(
+        (next, file) =>
+          withFileDiffFold(next, file.fileKey, effectiveFoldOverride === null ? undefined : viewed),
+        current,
+      ),
     );
   };
   const fileViewedToggle = {
@@ -1156,7 +1162,7 @@ function PullRequestCodeTab({
       file === undefined
         ? null
         : buildDiffReviewComment({
-            id: `pull-request-selection:${anchor.fileKey}:${anchor.range.start}:${anchor.range.end}`,
+            id: `pull-request-selection:${diffReviewSelectionId(anchor.fileKey, anchor.range)}`,
             sectionId: `pull-request:${detail.number}`,
             sectionTitle: `PR #${detail.number} review`,
             filePath: anchor.path,
