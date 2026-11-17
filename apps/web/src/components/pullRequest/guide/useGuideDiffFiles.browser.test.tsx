@@ -15,7 +15,10 @@ import { act, render } from "../../../../test/render";
 
 import type { GuideStop } from "./GuideStop";
 
-type Target = { environmentId: EnvironmentId; input: PullRequestDiffInput };
+type Target = {
+  environmentId: EnvironmentId;
+  input: PullRequestDiffInput & { cacheHeadSha?: string };
+};
 type PendingRead = {
   target: Target;
   resolve: (page: PullRequestDiffResult) => void;
