@@ -1,8 +1,8 @@
 import { File, type FileOptions, Virtualizer } from "@pierre/diffs/react";
-import type { EnvironmentId } from "@t3tools/contracts";
 import { type ClipboardEvent, useEffect, useRef, useState } from "react";
 
 import { DiffWorkerPoolProvider } from "~/components/DiffWorkerPoolProvider";
+import { useCodeDisplay, type CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useRenderedAppearance } from "~/hooks/useTheme";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
@@ -15,15 +15,24 @@ export default function ReadOnlySourcePreview(props: {
   readonly name: string;
   readonly text: string;
   readonly cacheKey?: string;
-  readonly workspace?: { readonly environmentId: EnvironmentId; readonly cwd: string };
-  readonly onPostRender?: FileOptions<unknown, undefined>["onPostRender"];
+  readonly workspace?: CodeDisplayWorkspace;
+  readonly onPostRender?: FileOptions<undefined, undefined>["onPostRender"];
   /** A preview's own wrap toggle; omitted follows the word wrap setting. */
   readonly wordWrap?: boolean;
 }) {
+  const { name, text, onPostRender: onFilePostRender } = props;
   const resolvedTheme = useRenderedAppearance();
   const defaultWordWrap = useClientSettings((settings) => settings.wordWrap);
   const wordWrap = props.wordWrap ?? defaultWordWrap;
-  const { text, onPostRender } = props;
+  const { onPostRender: onCodePostRender } = useCodeDisplay(props.workspace, [name]);
+  const onPostRender: NonNullable<FileOptions<undefined, undefined>["onPostRender"]> = (
+    container,
+    instance,
+    phase,
+  ) => {
+    onCodePostRender(container, name, phase);
+    onFilePostRender?.(container, instance, phase);
+  };
   const wrapper = useRef<HTMLDivElement>(null);
   const [selection] = useState(() => new SourceSelection());
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- follows the document's selection, which only it reports
