@@ -9,6 +9,7 @@ import {
   type ProviderConsumeResetCreditInput,
   type ServerProviderSlashCommand,
   isProviderAvailable,
+  isProviderWorkspaceSnapshotCurrent,
   PROVIDER_DISPLAY_NAMES,
   type ServerProvider,
   type ServerProviderResetCredits,
@@ -898,13 +899,63 @@ export function withUsageLimitsCommands(
   });
 }
 
+export function resolveProviderUsageLimitSource(
+  instanceId: ProviderInstanceId,
+  providers: readonly ServerProvider[],
+  now: number,
+  selection?: {
+    readonly model?: string | null | undefined;
+    readonly cwd?: string | null | undefined;
+  },
+): ServerProvider | undefined {
+  const selected = providers.find((provider) => provider.instanceId === instanceId);
+  if (selected?.driver !== "opencode" || !selected.enabled || !selection?.model || !selection.cwd)
+    return selected;
+  const workspace = selected.workspaceSnapshots?.find((snapshot) => snapshot.cwd === selection.cwd);
+  if (!workspace || !isProviderWorkspaceSnapshotCurrent(workspace, now)) return selected;
+  const modelProviderId = selection.model.split("/")[0];
+  const accounts = workspace.subscriptionAccounts?.filter(
+    (account) => account.modelProviderId === modelProviderId,
+  );
+  if (accounts?.length !== 1) return selected;
+  const account = accounts[0]!;
+  if (account.driver !== "codex" && account.driver !== "claudeAgent") return selected;
+  const matches = providers
+    .filter(
+      (provider) =>
+        provider.driver === account.driver &&
+        provider.enabled &&
+        provider.installed &&
+        isProviderAvailable(provider) &&
+        provider.auth.status === "authenticated" &&
+        provider.auth.email?.trim().toLowerCase() === account.email.trim().toLowerCase() &&
+        provider.auth.workspaceId === account.workspaceId &&
+        provider.auth.type !== "apiKey" &&
+        provider.auth.type !== "customEndpoint" &&
+        provider.auth.type !== "bedrock" &&
+        provider.usageLimits !== undefined,
+    )
+    .sort(
+      (a, b) =>
+        Number(limitsNotice(a.usageLimits!) !== null) -
+          Number(limitsNotice(b.usageLimits!) !== null) ||
+        Date.parse(b.usageLimits!.checkedAt) - Date.parse(a.usageLimits!.checkedAt) ||
+        a.instanceId.localeCompare(b.instanceId),
+    );
+  return matches[0] ?? selected;
+}
+
 export function collectProviderUsageLimits(
   instanceId: ProviderInstanceId,
   providers: readonly ServerProvider[],
   sources: UsageLimitSourceSnapshots,
   now: number,
+  selection?: {
+    readonly model?: string | null | undefined;
+    readonly cwd?: string | null | undefined;
+  },
 ): UsageLimitsReport | null {
-  const selected = providers.find((provider) => provider.instanceId === instanceId);
+  const selected = resolveProviderUsageLimitSource(instanceId, providers, now, selection);
   if (!selected || !hasProviderUsageLimits(selected.driver, providers, sources)) return null;
   const resolveKey = accountKeyResolver([
     ...providers.filter((provider) => provider.enabled).map(nativeReport),
@@ -915,7 +966,9 @@ export function collectProviderUsageLimits(
     string,
     { usage: NativeSnapshot; credits: NativeSnapshot | null }
   >();
-  for (const provider of providersWithLimits(providers)) {
+  for (const provider of providersWithLimits(
+    selected.instanceId === instanceId ? providers : [selected],
+  )) {
     if (provider.driver !== selected.driver || !provider.usageLimits) continue;
     const snapshot = { provider, limits: provider.usageLimits };
     const key = resolveKey(nativeReport(provider)) ?? `instance:${provider.instanceId}`;
@@ -1023,5 +1076,12 @@ export function collectProviderUsageLimits(
       notices.push(`${source.label}: ${source.error}`);
     }
   }
-  return { createdAt: DateTime.formatIso(DateTime.makeUnsafe(now)), accounts, notices };
+  return {
+    createdAt: DateTime.formatIso(DateTime.makeUnsafe(now)),
+    accounts:
+      selected.instanceId === instanceId
+        ? accounts
+        : accounts.filter((account) => account.instanceId === selected.instanceId),
+    notices,
+  };
 }
