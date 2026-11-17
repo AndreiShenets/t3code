@@ -11,7 +11,7 @@ export function DiffFilePathCopyButton({
   workspaceRoot,
 }: {
   filePath: string;
-  workspaceRoot: string | undefined;
+  workspaceRoot?: string | undefined;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const { copyToClipboard, isCopied } = useCopyToClipboard<void>({
@@ -28,9 +28,10 @@ export function DiffFilePathCopyButton({
             size="icon-micro"
             variant="ghost-muted"
             aria-label="Copy file path"
-            onClick={() =>
-              copyToClipboard(formatFilePathForClipboard(filePath, workspaceRoot), undefined)
-            }
+            onClick={(event) => {
+              event.stopPropagation();
+              copyToClipboard(formatFilePathForClipboard(filePath, workspaceRoot), undefined);
+            }}
           />
         }
       >
