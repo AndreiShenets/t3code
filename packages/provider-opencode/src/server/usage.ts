@@ -55,6 +55,7 @@ function parseOpenCodeMessage(
   const modelReference = object(message.model);
   const model = text(modelReference.id) || text(modelReference.modelID) || text(message.modelID);
   const providerId = text(modelReference.providerID) || text(message.providerID);
+  const upstreamProvider = providerId.trim();
   const timestampMs = object(message.time).created ?? fallback.timestampMs;
   if (!model || typeof timestampMs !== "number" || !Number.isFinite(timestampMs)) return null;
   const reasoningTokens = tokens(usage.reasoning);
@@ -74,6 +75,7 @@ function parseOpenCodeMessage(
     provider: "opencode",
     timestampMs,
     model,
+    ...(upstreamProvider ? { upstreamProvider } : {}),
     ...(prefix !== undefined && !model.includes("/") ? { rateModel: `${prefix}/${model}` } : {}),
     sessionId: fallback.sessionId || text(message.sessionID),
     totals,

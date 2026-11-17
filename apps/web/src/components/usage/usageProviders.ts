@@ -1,6 +1,7 @@
 import type { UsageProviderKind } from "@t3tools/contracts";
 
 import { ProviderDriverKind } from "@t3tools/contracts";
+import { usageSeriesColor, usageSeriesLabel, type UsageSeries } from "@t3tools/shared/usageSeries";
 
 import type { UsageMetric } from "./usageShortcuts";
 
@@ -50,6 +51,15 @@ export const PROVIDER_PRESENTATION = {
 } satisfies Record<UsageProviderKind, UsageProviderPresentation>;
 
 export const PROVIDER_ORDER = Object.keys(PROVIDER_PRESENTATION) as UsageProviderKind[];
+
+export function usagePresentation(series: UsageSeries) {
+  const base = PROVIDER_PRESENTATION[series.provider];
+  return {
+    ...base,
+    label: usageSeriesLabel(series, base.label),
+    color: usageSeriesColor(series, base.color),
+  };
+}
 
 export function providersWithUsage(
   totals: readonly {
