@@ -170,3 +170,29 @@ index d1fa4d5d79ba70b6cd990b0ac9df5206fe55b58d..8762624a075174f5d9f35224cf091596
      }
    },
    "publishConfig": {
+diff --git a/dist/editor/platform.js b/dist/editor/platform.js
+--- a/dist/editor/platform.js
++++ b/dist/editor/platform.js
+@@ -21,6 +21,10 @@ function isMoveCursorShortcut(e) {
+ 		else if (e.key === "Home") return "start";
+ 		else if (e.key === "End") return "end";
+ 	}
++	if (isMac && e.altKey && !e.ctrlKey && !e.metaKey) {
++		if (e.key === "ArrowLeft") return "wordLeft";
++		else if (e.key === "ArrowRight") return "wordRight";
++	}
+ 	if (!e.altKey && isPrimaryModifier(e, isMac)) {
+ 		if (e.key === "ArrowLeft") return isMac ? "textStart" : "wordLeft";
+ 		else if (e.key === "ArrowRight") return isMac ? "end" : "wordRight";
+diff --git a/dist/editor/selection.js b/dist/editor/selection.js
+--- a/dist/editor/selection.js
++++ b/dist/editor/selection.js
+@@ -129,7 +129,7 @@ function mapCursorMove(textDocument, selections, shortcut, options = {}) {
+ 				if (line < maxLine) line = options.resolveRenderableLine == null ? line + 1 : Math.min(options.resolveRenderableLine(line + 1, "down") ?? line, maxLine);
+ 				else character = textDocument.getLineLength(line);
+ 			}
+-		} else if (isCollapsedSelection(selection)) {
++		} else if (isCollapsedSelection(selection) || shortcut === "wordLeft" || shortcut === "wordRight") {
+ 			const lineLength = textDocument.getLineLength(line);
+ 			character = Math.min(character, lineLength);
+ 			if (shortcut === "left" || shortcut === "wordLeft") {
