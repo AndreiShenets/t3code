@@ -596,6 +596,7 @@ it("uses the owning surface's tab selection across thread and panel switches", a
         keybindings={[]}
         configuredPreviewUrls={[]}
         workspaceMutationId={null}
+        issuesSupported={false}
         sideChatParentPanel={{ openToolDiff: () => {}, runShellCommand: () => {} }}
         getShortcutContext={shortcutContext}
         onSendAnnotation={() => {}}
