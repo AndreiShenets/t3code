@@ -1684,7 +1684,11 @@ it.layer(
                     : [defaultModel, customModel, currentModel, removedModel],
                 );
 
-                yield* registry.refreshInstance(instance.instanceId);
+                const refreshed = yield* registry.refreshInstance(instance.instanceId);
+                assert.deepStrictEqual(
+                  refreshed[0]?.models,
+                  restarted ? retainedModels : refreshedProvider.models,
+                );
                 assert.deepStrictEqual(
                   (yield* readProviderStatusCache(filePath))?.models,
                   restarted ? retainedModels : refreshedProvider.models,
@@ -1713,6 +1717,8 @@ it.layer(
                 prefix: "t3-pi-model-cache-",
               }).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
             ),
+            Effect.provideService(WindowsShellEnvironment, () => Effect.succeed({})),
+            Effect.provideService(HostProcess.Environment, { PATH: "C:\\Windows" }),
           ),
       );
     });
