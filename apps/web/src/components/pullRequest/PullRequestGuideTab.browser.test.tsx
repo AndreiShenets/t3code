@@ -153,6 +153,7 @@ it("steps with J and K beside a chat, also after a stop button or while the chat
       <PullRequestGuideTab
         environmentId={EnvironmentId.make("environment")}
         reference={reference}
+        headSha="head"
         title="Test pull request"
         workspaceRoot="/workspace"
         active
