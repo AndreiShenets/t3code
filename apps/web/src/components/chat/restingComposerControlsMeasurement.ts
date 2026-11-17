@@ -32,7 +32,7 @@ function providerModelPickerNaturalWidth(picker: HTMLElement): number {
       ? Math.max(
           0,
           Math.min(
-            label.scrollWidth,
+            Math.max(label.scrollWidth, ...Array.from(label.children, (line) => line.scrollWidth)),
             Number.isFinite(labelMaxWidth) ? labelMaxWidth : Number.POSITIVE_INFINITY,
           ) - label.clientWidth,
         )
