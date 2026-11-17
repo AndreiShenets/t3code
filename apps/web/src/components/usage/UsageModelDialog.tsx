@@ -1,5 +1,6 @@
 import { formatPercent, formatTokens, formatUsd } from "@t3tools/shared/usageFormat";
 import { isModelCostUnknown, type ModelTotals } from "@t3tools/shared/usageMerge";
+import { usageModelKey } from "@t3tools/shared/usageSeries";
 
 import { mergeAnsweredUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
@@ -22,7 +23,7 @@ import {
   speedCostSegments,
   tokenTypeSegments,
 } from "./usageBreakdown";
-import { PROVIDER_PRESENTATION } from "./usageProviders";
+import { usagePresentation } from "./usageProviders";
 
 export interface UsageChartWindow {
   readonly days: readonly string[];
@@ -50,10 +51,10 @@ export function UsageModelDialog({
 }) {
   const usage = mergeAnsweredUsage(
     environments,
-    (bucket) => bucket.provider === model.provider && bucket.model === model.model,
+    (bucket) => usageModelKey(bucket) === usageModelKey(model),
   );
   const providers = [model.provider];
-  const presentation = PROVIDER_PRESENTATION[model.provider];
+  const presentation = usagePresentation(model);
   const costUnknown = isModelCostUnknown(model);
   const hitRate = cacheHitRate(model);
   const perMillion = costPerMillionTokens(model);
@@ -100,6 +101,7 @@ export function UsageModelDialog({
             {/* Unpriced cost is unknown, not zero, so its trend shows tokens. */}
             <UsageProviderChart
               providers={providers}
+              series={[model]}
               days={chartWindow.days}
               daily={usage.daily}
               hours={chartWindow.hours}
