@@ -5,6 +5,9 @@ import {
   type EnvironmentId,
 } from "@t3tools/contracts";
 import { FolderClosedIcon } from "lucide-react";
+import { useMessages } from "gt-react";
+
+import type { MessageResolver } from "../../i18n/messages";
 
 import { usePreferredEditor } from "../../editorPreferences";
 import { editorLabelForPlatform } from "../../editorLabels";
@@ -53,7 +56,11 @@ type OpenInOption = {
   kind: "brand" | "generic";
 };
 
-const resolveOpenInOptions = (platform: string, availableEditors: ReadonlyArray<EditorId>) => {
+const resolveOpenInOptions = (
+  platform: string,
+  availableEditors: ReadonlyArray<EditorId>,
+  resolve: MessageResolver,
+) => {
   const baseOptions: ReadonlyArray<Omit<OpenInOption, "label">> = [
     { Icon: CursorIcon, value: "cursor", kind: "brand" },
     { Icon: TraeIcon, value: "trae", kind: "brand" },
@@ -88,7 +95,10 @@ const resolveOpenInOptions = (platform: string, availableEditors: ReadonlyArray<
   const availableEditorSet = new Set(availableEditors);
   return baseOptions
     .filter((option) => availableEditorSet.has(option.value))
-    .map((option) => ({ ...option, label: editorLabelForPlatform(option.value, platform) }));
+    .map((option) => ({
+      ...option,
+      label: editorLabelForPlatform(option.value, platform, resolve),
+    }));
 };
 
 export function getOpenInIconClass(kind: OpenInOption["kind"]) {
@@ -141,7 +151,8 @@ export function useEditorLauncher(
     return (await result)._tag === "Success";
   };
 
-  const options = resolveOpenInOptions(navigator.platform, effectiveEditors);
+  const messages = useMessages();
+  const options = resolveOpenInOptions(navigator.platform, effectiveEditors, messages);
   const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
   return {
     remote,
