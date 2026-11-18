@@ -1,3 +1,4 @@
+import { useMessages } from "gt-react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { EnvironmentId, PullRequestRef } from "@t3tools/contracts";
 import { RegistryContext } from "@effect/atom-react";
@@ -54,6 +55,7 @@ export function useGuideDiffFiles({
           },
         })
       : null,
+    useMessages(),
   );
 
   const data = query.data;
