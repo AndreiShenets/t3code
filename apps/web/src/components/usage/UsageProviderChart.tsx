@@ -1,5 +1,6 @@
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import type { UsageProviderKind } from "@t3tools/contracts";
+import { T, useGT, useLocale, useMessages } from "gt-react";
 import { useLayoutEffect, useRef, useState } from "react";
 
 import type { DailyTotals, HourlyTotals } from "@t3tools/shared/usageMerge";
@@ -7,10 +8,10 @@ import { usageSeriesKey, usageSeriesValue, type UsageSeries } from "@t3tools/sha
 import {
   formatDayShort,
   formatHourShort,
-  formatRelativeHourShort,
   formatTokens,
   formatUsd,
 } from "@t3tools/shared/usageFormat";
+import { formatRelativeHourShort } from "@t3tools/shared/usageFormatCopy";
 import { cn } from "~/lib/utils";
 import { PROVIDER_ORDER, usagePresentation } from "./usageProviders";
 import { observeResize } from "~/lib/observeResize";
@@ -276,7 +277,9 @@ function UsageChartTooltip({
         );
       })}
       <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-1">
-        <span className="text-muted-foreground">Total</span>
+        <span className="text-muted-foreground">
+          <T>Total</T>
+        </span>
         <span className={cn("tabular-nums", partial ? "text-muted-foreground" : "text-foreground")}>
           {format(column?.total ?? 0)}
         </span>
@@ -422,6 +425,9 @@ export function UsageProviderChart({
   timeZone,
   hour12,
 }: UsageProviderChartProps) {
+  const gt = useGT();
+  const locale = useLocale();
+  const m = useMessages();
   const periods = resolution === "hour" ? hours : days;
   const totals: readonly (DailyTotals | HourlyTotals)[] = resolution === "hour" ? hourly : daily;
   const byPeriod = new Map(
@@ -439,12 +445,14 @@ export function UsageProviderChart({
   const toY = (value: number) => valueToY(value, scale.max);
   const seriesClassName = (loading: boolean) =>
     cn("transition-opacity", loading && "opacity-40 delay-150");
-  const format = metric === "tokens" ? formatTokens : formatUsd;
+  const format = metric === "tokens" ? formatTokens : (value: number) => formatUsd(value, locale);
   const formatPeriod = (period: string) =>
-    resolution === "hour" ? formatHourShort(period, timeZone, hour12) : formatDayShort(period);
+    resolution === "hour"
+      ? formatHourShort(period, timeZone, hour12, locale)
+      : formatDayShort(period, locale);
   const formatTooltipPeriod = (period: string) =>
     resolution === "hour" && referenceTime !== undefined
-      ? formatRelativeHourShort(period, referenceTime, timeZone, hour12)
+      ? formatRelativeHourShort(period, referenceTime, timeZone, hour12, m, locale)
       : formatPeriod(period);
 
   return (
@@ -537,42 +545,55 @@ export function UsageProviderChart({
         )}
       </div>
 
-      {/* The plot and its axes are hover-only; this carries the same figures for screen readers. */}
-      <table className="sr-only">
-        <caption>
-          {`${resolution === "hour" ? "Hourly" : "Daily"} ${metric === "tokens" ? "processed tokens" : "cost"} by provider`}
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">{resolution === "hour" ? "Hour" : "Day"}</th>
-            {series.map((entry) => (
-              <th key={usageSeriesKey(entry)} scope="col">
-                {usagePresentation(entry).label}
-              </th>
-            ))}
-            {series.length > 1 ? <th scope="col">Total</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {periods.map((period, index) => {
-            const column = columns[index];
-            return (
-              <tr key={period}>
-                <th scope="row">{formatTooltipPeriod(period)}</th>
-                {series.map((entry) => (
-                  <td key={usageSeriesKey(entry)}>
-                    {format(
-                      column?.bands.find((band) => usageSeriesKey(band) === usageSeriesKey(entry))
-                        ?.value ?? 0,
-                    )}
-                  </td>
-                ))}
-                {series.length > 1 ? <td>{format(column?.total ?? 0)}</td> : null}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {/* The plot and its axes are hover-only; this carries the same figures for screen readers.
+          sr-only sits on a wrapper: Firefox does not clip a table's caption by the table's own box. */}
+      <div className="sr-only">
+        <table>
+          <caption>
+            {resolution === "hour"
+              ? metric === "tokens"
+                ? gt("Hourly processed tokens by provider")
+                : gt("Hourly cost by provider")
+              : metric === "tokens"
+                ? gt("Daily processed tokens by provider")
+                : gt("Daily cost by provider")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{resolution === "hour" ? gt("Hour") : gt("Day")}</th>
+              {series.map((entry) => (
+                <th key={usageSeriesKey(entry)} scope="col">
+                  {usagePresentation(entry).label}
+                </th>
+              ))}
+              {series.length > 1 ? (
+                <th scope="col">
+                  <T>Total</T>
+                </th>
+              ) : null}
+            </tr>
+          </thead>
+          <tbody>
+            {periods.map((period, index) => {
+              const column = columns[index];
+              return (
+                <tr key={period}>
+                  <th scope="row">{formatTooltipPeriod(period)}</th>
+                  {series.map((entry) => (
+                    <td key={usageSeriesKey(entry)}>
+                      {format(
+                        column?.bands.find((band) => usageSeriesKey(band) === usageSeriesKey(entry))
+                          ?.value ?? 0,
+                      )}
+                    </td>
+                  ))}
+                  {series.length > 1 ? <td>{format(column?.total ?? 0)}</td> : null}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
