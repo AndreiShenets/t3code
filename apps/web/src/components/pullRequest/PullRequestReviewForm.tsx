@@ -1,7 +1,7 @@
 import { useAtomCommand } from "~/state/use-atom-command";
 import type { EnvironmentId, PullRequestRef, PullRequestReviewVerdict } from "@t3tools/contracts";
 import { CheckIcon, MessageSquareIcon, XCircleIcon } from "lucide-react";
-import { msg, useGT, useMessages } from "gt-react";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 
 import { m } from "~/i18n/messages";
@@ -156,8 +156,8 @@ export function PullRequestReviewForm({
       toastManager.add({
         type: "error",
         title: feedbackPosted
-          ? "Review feedback posted; vote not confirmed"
-          : "Some review feedback was not posted",
+          ? m(msg("Review feedback posted; vote not confirmed"))
+          : m(msg("Some review feedback was not posted")),
         description: result.value.message,
       });
       onPartial();
@@ -186,10 +186,12 @@ export function PullRequestReviewForm({
     <>
       {uncertain ? (
         <div role="alert" className="mb-2 text-xs">
-          The host may have accepted more of this review. Refresh and check the pull request before
-          retrying to avoid duplicates.
+          <T>
+            The host may have accepted more of this review. Refresh and check the pull request
+            before retrying to avoid duplicates.
+          </T>
           <Button size="xs" onClick={() => acknowledge(reviewKey)}>
-            I checked the PR; allow retry
+            <T>I checked the PR; allow retry</T>
           </Button>
         </div>
       ) : null}

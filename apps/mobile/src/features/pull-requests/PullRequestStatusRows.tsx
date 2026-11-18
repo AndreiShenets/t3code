@@ -373,14 +373,14 @@ export function PullRequestReviewersRow(props: RowProps) {
                 {reviewer.reviewOutcome ? (
                   <Text className="text-xs text-foreground-muted">
                     {reviewer.reviewOutcome === "approved-with-suggestions"
-                      ? "Approved with suggestions"
+                      ? gt("Approved with suggestions")
                       : reviewer.reviewOutcome === "waiting"
-                        ? "Waiting for author"
+                        ? gt("Waiting for author")
                         : reviewer.reviewOutcome === "rejected"
-                          ? "Rejected"
+                          ? gt("Rejected", { $context: "review state" })
                           : reviewer.reviewOutcome === "approved"
-                            ? "Approved"
-                            : "No vote"}
+                            ? gt("Approved", { $context: "review state" })
+                            : gt("No vote")}
                   </Text>
                 ) : null}
               </View>
