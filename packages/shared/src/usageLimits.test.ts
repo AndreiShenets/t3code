@@ -17,7 +17,6 @@ import {
   withUsageLimitsCommands,
   collectLimitAccounts,
   collectExternalUsageLinks,
-  collectLimitNotices,
   collectLimitPools,
   elapsedShare,
   exhaustedUsageWindow,
@@ -27,6 +26,7 @@ import {
   resolveNewThreadModelSelection,
   resolveProviderUsageLimitSource,
 } from "./usageLimits.ts";
+import { collectLimitNotices } from "./usageLimitsCopy.ts";
 
 const checkedAt = "2026-09-03T12:00:00.000Z";
 const now = Date.parse(checkedAt);
