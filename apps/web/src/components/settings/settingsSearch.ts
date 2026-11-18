@@ -945,7 +945,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "custom-build",
-    title: "Custom build",
+    title: msg("Custom build"),
     to: "/settings/general",
     searchTerms: ["AndreiShenets custom check download install update release"],
     desktopOnly: true,
