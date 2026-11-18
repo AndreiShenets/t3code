@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { useGT } from "gt-react";
 import type { EnvironmentId } from "@t3tools/contracts";
 
 import { resolveFileContextMenuAbsolutePath } from "~/fileContextMenu";
@@ -10,6 +11,7 @@ export function useDiffEditorAction(
   workspaceRoot: string | undefined,
   repositoryRoot: string | undefined,
 ) {
+  const gt = useGT();
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const { primaryOption, canOpenEditor, open } = useEditorLauncher(
     environmentId,
@@ -29,7 +31,7 @@ export function useDiffEditorAction(
     if (absolutePath === null) return null;
     return {
       Icon: primaryOption.Icon,
-      label: `Open in ${primaryOption.label}`,
+      label: gt("Open in {editor}", { editor: primaryOption.label }),
       iconClassName: getOpenInIconClass(primaryOption.kind),
       disabled: !canOpenEditor,
       onOpen: () => {

@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { AuthFilesystemWriteScope, type EnvironmentId } from "@t3tools/contracts";
 
 import { useTheme } from "~/hooks/useTheme";
@@ -31,6 +32,7 @@ export default function PullRequestFileEditor({
   relativePath: string;
   onClose: () => void;
 }) {
+  const gt = useGT();
   const file = useProjectFileQuery(environmentId, workspaceRoot, relativePath, true);
   const canWrite = useEnvironmentScope(environmentId, AuthFilesystemWriteScope);
   const { resolvedTheme } = useTheme();
@@ -42,8 +44,9 @@ export default function PullRequestFileEditor({
         <DialogHeader>
           <DialogTitle>{relativePath}</DialogTitle>
           <DialogDescription>
-            Current checkout.{" "}
-            {canWrite ? "Changes are saved automatically." : "Read-only connection."}
+            {canWrite
+              ? gt("Current checkout. Changes are saved automatically.")
+              : gt("Current checkout. Read-only connection.")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex h-[70dvh] min-h-0 flex-col overflow-hidden">
@@ -58,7 +61,7 @@ export default function PullRequestFileEditor({
             <>
               {file.data.truncated ? (
                 <FileSurfaceNotice>
-                  This file is too large to edit. Showing a partial preview.
+                  <T>This file is too large to edit. Showing a partial preview.</T>
                 </FileSurfaceNotice>
               ) : null}
               <SourceFilePreview
