@@ -64,7 +64,7 @@ describe("searchSettings", () => {
     (query) => {
       expect(searchSettings(query)[0]).toMatchObject({
         id: "show-whitespace-characters",
-        to: "/settings/general",
+        to: "/settings/diffs",
       });
     },
   );
