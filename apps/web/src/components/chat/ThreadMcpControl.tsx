@@ -1,5 +1,6 @@
 import { MCP_WORKSPACE_NOTICE, supportsMcpManagement } from "@t3tools/client-runtime/mcpCommands";
 import type { EnvironmentId, ServerProvider } from "@t3tools/contracts";
+import { T, useMessages } from "gt-react";
 import { PlugIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -15,6 +16,7 @@ export function ThreadMcpControl(props: {
   readonly provider: ServerProvider | null;
   readonly cwd: string | null;
 }) {
+  const messages = useMessages();
   const [open, setOpen] = useState(false);
   if (!supportsMcpManagement(props.provider) || !props.provider || !props.cwd) return null;
   return (
@@ -25,8 +27,10 @@ export function ThreadMcpControl(props: {
       </PopoverTrigger>
       <PopoverPopup side="left" align="start" width="lg">
         <div className="space-y-4">
-          <PopoverTitle>Configured MCP servers</PopoverTitle>
-          <p className="text-xs text-muted-foreground">{MCP_WORKSPACE_NOTICE}</p>
+          <PopoverTitle>
+            <T>Configured MCP servers</T>
+          </PopoverTitle>
+          <p className="text-xs text-muted-foreground">{messages(MCP_WORKSPACE_NOTICE)}</p>
           {open ? (
             <McpServerList
               environmentId={props.environmentId}

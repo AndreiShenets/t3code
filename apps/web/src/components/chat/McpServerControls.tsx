@@ -5,6 +5,7 @@ import {
   type McpManagementRequest,
 } from "@t3tools/client-runtime/mcpCommands";
 import type { ProviderMcpServer } from "@t3tools/contracts";
+import { T, useGT, useMessages } from "gt-react";
 import { useContext, useEffect, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
@@ -24,6 +25,7 @@ import { formatEnvironmentQueryError } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 
 export function McpServerList(props: McpManagementRequest) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const canManage = useAtomValue(
     serverEnvironment.setMcpEnabled.permissionAtom(props.environmentId),
@@ -70,8 +72,8 @@ export function McpServerList(props: McpManagementRequest) {
     <div className="space-y-4">
       <p className="break-all text-xs text-muted-foreground">{target.cwd}</p>
       <Input
-        aria-label="Search MCP servers"
-        placeholder="Search servers…"
+        aria-label={gt("Search MCP servers")}
+        placeholder={gt("Search servers…")}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
       />
@@ -84,7 +86,7 @@ export function McpServerList(props: McpManagementRequest) {
           start({ action: "list" });
         }}
       >
-        Refresh
+        <T>Refresh</T>
       </Button>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
@@ -93,12 +95,14 @@ export function McpServerList(props: McpManagementRequest) {
       ) : null}
       {busy ? (
         <p role="status" className="text-sm text-muted-foreground">
-          Updating MCP connections…
+          <T>Updating MCP connections…</T>
         </p>
       ) : null}
       {!busy && !error && visible.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {servers.length ? "No matching servers." : "No configured MCP servers in this workspace."}
+          {servers.length
+            ? gt("No matching servers.")
+            : gt("No configured MCP servers in this workspace.")}
         </p>
       ) : null}
       {visible.map((server) => (
@@ -118,13 +122,13 @@ export function McpServerList(props: McpManagementRequest) {
             <p className="break-all text-sm font-medium">{server.name}</p>
             <p className="text-xs text-muted-foreground">
               {server.status === "needs-auth"
-                ? "Needs authentication. Sign in using OpenCode /mcps."
+                ? gt("Needs authentication. Sign in using OpenCode /mcps.")
                 : server.status}
             </p>
           </div>
           <Switch
             size="sm"
-            aria-label={`Enable ${server.name}`}
+            aria-label={gt("Enable {name}", { name: server.name })}
             checked={server.status !== "disabled"}
             disabled={busy || !canManage}
             onCheckedChange={(enabled) => {
@@ -139,7 +143,7 @@ export function McpServerList(props: McpManagementRequest) {
       ))}
       {!canManage ? (
         <p className="text-xs text-muted-foreground">
-          Provider management permission is required to change connections.
+          <T>Provider management permission is required to change connections.</T>
         </p>
       ) : null}
     </div>
@@ -147,6 +151,7 @@ export function McpServerList(props: McpManagementRequest) {
 }
 
 export function ComposerMcpDialog(props: McpManagementRequest & { readonly onClose: () => void }) {
+  const messages = useMessages();
   return (
     <Dialog
       open
@@ -156,8 +161,10 @@ export function ComposerMcpDialog(props: McpManagementRequest & { readonly onClo
     >
       <DialogPopup>
         <DialogHeader>
-          <DialogTitle>MCP servers</DialogTitle>
-          <DialogDescription>{MCP_WORKSPACE_NOTICE}</DialogDescription>
+          <DialogTitle>
+            <T>MCP servers</T>
+          </DialogTitle>
+          <DialogDescription>{messages(MCP_WORKSPACE_NOTICE)}</DialogDescription>
         </DialogHeader>
         <DialogPanel>
           <McpServerList {...props} />
