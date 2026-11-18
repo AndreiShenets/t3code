@@ -7,6 +7,7 @@ import {
 } from "@t3tools/shared/keybindings";
 
 import { resolveShortcutCommand } from "../../keybindings";
+import { m } from "../../i18n/messages";
 
 import {
   buildKeybindingRows,
@@ -78,7 +79,7 @@ describe("KeybindingsSettings.logic", () => {
   );
   it("groups rows by command area in page order and drops empty groups", () => {
     const groups = groupKeybindingRows(buildKeybindingRows(DEFAULT_RESOLVED_KEYBINDINGS));
-    expect(groups.map((group) => group.title)).toEqual([
+    expect(groups.map((group) => m(group.title))).toEqual([
       "Navigation",
       "Threads",
       "Composer",

@@ -154,7 +154,7 @@ export function PullRequestReviewSheet({
           submitted.comments.every((_, index) => partial.postedCommentIndexes.includes(index)) &&
           (body.trim().length === 0 || partial.summaryPosted);
         throw new Error(
-          `${feedbackPosted ? "Review feedback posted; vote not confirmed." : "Some review feedback was not posted."} ${partial.message}`,
+          `${feedbackPosted ? gt("Review feedback posted; vote not confirmed.") : gt("Some review feedback was not posted.")} ${partial.message}`,
         );
       }
     });
@@ -191,11 +191,13 @@ export function PullRequestReviewSheet({
       {reviewing && store.draft.outcomeUnknown ? (
         <View className="gap-2">
           <Text>
-            The host may have accepted more of this review. Refresh and check the PR before retrying
-            to avoid duplicates.
+            <T>
+              The host may have accepted more of this review. Refresh and check the PR before
+              retrying to avoid duplicates.
+            </T>
           </Text>
           <Button
-            label="I checked the PR; allow retry"
+            label={gt("I checked the PR; allow retry")}
             onPress={() => {
               refreshDetail();
               store.update((draft) => ({ ...draft, outcomeUnknown: false }));

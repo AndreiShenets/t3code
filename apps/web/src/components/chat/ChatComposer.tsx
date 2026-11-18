@@ -2222,11 +2222,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (mcp !== null) {
       event?.preventDefault();
       if (!mcpAvailable || !mcpTarget) {
-        setComposerSubmissionError("MCP management requires OpenCode V2 and a workspace.");
+        setComposerSubmissionError(gt("MCP management requires OpenCode V2 and a workspace."));
       } else if (mcp.action === "invalid") {
-        setComposerSubmissionError(MCP_COMMAND_USAGE);
+        setComposerSubmissionError(m(MCP_COMMAND_USAGE));
       } else if (composerImagesRef.current.length > 0 || composerFilesRef.current.length > 0) {
-        setComposerSubmissionError("Remove attachments before running an MCP command.");
+        setComposerSubmissionError(gt("Remove attachments before running an MCP command."));
       } else {
         setComposerSubmissionError(null);
         openMcp(mcp);

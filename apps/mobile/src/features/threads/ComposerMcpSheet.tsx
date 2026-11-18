@@ -1,6 +1,7 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { MCP_WORKSPACE_NOTICE, type McpCommand } from "@t3tools/client-runtime/mcpCommands";
 import type { EnvironmentId, ProviderMcpServer, ProviderMcpTarget } from "@t3tools/contracts";
+import { T, useGT, useMessages } from "gt-react-native";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
 
@@ -16,6 +17,8 @@ export function ComposerMcpSheet(props: {
   readonly command: Exclude<McpCommand, { action: "invalid" }>;
   readonly onClose: () => void;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const registry = useContext(RegistryContext);
   const canManage = useAtomValue(
     serverEnvironment.setMcpEnabled.permissionAtom(props.environmentId),
@@ -63,17 +66,17 @@ export function ComposerMcpSheet(props: {
     server.name.toLowerCase().includes(query.toLowerCase()),
   );
   return (
-    <Sheet title="MCP servers" onClose={props.onClose}>
+    <Sheet title={gt("MCP servers")} onClose={props.onClose}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         contentContainerClassName="gap-4 p-4"
       >
-        <Text className="text-sm text-foreground-muted">{MCP_WORKSPACE_NOTICE}</Text>
+        <Text className="text-sm text-foreground-muted">{messages(MCP_WORKSPACE_NOTICE)}</Text>
         <Text className="text-xs text-foreground-muted">{target.cwd}</Text>
         <TextInput
-          accessibilityLabel="Search MCP servers"
-          placeholder="Search servers…"
+          accessibilityLabel={gt("Search MCP servers")}
+          placeholder={gt("Search servers…")}
           value={query}
           onChangeText={setQuery}
           className="rounded-lg border border-border-subtle p-3 text-foreground"
@@ -86,7 +89,9 @@ export function ComposerMcpSheet(props: {
           }}
           className="self-start rounded-lg bg-card px-4 py-2 disabled:opacity-50"
         >
-          <Text className="text-sm text-foreground">Refresh</Text>
+          <Text className="text-sm text-foreground">
+            <T>Refresh</T>
+          </Text>
         </Pressable>
         {error ? (
           <Text accessibilityRole="alert" className="text-sm text-danger">
@@ -95,14 +100,14 @@ export function ComposerMcpSheet(props: {
         ) : null}
         {busy ? (
           <Text accessibilityLiveRegion="polite" className="text-sm text-foreground-muted">
-            Updating MCP connections…
+            <T>Updating MCP connections…</T>
           </Text>
         ) : null}
         {!busy && !error && visible.length === 0 ? (
           <Text className="text-sm text-foreground-muted">
             {servers.length
-              ? "No matching servers."
-              : "No configured MCP servers in this workspace."}
+              ? gt("No matching servers.")
+              : gt("No configured MCP servers in this workspace.")}
           </Text>
         ) : null}
         {visible.map((server) => (
@@ -111,12 +116,12 @@ export function ComposerMcpSheet(props: {
               <Text className="text-sm font-medium text-foreground">{server.name}</Text>
               <Text className="text-xs text-foreground-muted">
                 {server.status === "needs-auth"
-                  ? "Needs authentication. Sign in using OpenCode /mcps."
+                  ? gt("Needs authentication. Sign in using OpenCode /mcps.")
                   : server.status}
               </Text>
             </View>
             <ThemedSwitch
-              accessibilityLabel={`Enable ${server.name}`}
+              accessibilityLabel={gt("Enable {name}", { name: server.name })}
               value={server.status !== "disabled"}
               disabled={busy || !canManage}
               onValueChange={(enabled) => {
@@ -131,7 +136,7 @@ export function ComposerMcpSheet(props: {
         ))}
         {!canManage ? (
           <Text className="text-xs text-foreground-muted">
-            Provider management permission is required to change connections.
+            <T>Provider management permission is required to change connections.</T>
           </Text>
         ) : null}
       </ScrollView>

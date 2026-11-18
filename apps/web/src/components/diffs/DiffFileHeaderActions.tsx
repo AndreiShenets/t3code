@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import { FilePenLine } from "lucide-react";
 
 import type { Icon } from "../Icons";
@@ -24,6 +25,7 @@ export function DiffFileHeaderActions({
   onOpenFile?: ((path: string) => void) | undefined;
   editorAction?: DiffFileEditorAction | null | undefined;
 }) {
+  const gt = useGT();
   return (
     <>
       <DiffFilePathCopyButton filePath={filePath} workspaceRoot={workspaceRoot} />
@@ -34,7 +36,7 @@ export function DiffFileHeaderActions({
               <Button
                 size="icon-micro"
                 variant="ghost-muted"
-                aria-label="Open file"
+                aria-label={gt("Open file")}
                 onClick={(event) => {
                   event.stopPropagation();
                   onOpenFile(filePath);
@@ -44,7 +46,7 @@ export function DiffFileHeaderActions({
           >
             <FilePenLine className="size-3" />
           </TooltipTrigger>
-          <TooltipPopup>Open file in current checkout</TooltipPopup>
+          <TooltipPopup>{gt("Open file in current checkout")}</TooltipPopup>
         </Tooltip>
       ) : null}
       {editorAction ? (

@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import { DownloadIcon, HourglassIcon, PackageCheckIcon, PackageSearchIcon } from "lucide-react";
 
 import { useCustomBuildUpdate } from "../../hooks/useCustomBuildUpdate";
@@ -5,6 +6,7 @@ import { SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export function SidebarCustomBuildUpdateButton() {
+  const gt = useGT();
   const { state, visible, disabled, busy, label, description, change } = useCustomBuildUpdate();
   if (!visible) return null;
   const hasUpdate = state?.status === "available" || state?.status === "downloaded";
@@ -23,7 +25,7 @@ export function SidebarCustomBuildUpdateButton() {
           render={
             <SidebarMenuButton
               size="icon"
-              aria-label={busy ? `Custom build: ${label}` : label}
+              aria-label={busy ? gt("Custom build: {status}", { status: label }) : label}
               aria-busy={busy}
               disabled={disabled}
               isActive={hasUpdate}
@@ -42,7 +44,7 @@ export function SidebarCustomBuildUpdateButton() {
           }
         />
         <TooltipPopup side="top">
-          <div>{busy ? `Custom build: ${label}` : label}</div>
+          <div>{busy ? gt("Custom build: {status}", { status: label }) : label}</div>
           <div>{description}</div>
         </TooltipPopup>
       </Tooltip>

@@ -261,7 +261,7 @@ export function useComposerMenuItems({
                 type: "slash-command" as const,
                 command: "mcp" as const,
                 label: "/mcp",
-                description: "Manage MCP connections for this workspace",
+                description: gt("Manage MCP connections for this workspace"),
               },
             ]
           : []),

@@ -651,7 +651,7 @@ export function PullRequestDetailPanel({
           if (relativePath === null) {
             toastManager.add({
               type: "error",
-              title: "This file is outside the project checkout.",
+              title: m(msg("This file is outside the project checkout.")),
             });
             return;
           }

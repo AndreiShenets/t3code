@@ -1,4 +1,5 @@
 import type { EnvironmentId, ProviderMcpTarget, ServerProvider } from "@t3tools/contracts";
+import { msg } from "gt-i18n";
 
 export type McpCommand =
   | { readonly action: "list" }
@@ -11,10 +12,15 @@ export interface McpManagementRequest {
   readonly command: Exclude<McpCommand, { action: "invalid" }>;
 }
 
-export const MCP_COMMAND_USAGE =
-  "Use /mcp, /mcp list, /mcp enable <server>, or /mcp disable <server>.";
-export const MCP_WORKSPACE_NOTICE =
-  "Changes affect all sessions using this OpenCode workspace. They last until OpenCode reloads or restarts. No configuration files are changed.";
+export const MCP_COMMAND_USAGE = msg("Use {list}, {listExplicit}, {enable}, or {disable}.", {
+  list: "/mcp",
+  listExplicit: "/mcp list",
+  enable: "/mcp enable <server>",
+  disable: "/mcp disable <server>",
+});
+export const MCP_WORKSPACE_NOTICE = msg(
+  "Changes affect all sessions using this OpenCode workspace. They last until OpenCode reloads or restarts. No configuration files are changed.",
+);
 
 export function supportsMcpManagement(
   provider:

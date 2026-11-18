@@ -1,6 +1,8 @@
 import { useAtom } from "@effect/atom-react";
 import type { DesktopCustomBuildState } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
+import { msg, useMessages } from "gt-react";
+import { m } from "../i18n/messages";
 import { useEffect, useState } from "react";
 
 import {
@@ -42,10 +44,14 @@ export function useCustomBuildUpdate() {
     };
   }, [act, subscribe]);
 
-  const presentation = customBuildUpdatePresentation(state, pending);
+  const presentation = customBuildUpdatePresentation(state, pending, useMessages());
   const reportError = (description: string) => {
     toastManager.add(
-      stackedThreadToast({ type: "error", title: "Custom build update failed", description }),
+      stackedThreadToast({
+        type: "error",
+        title: m(msg("Custom build update failed")),
+        description,
+      }),
     );
   };
   const change = (checkAgain = false) => {
@@ -63,7 +69,7 @@ export function useCustomBuildUpdate() {
         if (next.message) reportError(next.message);
       })
       .catch((error: unknown) => {
-        reportError(error instanceof Error ? error.message : "Try again.");
+        reportError(error instanceof Error ? error.message : m(msg("Try again.")));
       })
       .finally(() => setPending(false));
   };

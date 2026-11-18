@@ -1,18 +1,22 @@
 import type { DesktopBridge, DesktopCustomBuildState } from "@t3tools/contracts";
 
+import { msg } from "gt-react";
+import { m, type MessageResolver } from "../i18n/messages";
+
 const LABELS: Record<DesktopCustomBuildState["status"], string> = {
-  idle: "Check for Custom Build",
-  checking: "Checking…",
-  available: "Download Custom Build",
-  downloading: "Downloading…",
-  downloaded: "Install Custom Build",
-  installing: "Installing…",
-  "up-to-date": "Check for Custom Build",
+  idle: msg("Check for Custom Build"),
+  checking: msg("Checking…"),
+  available: msg("Download Custom Build"),
+  downloading: msg("Downloading…"),
+  downloaded: msg("Install Custom Build"),
+  installing: msg("Installing…"),
+  "up-to-date": msg("Check for Custom Build"),
 };
 
 export function customBuildUpdatePresentation(
   state: DesktopCustomBuildState | null,
   pending: boolean,
+  resolve: MessageResolver = m,
 ) {
   const status = state?.status ?? "idle";
   const busy = ["checking", "downloading", "installing"].includes(status);
@@ -20,14 +24,20 @@ export function customBuildUpdatePresentation(
     visible: state?.supported === true,
     disabled: pending || busy || !state?.supported,
     busy,
-    label: LABELS[status],
+    label: resolve(LABELS[status]),
     description:
       state?.message ??
       (status === "up-to-date"
-        ? "No newer custom Windows build is available."
+        ? resolve(msg("No newer custom Windows build is available."))
         : state?.availableBuild
-          ? `Custom build ${state.availableBuild}.`
-          : `Releases from AndreiShenets/t3code.${state?.currentBuild ? ` Installed: ${state.currentBuild}.` : ""}`),
+          ? resolve(msg("Custom build {build}.", { build: state.availableBuild }))
+          : state?.currentBuild
+            ? resolve(
+                msg("Releases from AndreiShenets/t3code. Installed: {build}.", {
+                  build: state.currentBuild,
+                }),
+              )
+            : resolve(msg("Releases from AndreiShenets/t3code."))),
   };
 }
 
@@ -53,7 +63,12 @@ export async function performCustomBuildUpdate({
   if (
     action === "install" &&
     !(await confirm(
-      `Install custom build ${state.availableBuild}? T3 Code will close and open the Windows installer. Running agents will be interrupted.`,
+      m(
+        msg(
+          "Install custom build {build}? T3 Code will close and open the Windows installer. Running agents will be interrupted.",
+          { build: state.availableBuild ?? "" },
+        ),
+      ),
     ))
   )
     return null;

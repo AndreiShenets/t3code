@@ -625,11 +625,14 @@ export function NewTaskDraftScreen(props: {
         !flow.selectedProviderStatus ||
         !composerWorkspaceCwd
       ) {
-        Dialog.alert("MCP unavailable", "MCP management requires OpenCode V2 and a workspace.");
+        Dialog.alert(
+          gt("MCP unavailable"),
+          gt("MCP management requires OpenCode V2 and a workspace."),
+        );
       } else if (mcp.action === "invalid") {
-        Dialog.alert("MCP command", MCP_COMMAND_USAGE);
+        Dialog.alert(gt("MCP command"), m(MCP_COMMAND_USAGE));
       } else if (draft.attachments.length > 0) {
-        Dialog.alert("MCP command", "Remove attachments before running an MCP command.");
+        Dialog.alert(gt("MCP command"), gt("Remove attachments before running an MCP command."));
       } else {
         setMcpRequest({
           environmentId: selectedProject.environmentId,

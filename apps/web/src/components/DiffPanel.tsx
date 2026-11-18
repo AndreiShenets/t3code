@@ -1388,7 +1388,9 @@ export default function DiffPanel({
     <DiffPanelShell mode={mode} header={headerRow}>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-border/60 px-4 py-1">
         {fileFilter.active && selectedFilePath && !fileFilter.matches(selectedFilePath) ? (
-          <span className="text-xs text-muted-foreground">Selected file shown outside filter</span>
+          <span className="text-xs text-muted-foreground">
+            <T>Selected file shown outside filter</T>
+          </span>
         ) : null}
         <div className="w-full max-w-80">
           <DiffFileFilter value={fileFilter.value} onChange={fileFilter.setValue} />
@@ -1525,7 +1527,7 @@ export default function DiffPanel({
                 >
                   {codeViewFiles.length === 0 && fileFilter.active ? (
                     <p className="pointer-events-none absolute inset-x-0 top-0 z-10 px-4 py-5 text-sm text-muted-foreground">
-                      No matching files.
+                      <T>No matching files.</T>
                     </p>
                   ) : null}
                   <AnnotatableCodeView
