@@ -1,4 +1,5 @@
 import { CaseSensitiveIcon, RegexIcon, SearchIcon, WholeWordIcon, XIcon } from "lucide-react";
+import { useGT } from "gt-react";
 import { useDeferredValue, useId, useState } from "react";
 import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
@@ -23,19 +24,20 @@ export function DiffFileFilter({
   readonly value: DiffFileFilterValue;
   readonly onChange: (value: DiffFileFilterValue) => void;
 }) {
+  const gt = useGT();
   const errorId = useId();
   const { error } = createDiffFileMatcher(value);
   return (
     <div>
-      <InputGroup role="search" aria-label="Filter changed files">
+      <InputGroup role="search" aria-label={gt("Filter changed files")}>
         <InputGroupAddon>
           <SearchIcon className="size-3.5" />
         </InputGroupAddon>
         <InputGroupInput
           type="search"
           size="sm"
-          aria-label="Filter files"
-          placeholder="Filter files"
+          aria-label={gt("Filter files")}
+          placeholder={gt("Filter files")}
           aria-invalid={error !== null}
           aria-describedby={error === null ? undefined : errorId}
           value={value.query}
@@ -52,9 +54,9 @@ export function DiffFileFilter({
         <InputGroupAddon align="inline-end">
           {(
             [
-              ["caseSensitive", "Match case", CaseSensitiveIcon],
-              ["wholeWord", "Match whole word", WholeWordIcon],
-              ["regex", "Use regular expression", RegexIcon],
+              ["caseSensitive", gt("Match case"), CaseSensitiveIcon],
+              ["wholeWord", gt("Match whole word"), WholeWordIcon],
+              ["regex", gt("Use regular expression"), RegexIcon],
             ] as const
           ).map(([key, label, Icon]) => (
             <Tooltip key={key}>
@@ -77,7 +79,7 @@ export function DiffFileFilter({
           <Button
             size="icon-xs"
             variant="ghost"
-            aria-label="Clear file filter"
+            aria-label={gt("Clear file filter")}
             disabled={value.query === ""}
             onClick={() => onChange({ ...value, query: "" })}
           >

@@ -1482,7 +1482,11 @@ function PullRequestCodeTab({
               )}
             </Button>
           ) : null}
-          {shownOutsideFilter ? <span>Linked file shown outside filter</span> : null}
+          {shownOutsideFilter ? (
+            <span>
+              <T>Linked file shown outside filter</T>
+            </span>
+          ) : null}
           {filesViewed.enabled && files.length > 0 ? (
             <span className="flex min-w-0 items-center gap-1 tabular-nums">
               <span className="shrink-0">
