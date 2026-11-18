@@ -67,10 +67,12 @@ export function PullRequestReviewForm({
   term,
   verdicts,
   requestChangesSummaryRequired,
+  verdictOnly = false,
   textareaRef,
   pending,
   onPendingChange,
   onSubmitted,
+  onPartial,
 }: {
   environmentId: EnvironmentId;
   /** False while the form stays mounted but hidden; dictation is cancelled then. */
@@ -80,10 +82,12 @@ export function PullRequestReviewForm({
   term: ChangeRequestTermKind;
   verdicts: ReadonlyArray<PullRequestReviewVerdict>;
   requestChangesSummaryRequired: boolean;
+  verdictOnly?: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   pending: boolean;
   onPendingChange: (pending: boolean) => void;
   onSubmitted: () => void;
+  onPartial: () => void;
 }) {
   const gt = useGT();
   const resolve = useMessages();
@@ -91,7 +95,9 @@ export function PullRequestReviewForm({
   const comments = usePendingReviewComments(reference);
   const reviewKey = pullRequestReviewKey(reference);
   const body = usePullRequestReviewStore((store) => store.summaries[reviewKey] ?? "");
-  const removeComments = usePullRequestReviewStore((store) => store.removeComments);
+  const applySubmission = usePullRequestReviewStore((store) => store.applySubmission);
+  const uncertain = usePullRequestReviewStore((store) => store.uncertain[reviewKey] === true);
+  const acknowledge = usePullRequestReviewStore((store) => store.acknowledge);
   const setSummary = usePullRequestReviewStore((store) => store.setSummary);
   const speech = useTextFieldSpeech({
     environmentId,
@@ -107,7 +113,6 @@ export function PullRequestReviewForm({
   useEffect(() => {
     if (!active) cancel();
   }, [active, cancel]);
-  const clearSummary = usePullRequestReviewStore((store) => store.clearSummary);
   const submitReview = useAtomCommand(pullRequestEnvironment.submitReview, {
     reportFailure: false,
   });
@@ -118,7 +123,7 @@ export function PullRequestReviewForm({
 
   const submit = async (verdict: (typeof VERDICTS)[number], text: string) => {
     const submittedComments = usePullRequestReviewStore.getState().drafts[reviewKey] ?? [];
-    if (pending || !canSubmit(verdict.value, text, submittedComments.length)) return;
+    if (pending || uncertain || !canSubmit(verdict.value, text, submittedComments.length)) return;
     const submittedBody = text;
     onPendingChange(true);
     const result = await submitReview({
@@ -143,11 +148,21 @@ export function PullRequestReviewForm({
       return;
     }
     // Preserve comments and summary edits made during submission.
-    removeComments(
-      reviewKey,
-      submittedComments.map((comment) => comment.id),
-    );
-    clearSummary(reviewKey, submittedBody);
+    applySubmission(reviewKey, submittedComments, submittedBody, result.value);
+    if (result.value?.status === "partial") {
+      const feedbackPosted =
+        submittedComments.every((_, index) => result.value?.postedCommentIndexes.includes(index)) &&
+        (submittedBody.trim().length === 0 || result.value.summaryPosted);
+      toastManager.add({
+        type: "error",
+        title: feedbackPosted
+          ? "Review feedback posted; vote not confirmed"
+          : "Some review feedback was not posted",
+        description: result.value.message,
+      });
+      onPartial();
+      return;
+    }
     toastManager.add({ type: "success", title: verdict.sent(term) });
     onSubmitted();
   };
@@ -156,7 +171,10 @@ export function PullRequestReviewForm({
   const canSubmit = (verdict: PullRequestReviewVerdict, summary: string, commentCount: number) =>
     verdict === "request-changes" && requestChangesSummaryRequired
       ? summary.trim().length > 0
-      : verdict === "approve" || summary.trim().length > 0 || commentCount > 0;
+      : verdict === "approve" ||
+        (verdict === "request-changes" && verdictOnly) ||
+        summary.trim().length > 0 ||
+        commentCount > 0;
   const placeholder =
     selectedVerdict === undefined || canSubmit(selectedVerdict.value, "", comments.length)
       ? gt("Summarize your review (optional)")
@@ -166,6 +184,15 @@ export function PullRequestReviewForm({
 
   return (
     <>
+      {uncertain ? (
+        <div role="alert" className="mb-2 text-xs">
+          The host may have accepted more of this review. Refresh and check the pull request before
+          retrying to avoid duplicates.
+          <Button size="xs" onClick={() => acknowledge(reviewKey)}>
+            I checked the PR; allow retry
+          </Button>
+        </div>
+      ) : null}
       <PullRequestMarkdownTextarea
         ref={textareaRef}
         completionScope={completionScope}
@@ -220,6 +247,7 @@ export function PullRequestReviewForm({
           disabled={
             speech.preparing ||
             pending ||
+            uncertain ||
             selectedVerdict === undefined ||
             (!canSubmit(selectedVerdict.value, body, comments.length) && !speech.blocksSubmission)
           }
