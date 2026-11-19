@@ -25,6 +25,7 @@ export function PullRequestGuideTab({
   reference,
   title,
   workspaceRoot,
+  headSha,
   active,
   canComment,
   rangeComments,
@@ -39,6 +40,7 @@ export function PullRequestGuideTab({
   reference: PullRequestRef;
   title: string | null;
   workspaceRoot: string;
+  headSha: string | null;
   active: boolean;
   canComment: boolean;
   rangeComments: boolean;
@@ -164,11 +166,18 @@ export function PullRequestGuideTab({
     ) : null;
 
   return (
-    <GuideProseContext value={{ environmentId, cwd: workspaceRoot }}>
+    <GuideProseContext
+      value={{
+        environmentId,
+        cwd: workspaceRoot,
+        snapshot: { reference, commit: headSha },
+      }}
+    >
       <GuideTour
         environmentId={environmentId}
         reference={reference}
         guide={guide}
+        headSha={headSha}
         banner={banner}
         active={active}
         commenting={commenting}

@@ -10,6 +10,19 @@ rebases, the files Git brought in are left out. A file stays in the list when th
 committed it, or fixed a conflict in it. Use the branch comparison to review everything that changed
 against your base branch. Restore still returns the complete saved workspace.
 
+## Tab width and whitespace
+
+On web and desktop, file and diff views display tabs using the applicable `.editorconfig`:
+`tab_width`, falling back to `indent_size`, or two columns when neither is set. Pull request
+views use the reviewed revision's configuration; workspace views use the current files.
+This changes only the display, not the file contents.
+
+To inspect indentation, enable **Settings → General → Show whitespace
+characters**. File and diff views show spaces as dots and tabs as arrows. This preference is
+off by default and saved separately on each device or browser.
+
+## Review local commits
+
 On web and desktop, open the Diff pane source picker and choose **Commits** to review one local
 commit at a time. The list shows the newest 100 commits in the branch comparison. A merge commit
 shows its changes against its first parent.
