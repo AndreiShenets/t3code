@@ -552,6 +552,8 @@ const buildRegistryOverSnapshot = Effect.fn("buildRegistryOverSnapshot")(functio
 });
 
 const layerTestNodeServices = Layer.mergeAll(
+  Layer.succeed(WindowsShellEnvironment, () => Effect.succeed({})),
+  Layer.succeed(HostProcess.Environment, { PATH: "C:\\Windows" }),
   ProviderLatestVersions.layer,
   NodeServices.layer,
   NodeCrypto.layer,
@@ -1705,7 +1707,11 @@ it.layer(
                     : [defaultModel, customModel, currentModel, removedModel],
                 );
 
-                yield* registry.refreshInstance(instance.instanceId);
+                const refreshed = yield* registry.refreshInstance(instance.instanceId);
+                assert.deepStrictEqual(
+                  refreshed[0]?.models,
+                  restarted ? retainedModels : refreshedProvider.models,
+                );
                 assert.deepStrictEqual(
                   (yield* readProviderStatusCache(filePath))?.models,
                   restarted ? retainedModels : refreshedProvider.models,

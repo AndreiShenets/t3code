@@ -1008,16 +1008,14 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
 
   // Git defaults and macOS writeout-only can leave empty refs after crashes; flush before publication.
   // Set fsync first: Git 2.36 ignores unknown batch without resetting the method.
-  // Batch fully flushes refs and equals fsync on macOS HFS+/APFS and Windows NTFS/ReFS.
-  // Keep per-object fsync elsewhere; VcsProcess retries unsupported macOS full flushes with plain fsync.
+  // Git for Windows cannot migrate bulk-fsync packs from a quarantined object directory.
+  // Keep per-object fsync there; VcsProcess retries unsupported macOS full flushes with plain fsync.
   const durableWrite = [
     "-c",
     "core.fsync=objects,reference",
     "-c",
     "core.fsyncMethod=fsync",
-    ...(hostPlatform === "darwin" || hostPlatform === "win32"
-      ? ["-c", "core.fsyncMethod=batch"]
-      : []),
+    ...(hostPlatform === "darwin" ? ["-c", "core.fsyncMethod=batch"] : []),
   ] as const;
 
   // Checkpoints must handle existing paths beyond Windows MAX_PATH, even when
@@ -1981,7 +1979,13 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
           args: [...longPaths, "clean", "-dn", "--", "."],
           env: { LC_ALL: "C" },
         });
-        if (/^Would remove /m.test(remaining.stdout)) {
+        if (
+          /^Would remove /m.test(remaining.stdout) &&
+          (yield* fileSystem.readDirectory(input.cwd).pipe(
+            Effect.map((entries) => entries.length > 0),
+            Effect.orElseSucceed(() => true),
+          ))
+        ) {
           yield* resetIndex;
           return yield* new VcsProcessExitError({
             operation,
