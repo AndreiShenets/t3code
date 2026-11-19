@@ -4671,6 +4671,8 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
                   }),
                   ...detail,
                   headSha: detail.headSha ?? undefined,
+                  mergeCommitSha: detail.mergeCommitSha ?? undefined,
+                  mergedBy: detail.mergedBy ?? undefined,
                   provider: provider.kind,
                   capabilities: provider.capabilities,
                   viewer: "viewer",
