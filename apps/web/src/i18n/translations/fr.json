@@ -478,6 +478,8 @@
   "0bf42b196261df62": "Le point de terminaison de l’environnement est introuvable.",
   "f5bf314f4bd18441": "Cet appareil attend une approbation sur l’hôte.",
   "94c2caab0a9d17a6": "L’environnement n’a pas pu autoriser la connexion.",
+  "72422582a2f6cac6": "Coût de la session",
+  "e11787ba7bf3de2f": "Inclut les coûts déclarés des agents délégués.",
   "d084f7f88e5bf041": "{host} a été figé pendant {seconds} s",
   "ca97b6934f016952": "Son processeur est surchargé (charge {load} sur {cpuCount} cœurs).",
   "93e37fedae7eaa5b": "T3 Code sur {host} était trop occupé pour répondre.",
