@@ -2063,7 +2063,24 @@ it.effect("restores and deletes checkpoints inside populated submodules", () =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const driver = yield* GitVcsDriver.makeVcsDriverShape();
+    const liveProcess = yield* VcsProcess.VcsProcess;
+    const driver = yield* GitVcsDriver.makeVcsDriverShape().pipe(
+      Effect.provideService(VcsProcess.VcsProcess, {
+        run: (input) =>
+          input.operation === "GitVcsDriver.checkpoints.listSubmodules" &&
+          input.args.includes("foreach")
+            ? Effect.fail(
+                new VcsProcessExitError({
+                  operation: input.operation,
+                  command: input.command,
+                  cwd: input.cwd,
+                  exitCode: 128,
+                  detail: "run_command returned non-zero status for library",
+                }),
+              )
+            : liveProcess.run(input),
+      }),
+    );
     const git = (cwd: string, args: ReadonlyArray<string>) =>
       driver.execute({ operation: "test", cwd, args });
     const makeRepository = Effect.fn("makeRepository")(function* (prefix: string) {
