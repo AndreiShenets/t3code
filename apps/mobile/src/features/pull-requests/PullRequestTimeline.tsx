@@ -3,6 +3,7 @@ import {
   pullRequestAnchorMatchesUrl,
 } from "@t3tools/shared/pullRequestAnchor";
 import { PullRequestEntryRow } from "./PullRequestEntryRow";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import IconGitCommit from "@tabler/icons-react-native/IconGitCommit";
@@ -112,21 +113,21 @@ function TimelineComment({
             {approved ? (
               <T>
                 <Text className="font-t3-medium">
-                  <Var>{comment.author?.login ?? gt("Unknown author")}</Var>
+                  <Var>{getPullRequestActorName(comment.author, gt("Unknown author"))}</Var>
                 </Text>
                 <Text className="text-foreground-muted"> approved</Text>
               </T>
             ) : changes ? (
               <T>
                 <Text className="font-t3-medium">
-                  <Var>{comment.author?.login ?? gt("Unknown author")}</Var>
+                  <Var>{getPullRequestActorName(comment.author, gt("Unknown author"))}</Var>
                 </Text>
                 <Text className="text-foreground-muted"> requested changes</Text>
               </T>
             ) : (
               <T>
                 <Text className="font-t3-medium">
-                  <Var>{comment.author?.login ?? gt("Unknown author")}</Var>
+                  <Var>{getPullRequestActorName(comment.author, gt("Unknown author"))}</Var>
                 </Text>
                 <Text className="text-foreground-muted"> commented</Text>
               </T>
@@ -280,7 +281,12 @@ export function pullRequestTimelineRows(
             <Text className="flex-1 text-sm">
               <T>
                 <Text className="font-t3-medium">
-                  <Var>{thread.comments[0]?.author?.login ?? resolve(msg("Unknown author"))}</Var>
+                  <Var>
+                    {getPullRequestActorName(
+                      thread.comments[0]?.author,
+                      resolve(msg("Unknown author")),
+                    )}
+                  </Var>
                 </Text>
                 <Text className="text-foreground-muted"> started a discussion</Text>
               </T>
