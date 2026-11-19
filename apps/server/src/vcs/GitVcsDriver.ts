@@ -993,17 +993,31 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
     };
   });
 
-  // $displaypath is relative to cwd, so "../" marks submodules outside a nested workspace.
   const listSubmodules = Effect.fn("GitVcsDriver.listSubmodules")(function* (cwd: string) {
-    const result = yield* execute({
+    const gitlinks = new Set<string>();
+    const decoder = new TextDecoder();
+    let tail = "";
+    // Git for Windows can fail to start the shell used by `submodule foreach`.
+    yield* vcsProcess.run({
       operation: "GitVcsDriver.checkpoints.listSubmodules",
+      command: "git",
       cwd,
-      args: ["submodule", "foreach", "--quiet", 'printf "%s\\0" "$displaypath"'],
+      args: ["-C", cwd, "ls-files", "--stage", "-z", "--", "."],
+      spawnCwd: globalThis.process.cwd(),
+      maxOutputBytes: 4_096,
+      outputMode: "truncate",
+      onStdoutChunk: (chunk) => {
+        const entries = (tail + decoder.decode(chunk, { stream: true })).split("\0");
+        tail = entries.pop() ?? "";
+        for (const entry of entries) {
+          if (entry.startsWith("160000 "))
+            gitlinks.add(path.join(cwd, entry.slice(entry.indexOf("\t") + 1)));
+        }
+      },
     });
-    return result.stdout
-      .split("\0")
-      .filter((entry) => entry !== "" && !entry.startsWith("../"))
-      .map((entry) => path.join(cwd, entry));
+    return yield* Effect.filter(gitlinks, (directory) =>
+      fileSystem.exists(path.join(directory, ".git")).pipe(Effect.orElseSucceed(() => false)),
+    );
   });
 
   // Git defaults and macOS writeout-only can leave empty refs after crashes; flush before publication.
