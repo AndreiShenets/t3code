@@ -8,6 +8,7 @@ import { sourceControlClients } from "@t3tools/client-runtime/source-control-cli
 import { useAtomCommand } from "~/state/use-atom-command";
 import type {
   EnvironmentId,
+  PullRequestCapabilities,
   PullRequestActor,
   PullRequestComment,
   PullRequestDetailView,
@@ -23,6 +24,7 @@ import {
   MessageSquareIcon,
   MessageSquarePlusIcon,
 } from "lucide-react";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 
 import { m } from "~/i18n/messages";
@@ -77,6 +79,7 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { changeRequestTermKind, type ChangeRequestTermKind } from "./changeRequestTerm";
 
 interface ReactionSurface {
+  readonly capabilities: PullRequestCapabilities;
   revealAnchor?: string | null;
   readonly canReact: (event: PullRequestTimelineEvent) => boolean;
   /** Absent where there is no composer beside the panel to add a remark to. */
@@ -118,7 +121,7 @@ function TimelineBody({
 }
 
 function ActorName({ actor }: { actor: PullRequestActor | null }) {
-  return <span className="font-semibold text-foreground">{actor?.login ?? "ghost"}</span>;
+  return <span className="font-semibold text-foreground">{getPullRequestActorName(actor)}</span>;
 }
 
 function TimelineMarker({
@@ -343,6 +346,7 @@ function ConversationCard({
               className="ml-auto justify-end"
               reactions={event.reactions}
               canReact={canReact}
+              capabilities={reactions.capabilities}
               subjectId={event.id}
               environmentId={reactions.environmentId}
               reference={reactions.reference}
@@ -552,7 +556,7 @@ function ReviewThreadEvent({
         ) : null}
         {expanded ? null : (
           <span className="shrink-0">
-            · {event.actor?.login ?? "ghost"}
+            · {getPullRequestActorName(event.actor)}
             {replyCount > 0 ? (
               <>
                 {" "}
@@ -798,6 +802,7 @@ function ReviewVerdictEvent({
             className="ml-auto justify-end"
             reactions={event.reactions}
             canReact={canReact}
+            capabilities={reactions.capabilities}
             subjectId={event.id}
             environmentId={reactions.environmentId}
             reference={reactions.reference}
@@ -869,6 +874,7 @@ export function PullRequestTimelineTab({
   const term = changeRequestTermKind(sourceControlClients.get(detail.provider).changeRequest);
   const newestCommitAt = newestPullRequestCommitAt(detail.commits);
   const reactions: ReactionSurface = {
+    capabilities: detail.capabilities,
     revealAnchor: anchor,
     canReact: (event) =>
       event.comment !== undefined && canReactPullRequestComment(detail, event.comment),
