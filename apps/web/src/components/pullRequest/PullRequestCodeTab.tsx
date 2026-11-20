@@ -1826,11 +1826,11 @@ function PullRequestCodeTab({
       </div>
     </div>
   );
-  // Hooks between diff derivations and their readers break compiler caching.
+  const hasDiffItems = items.length > 0;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Restore the native viewer scroll after its diff items attach.
   useLayoutEffect(() => {
     const position = scrollToRestore.current;
-    if (position === null || position.scopeKey !== scopeKey || items.length === 0) return;
+    if (position === null || position.scopeKey !== scopeKey || !hasDiffItems) return;
     const instance = viewer?.getInstance();
     const container = instance?.getContainerElement();
     if (!container) return;
@@ -1838,7 +1838,7 @@ function PullRequestCodeTab({
     // sticky header's height, which would move the review up one header on every return.
     container.scrollTo({ top: position.top, left: position.left });
     scrollToRestore.current = null;
-  }, [viewer, scopeKey, items.length]);
+  }, [viewer, scopeKey, hasDiffItems, scrollToRestore]);
   // A file not loaded yet pages forward each time a slice arrives; once loaded, the viewer
   // positions it when it renders it.
   const answerReveal = useEffectEvent(() => {
