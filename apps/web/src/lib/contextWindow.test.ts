@@ -80,9 +80,16 @@ describe("V2 context window presentation", () => {
     const snapshot = deriveLatestContextWindowSnapshot(
       [compactionEntry(null)],
       usageBeforeCompaction,
+      {
+        id: ProviderThreadId.make("provider-thread"),
+        contextUsage: { usedTokens: 985_000, cost: { amount: 0.42, currency: "USD" } },
+        updatedAt: DateTime.makeUnsafe("2026-06-19T23:55:00.000Z"),
+      },
+      0.08,
     );
     expect(snapshot?.usedTokens).toBe(2_000);
     expect(snapshot?.maxTokens).toBe(1_000_000);
+    expect(snapshot?.cost).toEqual({ amount: 0.5, currency: "USD" });
 
     // A report in the compaction's own millisecond is the provider's post-compaction usage.
     const reportedWithCompaction = decodeTokenUsage({
