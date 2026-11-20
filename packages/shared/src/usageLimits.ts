@@ -885,8 +885,12 @@ export function resolveProviderUsageLimitSource(
   const accounts = workspace.subscriptionAccounts?.filter(
     (account) => account.modelProviderId === modelProviderId,
   );
+  const reference = workspace.codexUsageSource;
   const account = accounts?.length === 1 ? accounts[0] : undefined;
-  if (account?.driver === "codex" || account?.driver === "claudeAgent") {
+  if (
+    account?.driver === "claudeAgent" ||
+    (account?.driver === "codex" && reference?.instanceId !== null)
+  ) {
     const matches = providers
       .filter(
         (provider) =>
@@ -904,8 +908,8 @@ export function resolveProviderUsageLimitSource(
       );
     if (matches[0]) return matches[0];
   }
-  const reference = workspace.codexUsageSource;
   if (!reference?.modelProviderIds.includes(modelProviderId ?? "")) return native;
+  if (reference.instanceId === null) return undefined;
   const codex = providers.filter((provider) => provider.driver === "codex");
   if (reference.instanceId === undefined && codex.length !== 1) return undefined;
   const source =

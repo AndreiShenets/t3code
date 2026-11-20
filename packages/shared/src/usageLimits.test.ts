@@ -81,7 +81,7 @@ describe("OpenCode subscription limit sources", () => {
     };
     const resolve = (
       providers: readonly ServerProvider[],
-      instanceId?: ProviderInstanceId,
+      instanceId?: ProviderInstanceId | null,
       model = "openai/gpt-6-luna",
       cwd = "/project",
     ) => {
@@ -109,6 +109,7 @@ describe("OpenCode subscription limit sources", () => {
     };
 
     expect(resolve([codex])?.accounts.map(({ limits }) => limits.windows)).toEqual([[window]]);
+    expect(resolve([codex], null)).toBeNull();
     expect(resolve([codex, secondCodex])).toBeNull();
     expect(resolve([codex, secondCodex], secondCodex.instanceId)?.accounts).toMatchObject([
       { instanceId: secondCodex.instanceId, limits: secondCodex.usageLimits },
@@ -164,6 +165,16 @@ describe("OpenCode subscription limit sources", () => {
         });
 
       expect(resolve()).toBe(native);
+      const disabled = {
+        ...opencode,
+        workspaceSnapshots: (opencode.workspaceSnapshots ?? []).map((snapshot) => ({
+          ...snapshot,
+          codexUsageSource: { instanceId: null, modelProviderIds: [] },
+        })),
+      };
+      expect(
+        resolveProviderUsageLimitSource(opencode.instanceId, [disabled, native], now, selection),
+      ).toBe(driver === "codex" ? disabled : native);
       for (const override of [
         { email: "other@example.com" },
         { workspaceId: "org-2" },

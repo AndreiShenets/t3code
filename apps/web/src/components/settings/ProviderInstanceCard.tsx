@@ -199,11 +199,21 @@ function OpenCodeCodexUsageSource({
   const codex = useAtomValue(providersIgnoringCheckedAtAtom(environmentId)).filter(
     (provider) => provider.driver === "codex",
   );
-  const source = readConfigString(config, "codexUsageSource");
-  if (codex.length < 2 && source === null) return null;
+  const saved =
+    config !== null && typeof config === "object" && "codexUsageSource" in config
+      ? config.codexUsageSource
+      : undefined;
+  const source =
+    typeof saved === "string"
+      ? saved
+      : saved === null
+        ? ""
+        : codex.length === 1
+          ? codex[0]?.instanceId
+          : undefined;
 
   const label = gt("Codex usage source");
-  const automatic = gt("Automatic");
+  const none = gt("None");
   const instanceLabel = (provider: ServerProvider) =>
     provider.displayName ?? (provider.instanceId === "codex" ? "Codex" : provider.instanceId);
   const selected = codex.find((provider) => provider.instanceId === source);
@@ -213,21 +223,17 @@ function OpenCodeCodexUsageSource({
       control={
         <ManagedControl reason={managedReason}>
           <Select
-            value={source ?? ""}
+            value={source ?? null}
             onValueChange={(value) => {
               if (typeof value !== "string") return;
-              const next = nextConfigBlobWithValue(config, "codexUsageSource", value);
-              if (!value) delete next.codexUsageSource;
-              onChange(Object.keys(next).length > 0 ? next : undefined);
+              onChange(nextConfigBlobWithValue(config, "codexUsageSource", value || null));
             }}
           >
             <SelectTrigger size="sm" aria-label={label}>
-              <SelectValue>
-                {selected ? instanceLabel(selected) : (source ?? automatic)}
-              </SelectValue>
+              <SelectValue>{selected ? instanceLabel(selected) : source || none}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="start" alignItemWithTrigger={false}>
-              <SelectItem value="">{automatic}</SelectItem>
+              <SelectItem value="">{none}</SelectItem>
               {codex.map((provider) => (
                 <SelectItem key={provider.instanceId} value={provider.instanceId}>
                   {instanceLabel(provider)}

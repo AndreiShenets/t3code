@@ -96,6 +96,15 @@ it.effect("scopes the Codex reference to a direct OpenAI token-sharing credentia
       subscriptionAccounts: [],
       codexUsageSource: { modelProviderIds: ["openai"], instanceId },
     });
+    NodeAssert.deepEqual(
+      yield* readOpenCodeSubscriptionAccounts({
+        providers: [],
+        credentials: [],
+        environment: {},
+        codexUsageSource: null,
+      }),
+      { subscriptionAccounts: [], codexUsageSource: { modelProviderIds: [], instanceId: null } },
+    );
     for (const override of [
       { settings: { baseURL: "https://proxy.example/v1" } },
       { settings: { ...provider.settings, apiKey: "overridden" } },

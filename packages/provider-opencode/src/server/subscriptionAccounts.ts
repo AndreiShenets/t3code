@@ -87,7 +87,7 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
     readonly providers: readonly unknown[];
     readonly credentials: readonly unknown[];
     readonly environment: NodeJS.ProcessEnv;
-    readonly codexUsageSource?: ProviderInstanceId | undefined;
+    readonly codexUsageSource?: ProviderInstanceId | null | undefined;
   }) {
     const providers = input.providers.flatMap((provider) =>
       Option.toArray(decodeProvider(provider)),
@@ -156,7 +156,7 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
     }
     return {
       subscriptionAccounts: accounts,
-      ...(tokenSharingModelProviders.length > 0
+      ...(tokenSharingModelProviders.length > 0 || input.codexUsageSource === null
         ? {
             codexUsageSource: {
               modelProviderIds: tokenSharingModelProviders,

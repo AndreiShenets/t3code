@@ -30,9 +30,9 @@ inherit subscription limits. Refresh provider status after changing a login.
 
 For OpenAI models signed in with ChatGPT token sharing, **Codex usage** shows the
 Session and Weekly limits reported by Codex, not OpenCode's own allowance. If
-the environment has more than one Codex instance, choose one under
-**Settings > Providers > OpenCode > Runtime > Codex usage source**. With only
-one instance, T3 Code uses it automatically.
+the environment has one Codex instance, T3 Code preselects it. To pick a
+different instance or turn off Codex usage with **None**, go to
+**Settings > Providers > OpenCode > Runtime > Codex usage source**.
 
 ## Compaction
 

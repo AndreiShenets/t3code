@@ -51,7 +51,7 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
         },
       }),
     ),
-    codexUsageSource: Schema.optionalKey(ProviderInstanceId).pipe(
+    codexUsageSource: Schema.optionalKey(Schema.NullOr(ProviderInstanceId)).pipe(
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
     customModels: Schema.Array(CustomModelSetting).pipe(
