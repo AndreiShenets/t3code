@@ -94,7 +94,7 @@ function compactionSnapshot(
   item: CompactionItem,
   maxTokens: number | null,
   updatedAt: string,
-  cost: ContextWindowSnapshot["cost"],
+  cost: Exclude<ContextWindowSnapshot["cost"], undefined>,
 ): ContextWindowSnapshot | null {
   const usedTokens = asFiniteNumber(item.afterTokenCount);
   if (usedTokens === null || usedTokens < 0) return null;
