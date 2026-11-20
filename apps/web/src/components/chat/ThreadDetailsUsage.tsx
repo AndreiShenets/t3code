@@ -5,7 +5,6 @@ import type {
   UsageLimitSourceSnapshots,
 } from "@t3tools/contracts";
 import {
-  CHATGPT_USAGE_URL,
   collectProviderUsageLimits,
   type LimitPace,
   paceOf,
@@ -23,7 +22,6 @@ import { useNowMinute } from "../../hooks/useNowMinute";
 import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { formatContextWindowTokens } from "../../lib/contextWindow";
 import { cn } from "../../lib/utils";
-import { ensureLocalApi } from "../../localApi";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { formatContextWindowCompactionMessage } from "./compaction.logic";
@@ -73,7 +71,6 @@ export function ThreadDetailsUsage({
     source?.usageLimits;
   if (!limits) return null;
   const notice = limitsNotice(limits, m);
-  const chatGptUsage = limits.externalUsage?.url === CHATGPT_USAGE_URL && limits.externalUsage;
 
   return (
     <ThreadDetailsSection
@@ -84,16 +81,12 @@ export function ThreadDetailsUsage({
       <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
         {notice ? (
           <UsageRow
-            label={
-              chatGptUsage
-                ? chatGptUsage.label
-                : gt("Limits", { $context: "usage limits row label" })
-            }
+            label={gt("Limits", { $context: "usage limits row label" })}
             fill={null}
             tone={null}
-            value={chatGptUsage ? gt("Open usage") : gt("Unavailable")}
+            value={gt("Unavailable")}
             tooltip={<span className="text-foreground">{notice}</span>}
-            usageLink={chatGptUsage ? chatGptUsage.url : true}
+            opensUsage
           />
         ) : (
           limits.windows.map((window) => (
@@ -205,7 +198,7 @@ function LimitRow({
       tick={timeLeft}
       value={`${left}%`}
       ariaValue={gt("{left}% left", { left })}
-      usageLink
+      opensUsage
       tooltip={
         <>
           {sourceLabel ? (
@@ -233,7 +226,7 @@ function LimitRow({
   );
 }
 
-/** One label, hairline, and value row; the whole row opens the details tooltip. */
+/** One label, hairline, and value row; the whole row opens the details tooltip. With `opensUsage` it links to the usage page. */
 function UsageRow({
   label,
   fill,
@@ -243,7 +236,7 @@ function UsageRow({
   ariaValue = value,
   tooltip,
   muted = false,
-  usageLink,
+  opensUsage = false,
 }: {
   readonly label: string;
   /** Bar fill from 0 to 100. Null hides the bar. */
@@ -255,14 +248,14 @@ function UsageRow({
   readonly ariaValue?: string;
   readonly tooltip: ReactNode;
   readonly muted?: boolean;
-  readonly usageLink?: true | string;
+  readonly opensUsage?: boolean;
 }) {
   const gt = useGT();
   const rowProps = {
     "aria-label": gt("{label}: {value}", { label, value: ariaValue }),
     className: cn(
       "col-span-3 grid h-6 grid-cols-subgrid items-center rounded-lg px-2.5 outline-none hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-black/[0.035] dark:hover:bg-white/[0.08] dark:data-popup-open:bg-white/[0.08]",
-      usageLink
+      opensUsage
         ? "group cursor-pointer active:bg-black/[0.06] dark:active:bg-white/[0.12]"
         : "cursor-default",
     ),
@@ -271,20 +264,7 @@ function UsageRow({
     <Tooltip>
       <TooltipTrigger
         render={
-          typeof usageLink === "string" ? (
-            <a
-              href={usageLink}
-              onClick={(event) => {
-                event.preventDefault();
-                void ensureLocalApi().shell.openExternal(usageLink);
-              }}
-              {...rowProps}
-            />
-          ) : usageLink ? (
-            <Link to="/usage" {...rowProps} />
-          ) : (
-            <div tabIndex={0} {...rowProps} />
-          )
+          opensUsage ? <Link to="/usage" {...rowProps} /> : <div tabIndex={0} {...rowProps} />
         }
       >
         <span className="max-w-28 truncate text-muted-foreground group-hover:text-foreground">
@@ -337,9 +317,7 @@ function UsageRow({
       <TooltipPopup side="left" sideOffset={16}>
         <div className="flex flex-col gap-0.5">
           {tooltip}
-          {usageLink === true ? (
-            <span className="text-muted-foreground">{gt("Open usage")}</span>
-          ) : null}
+          {opensUsage ? <span className="text-muted-foreground">{gt("Open usage")}</span> : null}
         </div>
       </TooltipPopup>
     </Tooltip>

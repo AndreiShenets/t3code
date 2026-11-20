@@ -1120,7 +1120,6 @@ it.layer(
             workspaceId: "workspace-1",
           },
         ],
-        chatGptSharingProviderIds: ["other-openai"],
         checkedAt: "2026-03-25T00:01:00.000Z",
         slashCommands: [{ name: "project" }],
         skills: [{ name: "project", path: "/project/SKILL.md", enabled: true }],
@@ -1153,7 +1152,6 @@ it.layer(
           skills: scopedSnapshot.skills,
           optionDescriptors: scopedSnapshot.optionDescriptors,
           subscriptionAccounts: scopedSnapshot.subscriptionAccounts,
-          chatGptSharingProviderIds: scopedSnapshot.chatGptSharingProviderIds,
           models: projectModels,
         },
       ]);
@@ -1202,7 +1200,6 @@ it.layer(
       const {
         optionDescriptors,
         subscriptionAccounts: _subscriptionAccounts,
-        chatGptSharingProviderIds: _chatGptSharingProviderIds,
         ...failedSnapshot
       } = scopedSnapshot;
       const firstFailure = ProviderRegistry.upsertProviderWorkspaceSnapshot(
@@ -1245,10 +1242,6 @@ it.layer(
         optionDescriptors,
       );
       assert.strictEqual(failedRefresh.workspaceSnapshots?.[1]?.subscriptionAccounts, undefined);
-      assert.strictEqual(
-        failedRefresh.workspaceSnapshots?.[1]?.chatGptSharingProviderIds,
-        undefined,
-      );
     });
 
     it("preserves previously discovered provider models when a refresh returns none", () => {

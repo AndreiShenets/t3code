@@ -24,10 +24,9 @@ started on 1.x continue on 2.x.
 
 For local OpenCode 2, thread usage limits can reuse an enabled Codex or Claude
 provider's limits when both logins have the same email and workspace or organization.
-If you sign in to OpenCode with ChatGPT token sharing, open **ChatGPT usage** to
-check your allowance. OpenCode does not report a percentage for that login.
-API-key, proxy, cloud, and external-server connections do not inherit subscription
-limits. Refresh provider status after changing a login.
+Select an OpenAI subscription model or a Claude Agent model in OpenCode; no manual
+mapping is needed. API-key, proxy, cloud, and external-server connections do not
+inherit subscription limits. Refresh provider status after changing a login.
 
 ## Compaction
 

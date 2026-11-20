@@ -449,9 +449,8 @@ export const OpenCodeDriver: ProviderDriver<
             client.provider.list({ location }).pipe(Effect.timeout("10 seconds"), Effect.ignore),
             processEnv,
           );
-          const noSubscriptions = { subscriptionAccounts: [] };
-          const subscriptions = external
-            ? noSubscriptions
+          const subscriptionAccounts = external
+            ? []
             : yield* Effect.all({
                 providers: client.provider.list({ location }).pipe(Effect.map((list) => list.data)),
                 credentials: client.credential.list(),
@@ -466,9 +465,9 @@ export const OpenCodeDriver: ProviderDriver<
                 Effect.provideService(FileSystem.FileSystem, fileSystem),
                 Effect.provideService(Path.Path, pathService),
                 Effect.timeout("5 seconds"),
-                Effect.orElseSucceed(() => noSubscriptions),
+                Effect.orElseSucceed(() => []),
               );
-          return { ...inventory, ...subscriptions };
+          return { ...inventory, subscriptionAccounts };
         }).pipe(Effect.scoped),
       );
     const serverOwner = yield* OpenCodeServerOwner.make({
@@ -765,9 +764,13 @@ export const OpenCodeDriver: ProviderDriver<
                     { concurrency: "unbounded" },
                   ).pipe(
                     Effect.map(
-                      ([machineSnapshot, cwdModels, { skills, commands, ...subscriptions }]) => ({
+                      ([
+                        machineSnapshot,
+                        cwdModels,
+                        { skills, commands, subscriptionAccounts },
+                      ]) => ({
                         ...machineSnapshot,
-                        ...subscriptions,
+                        subscriptionAccounts,
                         ...workspaceModelsFor(machineSnapshot.models, cwdModels),
                         skills: openCode2SkillsToServerProviderSkills(skills),
                         slashCommands: openCode2CommandsToServerProviderSlashCommands(commands),

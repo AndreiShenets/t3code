@@ -15,11 +15,6 @@ const accessToken = (email: string) =>
     }),
   ).toString("base64url")}.signature`;
 
-const readNativeAccounts = (input: Parameters<typeof readOpenCodeSubscriptionAccounts>[0]) =>
-  readOpenCodeSubscriptionAccounts(input).pipe(
-    Effect.map(({ subscriptionAccounts }) => subscriptionAccounts),
-  );
-
 it.effect(
   "matches only the active OAuth user and workspace behind the effective OpenAI provider",
   () =>
@@ -40,7 +35,7 @@ it.effect(
         },
       };
       const read = (providers: readonly unknown[], credentials: readonly unknown[]) =>
-        readNativeAccounts({ providers, credentials, environment: {} });
+        readOpenCodeSubscriptionAccounts({ providers, credentials, environment: {} });
 
       NodeAssert.deepEqual(yield* read([provider], [credential]), [
         {
@@ -72,41 +67,6 @@ it.effect(
     }).pipe(Effect.provide(NodeServices.layer)),
 );
 
-it.effect("recognizes only the active, direct ChatGPT token-sharing login", () =>
-  Effect.gen(function* () {
-    const provider = {
-      id: "openai",
-      integrationID: "openai",
-      settings: { baseURL: "https://api.openai.com/v1" },
-    };
-    const sharing = {
-      integrationID: "openai",
-      active: true,
-      value: { type: "oauth", methodID: "chatgpt-token-sharing", access: "opaque-token" },
-    };
-    const read = (providers: readonly unknown[], credentials: readonly unknown[]) =>
-      readOpenCodeSubscriptionAccounts({ providers, credentials, environment: {} }).pipe(
-        Effect.map(({ chatGptSharingProviderIds }) => chatGptSharingProviderIds ?? []),
-      );
-
-    NodeAssert.deepEqual(yield* read([provider], [sharing, { ...sharing, active: false }]), [
-      "openai",
-    ]);
-    for (const override of [
-      { settings: { baseURL: "https://proxy.example/v1" } },
-      { settings: { ...provider.settings, apiKey: "override" } },
-      { headers: { Authorization: "override" } },
-    ]) {
-      NodeAssert.deepEqual(yield* read([{ ...provider, ...override }], [sharing]), []);
-    }
-    NodeAssert.deepEqual(
-      yield* read([provider], [{ ...sharing, value: { type: "key", key: "api-key" } }]),
-      [],
-    );
-    NodeAssert.deepEqual(yield* read([provider], [{ ...sharing, active: false }]), []);
-  }).pipe(Effect.provide(NodeServices.layer)),
-);
-
 it.effect("reads Claude Agent's own login and rejects API, proxy, and cloud overrides", () =>
   Effect.gen(function* () {
     const provider = { id: "claude-agent", integrationID: "claude-agent", settings: {} };
@@ -132,7 +92,7 @@ it.effect("reads Claude Agent's own login and rejects API, proxy, and cloud over
         ),
     });
     const read = (settings: Record<string, string> = {}, environment: NodeJS.ProcessEnv = {}) =>
-      readNativeAccounts({
+      readOpenCodeSubscriptionAccounts({
         providers: [{ ...provider, settings }],
         credentials,
         environment: { CLAUDE_CONFIG_DIR: "/claude-profile", ...environment },
@@ -146,7 +106,7 @@ it.effect("reads Claude Agent's own login and rejects API, proxy, and cloud over
         workspaceId: "org-1",
       },
     ]);
-    const keychainAccount = yield* readNativeAccounts({
+    const keychainAccount = yield* readOpenCodeSubscriptionAccounts({
       providers: [provider],
       credentials,
       environment: { CLAUDE_CONFIG_DIR: "/claude-profile" },
@@ -182,7 +142,7 @@ it.effect("reads Claude Agent's own login and rejects API, proxy, and cloud over
       NodeAssert.deepEqual(yield* read({}, { [key]: "override" }), []);
     }
     NodeAssert.deepEqual(
-      yield* readNativeAccounts({
+      yield* readOpenCodeSubscriptionAccounts({
         providers: [provider],
         credentials: [],
         environment: {},

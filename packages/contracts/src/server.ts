@@ -152,7 +152,6 @@ export const ServerProviderWorkspaceSnapshot = Schema.Struct({
       }),
     ),
   ),
-  chatGptSharingProviderIds: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
   // Absent means the provider's machine `models`, which keeps most snapshots small.
   models: Schema.optional(Schema.Array(ServerProviderModel)),
   modelsPending: Schema.optional(Schema.Boolean),
