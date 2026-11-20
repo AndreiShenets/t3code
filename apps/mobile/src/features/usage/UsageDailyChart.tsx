@@ -1,6 +1,7 @@
 import { View } from "react-native";
 
 import type { DailyTotals } from "@t3tools/shared/usageMerge";
+import { usageSeriesKey, usageSeriesColor, type UsageSeries } from "@t3tools/shared/usageSeries";
 
 import { buildChartDays, type UsageChartMetric } from "./usageChartData";
 import { useProviderColors } from "./usageProviders";
@@ -10,11 +11,12 @@ export interface UsageDailyChartProps {
   readonly daily: readonly DailyTotals[];
   readonly metric: UsageChartMetric;
   readonly height: number;
+  readonly series?: readonly UsageSeries[];
 }
 
-export function UsageDailyChart({ days, daily, metric, height }: UsageDailyChartProps) {
+export function UsageDailyChart({ days, daily, metric, height, series }: UsageDailyChartProps) {
   const colors = useProviderColors();
-  const chartDays = buildChartDays(days, daily, metric);
+  const chartDays = buildChartDays(days, daily, metric, series);
   const max = chartDays.reduce((peak, day) => Math.max(peak, day.total), 0);
 
   return (
@@ -28,10 +30,10 @@ export function UsageDailyChart({ days, daily, metric, height }: UsageDailyChart
         >
           {day.values.map((entry) => (
             <View
-              key={entry.provider}
+              key={usageSeriesKey(entry)}
               style={{
                 height: max === 0 ? 0 : (entry.value / max) * height,
-                backgroundColor: colors[entry.provider],
+                backgroundColor: usageSeriesColor(entry, colors[entry.provider]),
               }}
             />
           ))}
