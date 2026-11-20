@@ -26,6 +26,7 @@ export function GuideTour({
   environmentId,
   reference,
   guide,
+  headSha,
   banner,
   active,
   commenting,
@@ -36,6 +37,7 @@ export function GuideTour({
   environmentId: EnvironmentId;
   reference: PullRequestRef;
   guide: PullRequestReviewGuide;
+  headSha: string | null;
   banner: ReactNode;
   active: boolean;
   commenting: ExcerptCommenting | null;
@@ -57,7 +59,7 @@ export function GuideTour({
   const diff = useGuideDiffFiles({
     environmentId,
     reference,
-    headSha: guide.headSha,
+    headSha,
     wantedPaths,
   });
   const getDiffFileContents = useAtomCommand(pullRequestEnvironment.diffFileContents);
@@ -65,7 +67,7 @@ export function GuideTour({
     environmentId,
     reference,
     commit: null,
-    cacheKey: `pull-request-guide:${key}`,
+    cacheKey: `pull-request-guide:${key}:${headSha}`,
   });
 
   const scrollRef = useRef<HTMLDivElement>(null);
