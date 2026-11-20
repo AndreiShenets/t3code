@@ -412,8 +412,10 @@ it.each([
       code: {
         scopeKey: JSON.stringify([threadRef.environmentId, pullRequestReviewKey(detail), null]),
         slices: [{ ...result, source: result, cursor: null }],
-        foldChoices: new Map(),
-        foldOverride,
+        folds: {
+          source: { override: foldOverride, choices: new Map() },
+          test: { override: foldOverride, choices: new Map() },
+        },
         visibleCommitCount: 10,
         wordWrap: false,
         ignoreWhitespace: false,
@@ -516,8 +518,10 @@ it("keeps loaded pages during background reads and restores them after returning
         { ...first, source: first, cursor: null },
         { ...second, source: second, cursor: "second" },
       ],
-      foldChoices: new Map(),
-      foldOverride: "expanded",
+      folds: {
+        source: { override: "expanded", choices: new Map() },
+        test: { override: "expanded", choices: new Map() },
+      },
       visibleCommitCount: 10,
       wordWrap: false,
       ignoreWhitespace: false,
