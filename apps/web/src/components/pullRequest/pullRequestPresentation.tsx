@@ -10,6 +10,7 @@ import type {
   PullRequestState,
 } from "@t3tools/contracts";
 import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import {
   CircleCheckIcon,
   CircleDashedIcon,
@@ -470,7 +471,7 @@ export function PullRequestActorAvatar({
   actor: PullRequestActor | null;
   className?: string;
 }) {
-  const login = actor?.login ?? "ghost";
+  const name = getPullRequestActorName(actor);
   const avatarUrl = actor?.avatarUrl ?? null;
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   return avatarUrl === null || failedAvatarUrl === avatarUrl ? (
@@ -481,7 +482,7 @@ export function PullRequestActorAvatar({
         className,
       )}
     >
-      {login.slice(0, 1).toUpperCase()}
+      {name.slice(0, 1).toUpperCase()}
     </span>
   ) : (
     <img
@@ -510,11 +511,12 @@ export function PullRequestActorLabel({
 }) {
   const gt = useGT();
   const login = actor?.login ?? "ghost";
+  const name = getPullRequestActorName(actor);
   const label = (
     <span className={cn("flex min-w-0 items-baseline", variant === "label" && "gap-1.5")}>
       <PullRequestActorAvatar actor={actor} className="self-center" />
       <span className={variant === "label" ? "truncate font-medium text-foreground" : "sr-only"}>
-        {login}
+        {name}
       </span>
     </span>
   );
@@ -532,7 +534,7 @@ export function PullRequestActorLabel({
                   href={profileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={gt("Open {login}'s profile", { login })}
+                  aria-label={gt("Open {login}'s profile", { login: name })}
                 />
               }
             />
