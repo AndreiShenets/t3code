@@ -117,9 +117,9 @@ import { useDiffWorkerPool } from "../DiffWorkerPoolProvider";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { DiffFileTree } from "../diffs/DiffFileTree";
 import { DiffFileFilter, useDiffFileFilter } from "../diffs/DiffFileFilter";
- import { DiffFileHeaderActions } from "../diffs/DiffFileHeaderActions";
- import { useDiffEditorAction } from "../diffs/useDiffEditorAction";
- import { diffHeaderTogglePath } from "../diffs/diffHeaderInteraction";
+import { DiffFileHeaderActions } from "../diffs/DiffFileHeaderActions";
+import { useDiffEditorAction } from "../diffs/useDiffEditorAction";
+import { diffHeaderTogglePath } from "../diffs/diffHeaderInteraction";
 import { FileExplorerPane } from "../files/FileExplorerPane";
 import { useCodeViewFileReveal } from "../diffs/useCodeViewFileReveal";
 import { useDiffSearchShortcut } from "../diffs/useDiffSearchShortcut";
@@ -1158,9 +1158,7 @@ function PullRequestCodeTab({
     const item = items.find((candidate) => resolveFileDiffPath(candidate.fileDiff) === path);
     if (item === undefined) return;
     // Record the unfold even when already open, so a Viewed mark that loads later cannot fold it.
-    setFoldChoices(path, (current) =>
-      withFileDiffFold(current, item.id, false),
-    );
+    setFoldChoices(path, (current) => withFileDiffFold(current, item.id, false));
     if (range) setSelectedLines({ id: item.id, range });
     codeViewReveal.request(item.id, range);
   };
@@ -1352,11 +1350,7 @@ function PullRequestCodeTab({
     ) => {
       if (nextItem.type !== "diff") return;
       setFoldChoices(resolveFileDiffPath(nextItem.fileDiff), (current) =>
-        withFileDiffFold(
-          current,
-          nextItem.id,
-          nextItem.collapsed === true,
-        ),
+        withFileDiffFold(current, nextItem.id, nextItem.collapsed === true),
       );
     },
   };
