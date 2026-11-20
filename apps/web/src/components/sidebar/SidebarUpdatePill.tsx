@@ -40,6 +40,7 @@ import {
   shouldShowDesktopUpdateCheckIcon,
 } from "./DesktopUpdateStatusIcon";
 import { SidebarUpdateReleaseNotes } from "./SidebarUpdateReleaseNotes";
+import { SidebarCustomBuildUpdateButton } from "./SidebarCustomBuildUpdateButton";
 import { SidebarUpdateCapsule } from "./SidebarUpdateCapsule";
 import { UpdateEverythingDialog } from "./UpdateEverythingDialog";
 import type { UpdateEverythingRun, UpdateRunLocalState } from "./updateEverything.logic";
@@ -442,6 +443,7 @@ function SidebarUpdateControl() {
           : { status: "waiting" };
     return (
       <SidebarMenuItem className="@container/sidebar-update ml-auto flex min-w-8 flex-1">
+        <SidebarCustomBuildUpdateButton />
         <SidebarUpdateCapsule
           run={run}
           local={local}
@@ -520,7 +522,8 @@ function SidebarUpdateControl() {
   );
 
   return (
-    <SidebarMenuItem className="ml-auto shrink-0">
+    <SidebarMenuItem className="ml-auto flex shrink-0 items-center">
+      <SidebarCustomBuildUpdateButton />
       <Popover
         handle={releaseNotesPopoverHandle}
         open={releaseNotesOpen && showReleaseNotesPopover}
