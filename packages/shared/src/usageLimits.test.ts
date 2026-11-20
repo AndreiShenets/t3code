@@ -9,6 +9,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  CHATGPT_USAGE_URL,
   type LimitAccount,
   displayLimitWindows,
   cursorUsageWindowDetails,
@@ -58,6 +59,47 @@ function provider(overrides: Partial<ServerProvider>): ServerProvider {
 }
 
 describe("OpenCode subscription limit sources", () => {
+  it("does not show Console budgets for an OpenAI model outside their coverage", () => {
+    const consoleWindow = {
+      ...window,
+      id: "budget_shared",
+      label: "Console · Shared · All spend",
+      providerIds: ["opencode"],
+    };
+    const goWindow = { ...window, id: "go_rolling", label: "Go · Session" };
+    const opencode = provider({
+      instanceId: ProviderInstanceId.make("opencode"),
+      driver: ProviderDriverKind.make("opencode"),
+      usageLimits: { checkedAt, windows: [consoleWindow, goWindow] },
+      workspaceSnapshots: [
+        {
+          cwd: "/project",
+          checkedAt,
+          skills: [],
+          slashCommands: [],
+          chatGptSharingProviderIds: ["openai"],
+        },
+      ],
+    });
+    const codex = provider({ usageLimits: { checkedAt, windows: [window] } });
+    const resolve = (model: string, cwd = "/project", at = now) =>
+      collectProviderUsageLimits(opencode.instanceId, [opencode, codex], [], at, {
+        model,
+        cwd,
+      });
+
+    expect(resolve("openai/gpt-6-luna")?.accounts.map(({ limits }) => limits)).toEqual([
+      expect.objectContaining({
+        windows: [],
+        externalUsage: { label: "ChatGPT usage", url: CHATGPT_USAGE_URL },
+      }),
+    ]);
+    expect(resolve("openai/gpt-6-luna", "/different-project")).toBeNull();
+    expect(resolve("openai/gpt-6-luna", "/project", now + 300_000)).toBeNull();
+    expect(resolve("opencode/model")?.accounts[0]?.limits.windows).toEqual([consoleWindow]);
+    expect(resolve("opencode-go/model")?.accounts[0]?.limits.windows).toEqual([goWindow]);
+  });
+
   it.each(["codex", "claudeAgent"] as const)(
     "requires the selected workspace's verified %s user and organization",
     (driver) => {

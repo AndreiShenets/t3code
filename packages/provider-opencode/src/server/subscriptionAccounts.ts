@@ -90,21 +90,28 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
     const credentials = input.credentials
       .flatMap((credential) => Option.toArray(decodeCredential(credential)))
       .filter((credential) => credential.active);
-    const accounts: NonNullable<ServerProviderWorkspaceSnapshot["subscriptionAccounts"]>[number][] =
-      [];
+    const subscriptionAccounts: NonNullable<
+      ServerProviderWorkspaceSnapshot["subscriptionAccounts"]
+    >[number][] = [];
+    const chatGptSharingProviderIds: string[] = [];
     for (const provider of providers) {
       const matching = credentials.filter(
         (credential) => credential.integrationID === provider.integrationID,
       );
       if (matching.length !== 1) continue;
       const credential = matching[0]!.value;
+      const hasAuthOverride =
+        ["apiKey", "authToken"].some((key) => provider.settings?.[key]) ||
+        Object.keys(provider.headers ?? {}).some((key) => /authorization|api-key/i.test(key));
       if (provider.integrationID === "openai" && credential.type === "oauth") {
-        if (provider.settings?.baseURL !== "https://chatgpt.com/backend-api/codex") continue;
-        if (
-          ["apiKey", "authToken"].some((key) => provider.settings?.[key]) ||
-          Object.keys(provider.headers ?? {}).some((key) => /authorization|api-key/i.test(key))
-        )
+        if (hasAuthOverride) continue;
+        if (credential.methodID === "chatgpt-token-sharing") {
+          if (provider.settings?.baseURL === "https://api.openai.com/v1" && credential.access) {
+            chatGptSharingProviderIds.push(provider.id);
+          }
           continue;
+        }
+        if (provider.settings?.baseURL !== "https://chatgpt.com/backend-api/codex") continue;
         const tokenBody = credential.access?.split(".")[1];
         if (!tokenBody) continue;
         const claims = decodeClaims(Buffer.from(tokenBody, "base64url").toString("utf8"));
@@ -118,7 +125,7 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
           provider.headers?.["chatgpt-account-id"] !== workspaceId
         )
           continue;
-        accounts.push({
+        subscriptionAccounts.push({
           modelProviderId: provider.id,
           driver: ProviderDriverKind.make("codex"),
           email,
@@ -129,12 +136,12 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
         credential.type === "external" &&
         credential.methodID === "claude-login" &&
         !CLAUDE_AUTH_OVERRIDES.some((key) => input.environment[key]?.trim()) &&
-        !["apiKey", "authToken", "baseURL"].some((key) => provider.settings?.[key]) &&
-        !Object.keys(provider.headers ?? {}).some((key) => /authorization|api-key/i.test(key))
+        !hasAuthOverride &&
+        !provider.settings?.baseURL
       ) {
         const account = yield* readClaudeAccount(input.environment);
         if (Option.isSome(account) && account.value.email && account.value.workspaceId) {
-          accounts.push({
+          subscriptionAccounts.push({
             modelProviderId: provider.id,
             driver: ProviderDriverKind.make("claudeAgent"),
             ...account.value,
@@ -142,6 +149,9 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
         }
       }
     }
-    return accounts;
+    return {
+      subscriptionAccounts,
+      ...(chatGptSharingProviderIds.length > 0 ? { chatGptSharingProviderIds } : {}),
+    };
   },
 );

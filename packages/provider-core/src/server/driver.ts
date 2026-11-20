@@ -33,7 +33,10 @@ export interface ProviderDriverMetadata {
 export type ProviderWorkspaceSnapshot = ServerProvider &
   Pick<
     ServerProviderWorkspaceSnapshot,
-    "slashCommandsPending" | "optionDescriptors" | "subscriptionAccounts"
+    | "slashCommandsPending"
+    | "optionDescriptors"
+    | "subscriptionAccounts"
+    | "chatGptSharingProviderIds"
   > & {
     /** Set only when the directory's catalog differs from the machine snapshot's. */
     readonly workspaceModels?: ServerProviderWorkspaceSnapshot["models"];

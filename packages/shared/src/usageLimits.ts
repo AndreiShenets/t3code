@@ -24,6 +24,19 @@ import { isLocalLoopbackHost, isWildcardHost } from "./hostClassification.ts";
 
 const MINUTE = 60_000;
 
+function usageWindowCoversModel(
+  window: ServerProviderUsageWindow,
+  model: string,
+  driver: ServerProvider["driver"] | undefined,
+): boolean {
+  const modelProviderId = model.split("/", 1)[0] ?? "";
+  return (
+    (window.modelIds === undefined || window.modelIds.includes(model)) &&
+    (window.providerIds === undefined || window.providerIds.includes(modelProviderId)) &&
+    (driver !== "opencode" || !window.id.startsWith("go_") || model.startsWith("opencode-go/"))
+  );
+}
+
 export function exhaustedUsageWindow(
   provider: ServerProvider | undefined,
   now: number,
@@ -33,10 +46,7 @@ export function exhaustedUsageWindow(
   const exhausted = windows.filter(
     (window) =>
       (window.usedPercent ?? 0) >= 100 &&
-      (model === undefined || window.modelIds === undefined || window.modelIds.includes(model)) &&
-      (model === undefined ||
-        window.providerIds === undefined ||
-        window.providerIds.includes(model.split("/")[0] ?? "")) &&
+      (model === undefined || usageWindowCoversModel(window, model, provider?.driver)) &&
       (!window.resetsAt ||
         !Number.isFinite(Date.parse(window.resetsAt)) ||
         Date.parse(window.resetsAt) > now),
@@ -67,10 +77,6 @@ export function exhaustedUsageWindow(
       );
       return exhausted.find((window) => window.id !== "individual" || !hasPlanWindows);
     }
-    case "opencode":
-      return exhausted.find(
-        (window) => !window.id.startsWith("go_") || model.startsWith("opencode-go/"),
-      );
     default:
       return exhausted[0];
   }
@@ -849,17 +855,39 @@ export function resolveProviderUsageLimitSource(
   },
 ): ServerProvider | undefined {
   const selected = providers.find((provider) => provider.instanceId === instanceId);
-  if (selected?.driver !== "opencode" || !selected.enabled || !selection?.model || !selection.cwd)
-    return selected;
-  const workspace = selected.workspaceSnapshots?.find((snapshot) => snapshot.cwd === selection.cwd);
-  if (!workspace || !isProviderWorkspaceSnapshotCurrent(workspace, now)) return selected;
-  const modelProviderId = selection.model.split("/")[0];
+  if (selected?.driver !== "opencode" || !selected.enabled || !selection?.model) return selected;
+  const { model, cwd } = selection;
+  const limits = selected.usageLimits;
+  const windows = limits?.windows.filter((window) =>
+    usageWindowCoversModel(window, model, selected.driver),
+  );
+  const fallback =
+    limits && windows && windows.length !== limits.windows.length
+      ? { ...selected, usageLimits: windows.length > 0 ? { ...limits, windows } : undefined }
+      : selected;
+  const workspace = selected.workspaceSnapshots?.find((snapshot) => snapshot.cwd === cwd);
+  if (!workspace || !isProviderWorkspaceSnapshotCurrent(workspace, now)) return fallback;
+  const modelProviderId = model.split("/", 1)[0] ?? "";
+  if (workspace.chatGptSharingProviderIds?.includes(modelProviderId)) {
+    return {
+      ...selected,
+      usageLimits: {
+        checkedAt: workspace.checkedAt,
+        windows: [],
+        unavailable: {
+          reason: "unsupported",
+          message: "Open ChatGPT Usage settings with the account you connected to OpenCode.",
+        },
+        externalUsage: { label: "ChatGPT usage", url: CHATGPT_USAGE_URL },
+      },
+    };
+  }
   const accounts = workspace.subscriptionAccounts?.filter(
     (account) => account.modelProviderId === modelProviderId,
   );
-  if (accounts?.length !== 1) return selected;
+  if (accounts?.length !== 1) return fallback;
   const account = accounts[0]!;
-  if (account.driver !== "codex" && account.driver !== "claudeAgent") return selected;
+  if (account.driver !== "codex" && account.driver !== "claudeAgent") return fallback;
   const matches = providers
     .filter(
       (provider) =>
@@ -882,7 +910,7 @@ export function resolveProviderUsageLimitSource(
         Date.parse(b.usageLimits!.checkedAt) - Date.parse(a.usageLimits!.checkedAt) ||
         a.instanceId.localeCompare(b.instanceId),
     );
-  return matches[0] ?? selected;
+  return matches[0] ?? fallback;
 }
 
 export function collectProviderUsageLimits(
@@ -896,7 +924,12 @@ export function collectProviderUsageLimits(
   },
 ): UsageLimitsReport | null {
   const selected = resolveProviderUsageLimitSource(instanceId, providers, now, selection);
-  if (!selected || !hasProviderUsageLimits(selected.driver, providers, sources)) return null;
+  if (!selected) return null;
+  if (selected.driver === "opencode" && selection?.model) {
+    providers = [selected];
+    sources = [];
+  }
+  if (!hasProviderUsageLimits(selected.driver, providers, sources)) return null;
   const resolveKey = accountKeyResolver([
     ...providers.filter((provider) => provider.enabled).map(nativeReport),
     ...sources.flatMap((source) => source.accounts),
