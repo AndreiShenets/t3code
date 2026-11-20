@@ -58,6 +58,70 @@ function provider(overrides: Partial<ServerProvider>): ServerProvider {
 }
 
 describe("OpenCode subscription limit sources", () => {
+  it("shows only the chosen Codex instance's limits for an OpenCode token-sharing model", () => {
+    const codex = provider({
+      auth: { status: "authenticated", type: "chatgpt" },
+      usageLimits: { checkedAt, windows: [window] },
+    });
+    const secondCodex = {
+      ...codex,
+      instanceId: ProviderInstanceId.make("codex-work"),
+      usageLimits: { checkedAt, windows: [{ ...window, usedPercent: 75 }] },
+    };
+    const console = {
+      checkedAt,
+      windows: [
+        {
+          ...window,
+          id: "budget_shared",
+          label: "Console · Shared",
+          providerIds: ["opencode"],
+        },
+      ],
+    };
+    const resolve = (
+      providers: readonly ServerProvider[],
+      instanceId?: ProviderInstanceId,
+      model = "openai/gpt-6-luna",
+      cwd = "/project",
+    ) => {
+      const opencode = provider({
+        instanceId: ProviderInstanceId.make("opencode"),
+        driver: ProviderDriverKind.make("opencode"),
+        usageLimits: console,
+        workspaceSnapshots: [
+          {
+            cwd: "/project",
+            checkedAt,
+            skills: [],
+            slashCommands: [],
+            codexUsageSource: {
+              modelProviderIds: ["openai"],
+              ...(instanceId === undefined ? {} : { instanceId }),
+            },
+          },
+        ],
+      });
+      return collectProviderUsageLimits(opencode.instanceId, [opencode, ...providers], [], now, {
+        model,
+        cwd,
+      });
+    };
+
+    expect(resolve([codex])?.accounts.map(({ limits }) => limits.windows)).toEqual([[window]]);
+    expect(resolve([codex, secondCodex])).toBeNull();
+    expect(resolve([codex, secondCodex], secondCodex.instanceId)?.accounts).toMatchObject([
+      { instanceId: secondCodex.instanceId, limits: secondCodex.usageLimits },
+    ]);
+    expect(resolve([codex], secondCodex.instanceId)).toBeNull();
+    expect(resolve([codex], undefined, "openai/gpt-6-luna", "/not-yet-scanned")).toBeNull();
+    expect(resolve([codex, { ...secondCodex, enabled: false }], secondCodex.instanceId)).toBeNull();
+    expect(resolve([{ ...codex, auth: { status: "authenticated", type: "apiKey" } }])).toBeNull();
+    expect(resolve([codex], codex.instanceId, "opencode/model")?.accounts[0]?.limits).toEqual(
+      console,
+    );
+  });
+
   it.each(["codex", "claudeAgent"] as const)(
     "requires the selected workspace's verified %s user and organization",
     (driver) => {

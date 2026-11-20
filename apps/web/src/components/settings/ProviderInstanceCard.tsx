@@ -1,5 +1,6 @@
 import { Spinner } from "~/components/ui/spinner";
 
+import { useAtomValue } from "@effect/atom-react";
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -50,6 +51,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Switch } from "../ui/switch";
 import { ManagedControl, ManagedNotice } from "../ManagedPolicy";
 import { managedInstanceLocks, useManagedPolicy } from "../../state/managedPolicy";
+import { providersIgnoringCheckedAtAtom } from "../../state/server";
 import { disallowedProviderMessage, isManagedDriverAllowed } from "@t3tools/contracts";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -68,6 +70,7 @@ import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { AcpSessionManagementSection } from "./AcpSessionManagementSection";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { readCodexSetupMode } from "./CodexSetupSection.logic";
@@ -179,6 +182,63 @@ function nextConfigBlobWithValue(
     config !== null && typeof config === "object" ? { ...(config as Record<string, unknown>) } : {};
   base[key] = value;
   return base;
+}
+
+function OpenCodeCodexUsageSource({
+  config,
+  environmentId,
+  managedReason,
+  onChange,
+}: {
+  readonly config: unknown;
+  readonly environmentId: EnvironmentId;
+  readonly managedReason?: string | undefined;
+  readonly onChange: (config: Record<string, unknown> | undefined) => void;
+}) {
+  const gt = useGT();
+  const codex = useAtomValue(providersIgnoringCheckedAtAtom(environmentId)).filter(
+    (provider) => provider.driver === "codex",
+  );
+  const source = readConfigString(config, "codexUsageSource");
+  if (codex.length < 2 && source === null) return null;
+
+  const label = gt("Codex usage source");
+  const automatic = gt("Automatic");
+  const instanceLabel = (provider: ServerProvider) =>
+    provider.displayName ?? (provider.instanceId === "codex" ? "Codex" : provider.instanceId);
+  const selected = codex.find((provider) => provider.instanceId === source);
+  return (
+    <SettingsRow
+      title={label}
+      control={
+        <ManagedControl reason={managedReason}>
+          <Select
+            value={source ?? ""}
+            onValueChange={(value) => {
+              if (typeof value !== "string") return;
+              const next = nextConfigBlobWithValue(config, "codexUsageSource", value);
+              if (!value) delete next.codexUsageSource;
+              onChange(Object.keys(next).length > 0 ? next : undefined);
+            }}
+          >
+            <SelectTrigger size="sm" aria-label={label}>
+              <SelectValue>
+                {selected ? instanceLabel(selected) : (source ?? automatic)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectPopup align="start" alignItemWithTrigger={false}>
+              <SelectItem value="">{automatic}</SelectItem>
+              {codex.map((provider) => (
+                <SelectItem key={provider.instanceId} value={provider.instanceId}>
+                  {instanceLabel(provider)}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        </ManagedControl>
+      }
+    />
+  );
 }
 
 export function deriveProviderModelsForDisplay(input: {
@@ -1447,6 +1507,18 @@ export function ProviderInstanceCard({
           className={readOnly ? "opacity-50 select-none" : undefined}
         >
           {runtimeFields}
+          {instance.driver === "opencode" &&
+          environmentId !== undefined &&
+          !readConfigString(instance.config, "serverUrl") ? (
+            <OpenCodeCodexUsageSource
+              config={instance.config}
+              environmentId={environmentId}
+              managedReason={
+                instanceLocks?.configKeys.has("codexUsageSource") ? instanceLocks.reason : undefined
+              }
+              onChange={updateConfig}
+            />
+          ) : null}
         </SettingsSection>
       ) : null}
 

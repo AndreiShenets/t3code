@@ -24,6 +24,17 @@ import { isLocalLoopbackHost, isWildcardHost } from "./hostClassification.ts";
 
 const MINUTE = 60_000;
 
+function usageWindowCoversModel(window: ServerProviderUsageWindow, model: string): boolean {
+  return (
+    (window.modelIds === undefined || window.modelIds.includes(model)) &&
+    (window.providerIds === undefined || window.providerIds.includes(model.split("/", 1)[0] ?? ""))
+  );
+}
+
+const openCodeUsageWindowCoversModel = (window: ServerProviderUsageWindow, model: string) =>
+  usageWindowCoversModel(window, model) &&
+  (!window.id.startsWith("go_") || model.startsWith("opencode-go/"));
+
 export function exhaustedUsageWindow(
   provider: ServerProvider | undefined,
   now: number,
@@ -33,10 +44,10 @@ export function exhaustedUsageWindow(
   const exhausted = windows.filter(
     (window) =>
       (window.usedPercent ?? 0) >= 100 &&
-      (model === undefined || window.modelIds === undefined || window.modelIds.includes(model)) &&
       (model === undefined ||
-        window.providerIds === undefined ||
-        window.providerIds.includes(model.split("/")[0] ?? "")) &&
+        (provider?.driver === "opencode"
+          ? openCodeUsageWindowCoversModel(window, model)
+          : usageWindowCoversModel(window, model))) &&
       (!window.resetsAt ||
         !Number.isFinite(Date.parse(window.resetsAt)) ||
         Date.parse(window.resetsAt) > now),
@@ -67,10 +78,6 @@ export function exhaustedUsageWindow(
       );
       return exhausted.find((window) => window.id !== "individual" || !hasPlanWindows);
     }
-    case "opencode":
-      return exhausted.find(
-        (window) => !window.id.startsWith("go_") || model.startsWith("opencode-go/"),
-      );
     default:
       return exhausted[0];
   }
@@ -839,6 +846,27 @@ export function withUsageLimitsCommands(
   });
 }
 
+function hasNativeSubscriptionLimits(provider: ServerProvider) {
+  return (
+    provider.enabled &&
+    provider.installed &&
+    isProviderAvailable(provider) &&
+    provider.auth.status === "authenticated" &&
+    provider.auth.type !== "apiKey" &&
+    provider.auth.type !== "customEndpoint" &&
+    provider.auth.type !== "bedrock" &&
+    provider.usageLimits !== undefined
+  );
+}
+
+function scopeOpenCodeUsageLimits(provider: ServerProvider, model: string): ServerProvider {
+  const limits = provider.usageLimits;
+  if (!limits?.windows.length) return provider;
+  const windows = limits.windows.filter((window) => openCodeUsageWindowCoversModel(window, model));
+  if (windows.length === limits.windows.length) return provider;
+  return { ...provider, usageLimits: windows.length > 0 ? { ...limits, windows } : undefined };
+}
+
 export function resolveProviderUsageLimitSource(
   instanceId: ProviderInstanceId,
   providers: readonly ServerProvider[],
@@ -849,40 +877,42 @@ export function resolveProviderUsageLimitSource(
   },
 ): ServerProvider | undefined {
   const selected = providers.find((provider) => provider.instanceId === instanceId);
-  if (selected?.driver !== "opencode" || !selected.enabled || !selection?.model || !selection.cwd)
-    return selected;
+  if (selected?.driver !== "opencode" || !selected.enabled || !selection?.model) return selected;
+  const native = scopeOpenCodeUsageLimits(selected, selection.model);
   const workspace = selected.workspaceSnapshots?.find((snapshot) => snapshot.cwd === selection.cwd);
-  if (!workspace || !isProviderWorkspaceSnapshotCurrent(workspace, now)) return selected;
+  if (!workspace || !isProviderWorkspaceSnapshotCurrent(workspace, now)) return native;
   const modelProviderId = selection.model.split("/")[0];
   const accounts = workspace.subscriptionAccounts?.filter(
     (account) => account.modelProviderId === modelProviderId,
   );
-  if (accounts?.length !== 1) return selected;
-  const account = accounts[0]!;
-  if (account.driver !== "codex" && account.driver !== "claudeAgent") return selected;
-  const matches = providers
-    .filter(
-      (provider) =>
-        provider.driver === account.driver &&
-        provider.enabled &&
-        provider.installed &&
-        isProviderAvailable(provider) &&
-        provider.auth.status === "authenticated" &&
-        provider.auth.email?.trim().toLowerCase() === account.email.trim().toLowerCase() &&
-        provider.auth.workspaceId === account.workspaceId &&
-        provider.auth.type !== "apiKey" &&
-        provider.auth.type !== "customEndpoint" &&
-        provider.auth.type !== "bedrock" &&
-        provider.usageLimits !== undefined,
-    )
-    .sort(
-      (a, b) =>
-        Number(limitsNotice(a.usageLimits!) !== null) -
-          Number(limitsNotice(b.usageLimits!) !== null) ||
-        Date.parse(b.usageLimits!.checkedAt) - Date.parse(a.usageLimits!.checkedAt) ||
-        a.instanceId.localeCompare(b.instanceId),
-    );
-  return matches[0] ?? selected;
+  const account = accounts?.length === 1 ? accounts[0] : undefined;
+  if (account?.driver === "codex" || account?.driver === "claudeAgent") {
+    const matches = providers
+      .filter(
+        (provider) =>
+          provider.driver === account.driver &&
+          hasNativeSubscriptionLimits(provider) &&
+          provider.auth.email?.trim().toLowerCase() === account.email.trim().toLowerCase() &&
+          provider.auth.workspaceId === account.workspaceId,
+      )
+      .sort(
+        (a, b) =>
+          Number(limitsNotice(a.usageLimits!) !== null) -
+            Number(limitsNotice(b.usageLimits!) !== null) ||
+          Date.parse(b.usageLimits!.checkedAt) - Date.parse(a.usageLimits!.checkedAt) ||
+          a.instanceId.localeCompare(b.instanceId),
+      );
+    if (matches[0]) return matches[0];
+  }
+  const reference = workspace.codexUsageSource;
+  if (!reference?.modelProviderIds.includes(modelProviderId ?? "")) return native;
+  const codex = providers.filter((provider) => provider.driver === "codex");
+  if (reference.instanceId === undefined && codex.length !== 1) return undefined;
+  const source =
+    reference.instanceId === undefined
+      ? codex[0]
+      : codex.find((provider) => provider.instanceId === reference.instanceId);
+  return source && hasNativeSubscriptionLimits(source) ? source : undefined;
 }
 
 export function collectProviderUsageLimits(
@@ -896,7 +926,12 @@ export function collectProviderUsageLimits(
   },
 ): UsageLimitsReport | null {
   const selected = resolveProviderUsageLimitSource(instanceId, providers, now, selection);
-  if (!selected || !hasProviderUsageLimits(selected.driver, providers, sources)) return null;
+  if (!selected) return null;
+  if (selected.driver === "opencode" && selection?.model) {
+    providers = [selected];
+    sources = [];
+  }
+  if (!hasProviderUsageLimits(selected.driver, providers, sources)) return null;
   const resolveKey = accountKeyResolver([
     ...providers.filter((provider) => provider.enabled).map(nativeReport),
     ...sources.flatMap((source) => source.accounts),

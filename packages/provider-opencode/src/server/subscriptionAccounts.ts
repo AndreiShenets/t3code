@@ -1,4 +1,8 @@
-import { ProviderDriverKind, type ServerProviderWorkspaceSnapshot } from "@t3tools/contracts";
+import {
+  ProviderDriverKind,
+  type ProviderInstanceId,
+  type ServerProviderWorkspaceSnapshot,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -83,6 +87,7 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
     readonly providers: readonly unknown[];
     readonly credentials: readonly unknown[];
     readonly environment: NodeJS.ProcessEnv;
+    readonly codexUsageSource?: ProviderInstanceId | undefined;
   }) {
     const providers = input.providers.flatMap((provider) =>
       Option.toArray(decodeProvider(provider)),
@@ -92,6 +97,7 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
       .filter((credential) => credential.active);
     const accounts: NonNullable<ServerProviderWorkspaceSnapshot["subscriptionAccounts"]>[number][] =
       [];
+    const tokenSharingModelProviders: string[] = [];
     for (const provider of providers) {
       const matching = credentials.filter(
         (credential) => credential.integrationID === provider.integrationID,
@@ -99,12 +105,18 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
       if (matching.length !== 1) continue;
       const credential = matching[0]!.value;
       if (provider.integrationID === "openai" && credential.type === "oauth") {
-        if (provider.settings?.baseURL !== "https://chatgpt.com/backend-api/codex") continue;
         if (
           ["apiKey", "authToken"].some((key) => provider.settings?.[key]) ||
           Object.keys(provider.headers ?? {}).some((key) => /authorization|api-key/i.test(key))
         )
           continue;
+        if (credential.methodID === "chatgpt-token-sharing") {
+          if (provider.settings?.baseURL === "https://api.openai.com/v1" && credential.access) {
+            tokenSharingModelProviders.push(provider.id);
+          }
+          continue;
+        }
+        if (provider.settings?.baseURL !== "https://chatgpt.com/backend-api/codex") continue;
         const tokenBody = credential.access?.split(".")[1];
         if (!tokenBody) continue;
         const claims = decodeClaims(Buffer.from(tokenBody, "base64url").toString("utf8"));
@@ -142,6 +154,18 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
         }
       }
     }
-    return accounts;
+    return {
+      subscriptionAccounts: accounts,
+      ...(tokenSharingModelProviders.length > 0
+        ? {
+            codexUsageSource: {
+              modelProviderIds: tokenSharingModelProviders,
+              ...(input.codexUsageSource === undefined
+                ? {}
+                : { instanceId: input.codexUsageSource }),
+            },
+          }
+        : {}),
+    };
   },
 );

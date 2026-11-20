@@ -28,6 +28,12 @@ Select an OpenAI subscription model or a Claude Agent model in OpenCode; no manu
 mapping is needed. API-key, proxy, cloud, and external-server connections do not
 inherit subscription limits. Refresh provider status after changing a login.
 
+For OpenAI models signed in with ChatGPT token sharing, **Codex usage** shows the
+Session and Weekly limits reported by Codex, not OpenCode's own allowance. If
+the environment has more than one Codex instance, choose one under
+**Settings > Providers > OpenCode > Runtime > Codex usage source**. With only
+one instance, T3 Code uses it automatically.
+
 ## Compaction
 
 OpenCode compacts long conversations itself, and T3 Code has no setting for it. On

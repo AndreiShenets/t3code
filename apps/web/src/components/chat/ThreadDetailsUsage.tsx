@@ -71,12 +71,13 @@ export function ThreadDetailsUsage({
     source?.usageLimits;
   if (!limits) return null;
   const notice = limitsNotice(limits, m);
+  const borrowedCodex = source?.driver === "codex" && source.instanceId !== providerInstanceId;
 
   return (
     <ThreadDetailsSection
       headingId="thread-details-usage-heading"
-      title={gt("Usage limits")}
-      showHeading={false}
+      title={borrowedCodex ? gt("Codex usage") : gt("Usage limits")}
+      showHeading={borrowedCodex}
     >
       <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
         {notice ? (

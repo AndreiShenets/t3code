@@ -152,6 +152,12 @@ export const ServerProviderWorkspaceSnapshot = Schema.Struct({
       }),
     ),
   ),
+  codexUsageSource: Schema.optional(
+    Schema.Struct({
+      modelProviderIds: Schema.Array(TrimmedNonEmptyString),
+      instanceId: Schema.optionalKey(ProviderInstanceId),
+    }),
+  ),
   // Absent means the provider's machine `models`, which keeps most snapshots small.
   models: Schema.optional(Schema.Array(ServerProviderModel)),
   modelsPending: Schema.optional(Schema.Boolean),
