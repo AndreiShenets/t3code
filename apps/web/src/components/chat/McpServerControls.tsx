@@ -4,6 +4,7 @@ import {
   type McpCommand,
   type McpManagementRequest,
 } from "@t3tools/client-runtime/mcpCommands";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import type { ProviderMcpServer } from "@t3tools/contracts";
 import { T, useGT, useMessages } from "gt-react";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -40,8 +41,8 @@ export function McpServerList(props: McpManagementRequest) {
   const run = async (next: Exclude<McpCommand, { action: "invalid" }>) => {
     const id = ++requestId.current;
     const result = await (next.action === "list"
-      ? serverEnvironment.listMcpServers.run(registry, { environmentId, input: target })
-      : serverEnvironment.setMcpEnabled.run(registry, {
+      ? runAtomCommand(registry, serverEnvironment.listMcpServers, { environmentId, input: target })
+      : runAtomCommand(registry, serverEnvironment.setMcpEnabled, {
           environmentId,
           input: { ...target, server: next.server, enabled: next.enabled },
         }));

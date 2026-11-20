@@ -1,5 +1,6 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { MCP_WORKSPACE_NOTICE, type McpCommand } from "@t3tools/client-runtime/mcpCommands";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ProviderMcpServer, ProviderMcpTarget } from "@t3tools/contracts";
 import { T, useGT, useMessages } from "gt-react-native";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -34,8 +35,11 @@ export function ComposerMcpSheet(props: {
       const id = ++requestId.current;
       const request =
         next.action === "list"
-          ? serverEnvironment.listMcpServers.run(registry, { environmentId, input: target })
-          : serverEnvironment.setMcpEnabled.run(registry, {
+          ? runAtomCommand(registry, serverEnvironment.listMcpServers, {
+              environmentId,
+              input: target,
+            })
+          : runAtomCommand(registry, serverEnvironment.setMcpEnabled, {
               environmentId,
               input: { ...target, server: next.server, enabled: next.enabled },
             });
