@@ -535,6 +535,8 @@
   "355234f96f858555": "Der Gerätestream stockt. Verbinde neu…",
   "64b197cdb9380c6b": "Verbindung zum Gerätestream fehlgeschlagen. Verbinde neu…",
   "569b183f80eb68df": "Der Gerätestream hat noch keine Netzwerkkandidaten gefunden. Neuer Versuch…",
+  "5717fb8ba7e64068": "Heute",
+  "cd88e18ab9eba9c8": "Heute seit Mitternacht",
   "12cce1bb98aa42a8": "Angebot für den Gerätestream fehlgeschlagen ({status}). Neuer Versuch…",
   "c5a9ce61ab77276b": "Der Gerätestream hat eine ungültige Antwort zurückgegeben. Neuer Versuch…",
   "e25e5c200b5bfdb3": "Wechsel zu WebRTC.",

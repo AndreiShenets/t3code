@@ -535,6 +535,8 @@
   "355234f96f858555": "O stream do dispositivo travou. Reconectando…",
   "64b197cdb9380c6b": "Falha na conexão do stream do dispositivo. Reconectando…",
   "569b183f80eb68df": "O stream do dispositivo ainda não encontrou candidatos de rede. Tentando novamente…",
+  "5717fb8ba7e64068": "Hoje",
+  "cd88e18ab9eba9c8": "Hoje desde a meia-noite",
   "12cce1bb98aa42a8": "A oferta do stream do dispositivo falhou ({status}). Tentando novamente…",
   "c5a9ce61ab77276b": "O stream do dispositivo retornou uma resposta inválida. Tentando novamente…",
   "e25e5c200b5bfdb3": "Mudando para WebRTC.",
