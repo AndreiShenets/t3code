@@ -25,10 +25,12 @@ import {
   paceRemainingPercent,
   usesChatGptSharing,
   resolveNewThreadModelSelection,
+  resolveProviderUsageLimitSource,
 } from "./usageLimits.ts";
 import { collectLimitNotices } from "./usageLimitsCopy.ts";
 
-const now = Date.parse("2026-09-03T12:00:00.000Z");
+const checkedAt = "2026-09-03T12:00:00.000Z";
+const now = Date.parse(checkedAt);
 
 const window = {
   id: "five_hour",
@@ -55,6 +57,170 @@ function provider(overrides: Partial<ServerProvider>): ServerProvider {
     ...overrides,
   };
 }
+
+describe("OpenCode subscription limit sources", () => {
+  it("shows only the chosen Codex instance's limits for an OpenCode token-sharing model", () => {
+    const codex = provider({
+      auth: { status: "authenticated", type: "chatgpt" },
+      usageLimits: { checkedAt, windows: [window] },
+    });
+    const secondCodex = {
+      ...codex,
+      instanceId: ProviderInstanceId.make("codex-work"),
+      usageLimits: { checkedAt, windows: [{ ...window, usedPercent: 75 }] },
+    };
+    const console = {
+      checkedAt,
+      windows: [
+        {
+          ...window,
+          id: "budget_shared",
+          label: "Console · Shared",
+          providerIds: ["opencode"],
+        },
+      ],
+    };
+    const resolve = (
+      providers: readonly ServerProvider[],
+      instanceId?: ProviderInstanceId | null,
+      model = "openai/gpt-6-luna",
+      cwd = "/project",
+    ) => {
+      const opencode = provider({
+        instanceId: ProviderInstanceId.make("opencode"),
+        driver: ProviderDriverKind.make("opencode"),
+        usageLimits: console,
+        workspaceSnapshots: [
+          {
+            cwd: "/project",
+            checkedAt,
+            skills: [],
+            slashCommands: [],
+            codexUsageSource: {
+              modelProviderIds: ["openai"],
+              ...(instanceId === undefined ? {} : { instanceId }),
+            },
+          },
+        ],
+      });
+      return collectProviderUsageLimits(opencode.instanceId, [opencode, ...providers], [], now, {
+        model,
+        cwd,
+      });
+    };
+
+    expect(resolve([codex])?.accounts.map(({ limits }) => limits.windows)).toEqual([[window]]);
+    expect(resolve([codex], null)).toBeNull();
+    expect(resolve([codex, secondCodex])).toBeNull();
+    expect(resolve([codex, secondCodex], secondCodex.instanceId)?.accounts).toMatchObject([
+      { instanceId: secondCodex.instanceId, limits: secondCodex.usageLimits },
+    ]);
+    expect(resolve([codex], secondCodex.instanceId)).toBeNull();
+    expect(resolve([codex], undefined, "openai/gpt-6-luna", "/not-yet-scanned")).toBeNull();
+    expect(resolve([codex, { ...secondCodex, enabled: false }], secondCodex.instanceId)).toBeNull();
+    expect(resolve([{ ...codex, auth: { status: "authenticated", type: "apiKey" } }])).toBeNull();
+    expect(resolve([codex], codex.instanceId, "opencode/model")?.accounts[0]?.limits).toEqual(
+      console,
+    );
+  });
+
+  it.each(["codex", "claudeAgent"] as const)(
+    "requires the selected workspace's verified %s user and organization",
+    (driver) => {
+      const modelProviderId = driver === "codex" ? "work-openai" : "claude-agent";
+      const native = provider({
+        driver: ProviderDriverKind.make(driver),
+        auth: {
+          status: "authenticated",
+          type: "chatgpt",
+          email: "person@example.com",
+          workspaceId: "org-1",
+        },
+        usageLimits: { checkedAt, windows: [window] },
+      });
+      const opencode = provider({
+        instanceId: ProviderInstanceId.make("opencode"),
+        driver: ProviderDriverKind.make("opencode"),
+        workspaceSnapshots: [
+          {
+            cwd: "/project",
+            checkedAt,
+            skills: [],
+            slashCommands: [],
+            subscriptionAccounts: [
+              {
+                modelProviderId,
+                driver: native.driver,
+                email: "person@example.com",
+                workspaceId: "org-1",
+              },
+            ],
+          },
+        ],
+      });
+      const selection = { model: `${modelProviderId}/model`, cwd: "/project" };
+      const resolve = (source = native, override = {}) =>
+        resolveProviderUsageLimitSource(opencode.instanceId, [opencode, source], now, {
+          ...selection,
+          ...override,
+        });
+
+      expect(resolve()).toBe(native);
+      const disabled = {
+        ...opencode,
+        workspaceSnapshots: (opencode.workspaceSnapshots ?? []).map((snapshot) => ({
+          ...snapshot,
+          codexUsageSource: { instanceId: null, modelProviderIds: [] },
+        })),
+      };
+      expect(
+        resolveProviderUsageLimitSource(opencode.instanceId, [disabled, native], now, selection),
+      ).toBe(driver === "codex" ? disabled : native);
+      for (const override of [
+        { email: "other@example.com" },
+        { workspaceId: "org-2" },
+        { workspaceId: undefined },
+        { status: "unauthenticated" as const },
+        { type: "apiKey" },
+      ]) {
+        expect(resolve({ ...native, auth: { ...native.auth, ...override } })).toBe(opencode);
+      }
+      expect(resolve(native, { cwd: "/different-project" })).toBe(opencode);
+      expect(resolve(native, { model: "opencode-go/model" })).toBe(opencode);
+      expect(
+        resolveProviderUsageLimitSource(
+          opencode.instanceId,
+          [opencode, native],
+          now + 300_000,
+          selection,
+        ),
+      ).toBe(opencode);
+      expect(
+        collectProviderUsageLimits(
+          opencode.instanceId,
+          [opencode, native],
+          [],
+          now,
+          selection,
+        )?.accounts.map((a) => a.instanceId),
+      ).toEqual([native.instanceId]);
+      const unavailableAlias = {
+        ...native,
+        instanceId: ProviderInstanceId.make("earlier-alias"),
+        installed: false,
+      };
+      expect(
+        collectProviderUsageLimits(
+          opencode.instanceId,
+          [opencode, unavailableAlias, native],
+          [],
+          now,
+          selection,
+        )?.accounts.map((a) => a.instanceId),
+      ).toEqual([native.instanceId]);
+    },
+  );
+});
 
 describe("new thread model fallback", () => {
   const selection = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-6.1-sol" };

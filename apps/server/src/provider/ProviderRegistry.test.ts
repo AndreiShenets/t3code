@@ -1114,6 +1114,18 @@ it.layer(
       ] satisfies ServerProvider["models"];
       const scopedSnapshot = {
         ...provider,
+        subscriptionAccounts: [
+          {
+            modelProviderId: "openai",
+            driver: ProviderDriverKind.make("codex"),
+            email: "person@example.com",
+            workspaceId: "workspace-1",
+          },
+        ],
+        codexUsageSource: {
+          modelProviderIds: ["openai-sharing"],
+          instanceId: ProviderInstanceId.make("codex-work"),
+        },
         checkedAt: "2026-03-25T00:01:00.000Z",
         slashCommands: [{ name: "project" }],
         skills: [{ name: "project", path: "/project/SKILL.md", enabled: true }],
@@ -1145,6 +1157,8 @@ it.layer(
           slashCommands: scopedSnapshot.slashCommands,
           skills: scopedSnapshot.skills,
           optionDescriptors: scopedSnapshot.optionDescriptors,
+          subscriptionAccounts: scopedSnapshot.subscriptionAccounts,
+          codexUsageSource: scopedSnapshot.codexUsageSource,
           models: projectModels,
         },
       ]);
@@ -1190,7 +1204,12 @@ it.layer(
       );
       assert.strictEqual(withoutModels.workspaceSnapshots?.[0]?.models, undefined);
 
-      const { optionDescriptors, ...failedSnapshot } = scopedSnapshot;
+      const {
+        optionDescriptors,
+        subscriptionAccounts: _subscriptionAccounts,
+        codexUsageSource: _codexUsageSource,
+        ...failedSnapshot
+      } = scopedSnapshot;
       const firstFailure = ProviderRegistry.upsertProviderWorkspaceSnapshot(
         provider,
         "/project",
@@ -1230,6 +1249,8 @@ it.layer(
         failedRefresh.workspaceSnapshots?.[1]?.optionDescriptors,
         optionDescriptors,
       );
+      assert.strictEqual(failedRefresh.workspaceSnapshots?.[1]?.subscriptionAccounts, undefined);
+      assert.strictEqual(failedRefresh.workspaceSnapshots?.[1]?.codexUsageSource, undefined);
     });
 
     it("preserves previously discovered provider models when a refresh returns none", () => {
