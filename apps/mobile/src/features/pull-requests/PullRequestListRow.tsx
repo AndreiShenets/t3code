@@ -2,6 +2,7 @@ import { sourceControlClients } from "@t3tools/client-runtime/source-control-cli
 import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { useGT, useMessages } from "gt-react-native";
 import { memo } from "react";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import { Pressable, View } from "react-native";
 import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
@@ -123,7 +124,9 @@ export const PullRequestListRow = memo(
               item.title,
               status.label,
               conflict ? conflict.label.toLowerCase() : null,
-              gt("by {author}", { author: item.author?.login ?? gt("unknown author") }),
+              gt("by {author}", {
+                author: getPullRequestActorName(item.author, gt("unknown author")),
+              }),
               review ? review.accessibleLabel : null,
               checksSpoken,
               item.stack
