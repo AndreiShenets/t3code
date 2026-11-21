@@ -7,6 +7,7 @@ import {
   type UncontrolledCodeViewProps,
 } from "@pierre/diffs/react";
 /* oxlint-enable eslint/no-restricted-imports */
+import { useGT } from "gt-react";
 import type { Ref } from "react";
 
 import { useCodeDisplay, type CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";
@@ -261,6 +262,14 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
       options?.onPostRender?.(container, context.instance, phase, context);
     }
   };
+  const gt = useGT();
+  // The change bars are colour alone; this names each changed line for screen readers.
+  const lineKindCss = `[data-indicators="bars"] [data-line][data-line-type="change-deletion"]::before {
+  content: "" / ${JSON.stringify(gt("Removed", { $context: "diff line, read by screen readers" }))};
+}
+[data-indicators="bars"] [data-line][data-line-type="change-addition"]::before {
+  content: "" / ${JSON.stringify(gt("Added", { $context: "diff line, read by screen readers" }))};
+}`;
   return (
     <DiffWorkerPoolProvider>
       <CodeView<LAnnotation>
@@ -275,8 +284,8 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
           ...options,
           onPostRender,
           unsafeCSS: unsafeCSSExtra
-            ? `${DIFF_VIEW_UNSAFE_CSS}\n${unsafeCSSExtra}`
-            : DIFF_VIEW_UNSAFE_CSS,
+            ? `${DIFF_VIEW_UNSAFE_CSS}\n${lineKindCss}\n${unsafeCSSExtra}`
+            : `${DIFF_VIEW_UNSAFE_CSS}\n${lineKindCss}`,
           itemMetrics: {
             diffHeaderHeight: 32,
             hunkSeparatorHeight: 24,
