@@ -882,7 +882,7 @@ interface EditableFileSurfaceProps {
   projectId?: ProjectId | undefined;
   cwd: string;
   relativePath: string;
-  composerDraftTarget: ScopedThreadRef | DraftId;
+  composerDraftTarget: ScopedThreadRef | DraftId | null;
   contents: string;
   resolvedTheme: "light" | "dark";
   revealRequestId: number;
@@ -897,7 +897,7 @@ interface FileSelectionOverride {
   range: SelectedLineRange | null;
 }
 
-function EditableFileSurface({
+export function EditableFileSurface({
   environmentId,
   projectId,
   cwd,
@@ -917,7 +917,9 @@ function EditableFileSurface({
   const promptCommentIds = new Set(
     useComposerDraftStore(
       (store) =>
-        store.getComposerDraft(composerDraftTarget)?.reviewComments ?? EMPTY_REVIEW_COMMENTS,
+        (composerDraftTarget === null
+          ? undefined
+          : store.getComposerDraft(composerDraftTarget)?.reviewComments) ?? EMPTY_REVIEW_COMMENTS,
     ).map((comment) => comment.id),
   );
   const [lineAnnotations, setLineAnnotations] = useState<FileCommentLineAnnotation[]>([]);
@@ -962,7 +964,7 @@ function EditableFileSurface({
     setEditedContents(file.contents);
     setProjectFileQueryData(environmentId, cwd, relativePath, file.contents);
     changeFileSaveSession(saveTarget, file.contents);
-    if (!nextLineAnnotations) return;
+    if (!nextLineAnnotations || composerDraftTarget === null) return;
     const remapped = remapFileCommentAnnotations(nextLineAnnotations);
     // The editor hands back the array it was given until an edit moves an annotation.
     setLineAnnotations((current) => (current === nextLineAnnotations ? current : remapped));
@@ -985,6 +987,7 @@ function EditableFileSurface({
   };
 
   const removeAnnotationEntry = (entryId: string) => {
+    if (composerDraftTarget === null) return;
     setSelectedRange(null);
     removeReviewComment(composerDraftTarget, entryId);
     setLineAnnotations((current) => {
@@ -996,6 +999,7 @@ function EditableFileSurface({
   };
 
   const submitAnnotationEntry = (entryId: string, text: string) => {
+    if (composerDraftTarget === null) return;
     setSelectedRange(null);
     const entry = lineAnnotations
       .flatMap((annotation) => annotation.metadata.entries)
@@ -1120,8 +1124,8 @@ function EditableFileSurface({
             onEditChange={handleEditChange}
             options={{
               disableFileHeader: true,
-              enableGutterUtility: !hasOpenCommentForm,
-              enableLineSelection: !hasOpenCommentForm,
+              enableGutterUtility: composerDraftTarget !== null && !hasOpenCommentForm,
+              enableLineSelection: composerDraftTarget !== null && !hasOpenCommentForm,
               onGutterUtilityClick: setSelectedRange,
               onLineSelectionChange: setSelectedRange,
               onLineSelectionEnd: handleLineSelectionEnd,
