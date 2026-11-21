@@ -18,10 +18,10 @@ export function useUsageLimitsPanel(input: {
   readonly threadKey: string;
   readonly panelKey: string | null;
   readonly providerInstanceId: ProviderInstanceId | null;
+  readonly model: string | null;
   readonly providerDriver: ServerProvider["driver"] | null;
   readonly providers: readonly ServerProvider[];
   readonly sources: UsageLimitSourceSnapshots;
-  readonly model?: string | null | undefined;
   readonly cwd?: string | null | undefined;
 }) {
   const {
@@ -29,10 +29,10 @@ export function useUsageLimitsPanel(input: {
     threadKey,
     panelKey,
     providerInstanceId,
+    model,
     providerDriver,
     providers,
     sources,
-    model,
     cwd,
   } = input;
   const messages = useMessages();
