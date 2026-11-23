@@ -581,6 +581,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
       ? [gt("Diff whitespace changes")]
       : []),
+    ...(settings.showWhitespace !== DEFAULT_UNIFIED_SETTINGS.showWhitespace
+      ? [gt("Show whitespace characters")]
+      : []),
     ...(settings.diffLayout !== DEFAULT_UNIFIED_SETTINGS.diffLayout ? [gt("Diff layout")] : []),
     ...(settings.proactivePanelsEnabled !== DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled
       ? [gt("Open pull requests and changes panels proactively")]
@@ -725,6 +728,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       persistComposerContextStrip: DEFAULT_UNIFIED_SETTINGS.persistComposerContextStrip,
       diffFilesCollapsed: DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
+      showWhitespace: DEFAULT_UNIFIED_SETTINGS.showWhitespace,
       diffLayout: DEFAULT_UNIFIED_SETTINGS.diffLayout,
       proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
@@ -1767,6 +1771,27 @@ export function DiffsSettingsPanel() {
                 updateSettings({ diffIgnoreWhitespace: Boolean(checked) })
               }
               aria-label={gt("Hide whitespace changes by default")}
+            />
+          }
+        />
+        <SettingsRow
+          {...setting("show-whitespace-characters")}
+          description={gt("Show spaces as dots and tabs as arrows in file and diff views.")}
+          resetAction={
+            settings.showWhitespace !== DEFAULT_UNIFIED_SETTINGS.showWhitespace ? (
+              <SettingResetButton
+                ariaLabel={gt("Reset show whitespace characters to default")}
+                onClick={() =>
+                  updateSettings({ showWhitespace: DEFAULT_UNIFIED_SETTINGS.showWhitespace })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.showWhitespace}
+              onCheckedChange={(checked) => updateSettings({ showWhitespace: checked })}
+              aria-label={gt("Show whitespace characters")}
             />
           }
         />
