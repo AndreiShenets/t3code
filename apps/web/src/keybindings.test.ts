@@ -1074,7 +1074,7 @@ describe("Usage shortcuts", () => {
         platform: "Linux",
         context: { usagePageOpen: true },
       }),
-      "usage.period.day",
+      "usage.period.today",
     );
     assert.isNull(
       resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
