@@ -1,3 +1,12 @@
+import type { PullRequestActor } from "@t3tools/contracts";
+
+export function getPullRequestActorName(
+  actor: Pick<PullRequestActor, "login" | "name"> | null | undefined,
+  fallback = "ghost",
+): string {
+  return actor?.name?.trim() || actor?.login || fallback;
+}
+
 const SCP_SSH_REMOTE_PATTERN = /^[a-zA-Z0-9._-]+@([^:/]+):/;
 // Git reads `host:path` as SSH too, leaving the user to ssh config. A single letter is a Windows
 // drive and `::` names a remote helper.
