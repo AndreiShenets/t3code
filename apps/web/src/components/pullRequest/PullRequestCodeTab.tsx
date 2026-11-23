@@ -19,7 +19,7 @@ import type {
   FileDiffMetadata,
   SelectedLineRange,
 } from "@pierre/diffs";
-import type { CodeViewAnnotationArgs, CodeViewDiffItem } from "@pierre/diffs/react";
+import type { CodeViewAnnotationArgs, CodeViewDiffItem, CodeViewHandle } from "@pierre/diffs/react";
 import type {
   EnvironmentId,
   PullRequestDetailView,
@@ -69,6 +69,7 @@ import { m, type MessageResolver } from "~/i18n/messages";
 
 import { observeIntersection } from "~/lib/observeIntersection";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
 import { useRenderedAppearance } from "~/hooks/useTheme";
 import { areAllDiffFilesCollapsed } from "~/lib/diffCollapse";
@@ -118,8 +119,10 @@ import { DiffFileTree } from "../diffs/DiffFileTree";
 import { DiffFileHeaderActions } from "../diffs/DiffFileHeaderActions";
 import { useDiffEditorAction } from "../diffs/useDiffEditorAction";
 import { diffHeaderTogglePath } from "../diffs/diffHeaderInteraction";
+import { DiffFileFilter, useDiffFileFilter } from "../diffs/DiffFileFilter";
 import { FileExplorerPane } from "../files/FileExplorerPane";
 import { useCodeViewFileReveal } from "../diffs/useCodeViewFileReveal";
+import { useDiffSearchShortcut } from "../diffs/useDiffSearchShortcut";
 import { useHideTestFiles } from "../diffs/useHideTestFiles";
 import { diffFileTreeEntries } from "../diffs/diffFileTree.logic";
 import { StyledDiffCodeView } from "../diffs/StyledDiffCodeView";
@@ -507,6 +510,7 @@ function PullRequestCodeTab({
     false,
     Schema.Boolean,
   );
+  const fileFilter = useDiffFileFilter();
   const [selectedLines, setSelectedLines] = useState<{
     id: string;
     range: SelectedLineRange;
@@ -520,6 +524,10 @@ function PullRequestCodeTab({
     readonly cursor: string | null;
     readonly slices: ReadonlyArray<DiffSlice>;
   }>({ key: "", cursor: null, slices: NO_SLICES });
+  const [viewer, setViewer] = useState<CodeViewHandle<ReviewAnnotationGroup, undefined> | null>(
+    null,
+  );
+  useDiffSearchShortcut(viewer);
 
   const referenceKey = pullRequestReviewKey(reference);
   // A commit opened from the timeline or left selected across a force-push may no longer be
@@ -540,6 +548,7 @@ function PullRequestCodeTab({
     setFolds(EMPTY_PULL_REQUEST_DIFF_FOLDS);
     setVisibleCommitCount(COMMIT_PAGE_SIZE);
     setOrphansOpen(false);
+    fileFilter.setValue((previous) => ({ ...previous, query: "" }));
     setSliceState({ key: scopeKey, cursor: null, slices: NO_SLICES });
   }
 
@@ -690,6 +699,12 @@ function PullRequestCodeTab({
   }, [backgroundRefreshToken, refreshFirstDiffPage, refreshFilesViewed]);
 
   const codeViewReveal = useCodeViewFileReveal();
+  const attachViewer = useStableCallback(
+    (next: CodeViewHandle<ReviewAnnotationGroup, undefined> | null) => {
+      codeViewReveal.attach(next);
+      setViewer(next);
+    },
+  );
   const answeredRevealNonce = useRef<number | null>(null);
 
   const loadDiffFiles = createPullRequestDiffFileContentsLoader(getDiffFileContents, {
@@ -813,14 +828,20 @@ function PullRequestCodeTab({
       })
     : loadedFiles;
   const hiddenTestFileCount = loadedFiles.length - testFilteredFiles.length;
-  const files = hideReviewedFiles
+  const reviewedFilteredFiles = hideReviewedFiles
     ? testFilteredFiles.filter((file) => {
         const path = resolveFileDiffPath(file);
         return path === revealRequest?.path || path === linkPath || !foldsAsViewed(path);
       })
     : testFilteredFiles;
-  const hiddenReviewedFileCount = testFilteredFiles.length - files.length;
+  const hiddenReviewedFileCount = testFilteredFiles.length - reviewedFilteredFiles.length;
   const filePaths = loadedFiles.map((file) => resolveFileDiffPath(file));
+  const files = reviewedFilteredFiles.filter((file) => {
+    const path = resolveFileDiffPath(file);
+    return path === revealRequest?.path || path === linkPath || fileFilter.matchesFile(file);
+  });
+  const shownOutsideFilter =
+    fileFilter.active && files.some((file) => !fileFilter.matchesFile(file));
   const omittedFileStats = new Map(
     loadedSlices.flatMap((slice) =>
       slice.omittedFileStats.map((file) => [file.path, file] as const),
@@ -833,7 +854,7 @@ function PullRequestCodeTab({
     const placed = new Set<string>();
     // Commit diffs use different line coordinates; list conversations separately.
     if (commit !== null) return placed;
-    for (const file of files) {
+    for (const file of testFilteredFiles) {
       for (const thread of threadsByPath.get(resolveFileDiffPath(file)) ?? []) {
         if (thread.line !== null && isLineInFileDiff(file, thread.side, thread.line)) {
           placed.add(thread.id);
@@ -975,7 +996,7 @@ function PullRequestCodeTab({
       ? parsedSlices.flatMap((parsed) => (parsed?.kind === "raw" ? [parsed] : []))
       : [];
   const rawSlicesView =
-    files.length === 0 && rawSlices.length > 0 ? (
+    !fileFilter.active && files.length === 0 && rawSlices.length > 0 ? (
       <div className="space-y-4 px-4 py-5">
         {rawSlices.map((slice) => (
           <div key={`${slice.reason}:${slice.text.slice(0, 64)}`} className="space-y-2">
@@ -1174,7 +1195,7 @@ function PullRequestCodeTab({
   const renderCodeViewFooter = () =>
     nextCursor === null ? null : (
       <div
-        ref={sentinelRef}
+        ref={fileFilter.active ? undefined : sentinelRef}
         className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"
       >
         {diffQuery.error !== null ? (
@@ -1188,6 +1209,10 @@ function PullRequestCodeTab({
           </>
         ) : diffQuery.isPending ? (
           gt("Loading more files...")
+        ) : fileFilter.active ? (
+          <Button size="xs" variant="outline" onClick={loadNextSlice}>
+            <T>Load more files</T>
+          </Button>
         ) : null}
       </div>
     );
@@ -1458,8 +1483,8 @@ function PullRequestCodeTab({
     setSelectedLines(null);
   };
   const toolbar = (
-    <div className="@container flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background px-4 text-xs text-muted-foreground">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+    <div className="@container flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-background px-4 py-1 text-xs text-muted-foreground">
+      <div className="flex min-w-0 basis-full flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-1 @xl:basis-0 @xl:flex-nowrap">
         {orderedCommits.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -1514,9 +1539,14 @@ function PullRequestCodeTab({
         ) : null}
         <PullRequestMetaLine>
           <span className="shrink-0 tabular-nums">
-            {gt("{count, plural, one {{count} file} other {{count} files}}", {
-              count: files.length,
-            })}
+            {fileFilter.active
+              ? gt("{count} of {total} loaded files", {
+                  count: files.length,
+                  total: testFilteredFiles.length,
+                })
+              : gt("{count, plural, one {{count} file} other {{count} files}}", {
+                  count: files.length,
+                })}
             {nextCursor === null ? "" : "+"}
           </span>
           {hiddenTestFileCount > 0 ? (
@@ -1539,6 +1569,11 @@ function PullRequestCodeTab({
                 { count: hiddenReviewedFileCount },
               )}
             </Button>
+          ) : null}
+          {shownOutsideFilter ? (
+            <span>
+              <T>Linked file shown outside filter</T>
+            </span>
           ) : null}
           {filesViewed.enabled && loadedFiles.length > 0 ? (
             <span className="flex min-w-0 items-center gap-1 tabular-nums">
@@ -1634,7 +1669,10 @@ function PullRequestCodeTab({
           ) : null}
         </PullRequestMetaLine>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="order-last ml-auto w-full @5xl:order-none @5xl:w-80">
+        <DiffFileFilter value={fileFilter.value} onChange={fileFilter.setValue} />
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger
@@ -1950,6 +1988,17 @@ function PullRequestCodeTab({
     return withToolbar(rawSlicesView);
   }
 
+  if (items.length === 0 && fileFilter.active) {
+    return withToolbar(
+      <div>
+        <p className="px-4 py-5 text-sm text-muted-foreground">
+          <T>No matching files.</T>
+        </p>
+        {renderCodeViewFooter()}
+      </div>,
+    );
+  }
+
   if (items.length === 0 && nextCursor === null) {
     return withToolbar(
       <p className="px-4 py-5 text-sm text-muted-foreground">
@@ -1970,7 +2019,9 @@ function PullRequestCodeTab({
     return withToolbar(diffLoading);
   }
 
-  const orphanThreads = detail.reviewThreads.filter((thread) => !placedThreadIds.has(thread.id));
+  const orphanThreads = detail.reviewThreads.filter(
+    (thread) => !placedThreadIds.has(thread.id) && fileFilter.matches(thread.path),
+  );
   const orphanFiles = new Map<string, PullRequestReviewThread[]>();
   for (const thread of orphanThreads) {
     const existing = orphanFiles.get(thread.path);
@@ -2069,7 +2120,7 @@ function PullRequestCodeTab({
                 node?.setAttribute("data-workspace-focus-default", "");
                 scrollerRef(node);
               }}
-              viewerRef={codeViewReveal.attach}
+              viewerRef={attachViewer}
               items={items}
               selectedLines={selectedLines}
               onSelectedLinesChange={setSelectedLines}
