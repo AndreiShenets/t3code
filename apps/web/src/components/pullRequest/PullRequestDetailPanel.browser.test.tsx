@@ -600,6 +600,7 @@ it("uses the owning surface's tab selection across thread and panel switches", a
         keybindings={[]}
         configuredPreviewUrls={[]}
         workspaceMutationId={null}
+        workspaceRevision={null}
         issuesSupported={false}
         sideChatParentPanel={{ hostRef: ref, openToolDiff: () => {}, runShellCommand: () => {} }}
         getShortcutContext={shortcutContext}
