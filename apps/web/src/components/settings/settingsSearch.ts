@@ -783,6 +783,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("diff ignore spaces edits default")],
   },
   {
+    id: "show-whitespace-characters",
+    title: msg("Show whitespace characters"),
+    to: "/settings/diffs",
+    searchTerms: [msg("spaces tabs dots arrows invisible indentation file diff views")],
+  },
+  {
     id: "default-diff-file-state",
     title: msg("Default diff file state"),
     to: "/settings/diffs",
