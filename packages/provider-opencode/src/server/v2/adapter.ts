@@ -3016,7 +3016,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
             },
             updatedAt,
           };
-          yield* emitProviderTurn(state, turn, {
+          yield* emitProviderTurn(turn, {
             ...turn.providerTurn,
             tokenUsage: {
               ...usage,
