@@ -63,7 +63,14 @@ export function ThreadDetailsUsage({
   const gt = useGT();
   const nowMinute = useNowMinute();
   const now = Date.parse(`${nowMinute}:00Z`);
-  const resolved = resolveThreadDetailsLimits(providerInstanceId, model, providers, sources, now, cwd);
+  const resolved = resolveThreadDetailsLimits(
+    providerInstanceId,
+    model,
+    providers,
+    sources,
+    now,
+    cwd,
+  );
   if (!resolved) return null;
   const borrowedCodex = resolved.kind === "instance" && resolved.borrowedCodex === true;
 
