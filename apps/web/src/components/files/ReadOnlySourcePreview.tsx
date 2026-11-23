@@ -19,6 +19,8 @@ export default function ReadOnlySourcePreview(props: {
   readonly onPostRender?: FileOptions<undefined, undefined>["onPostRender"];
   /** A preview's own wrap toggle; omitted follows the word wrap setting. */
   readonly wordWrap?: boolean;
+  /** Files with more lines than this render without highlighting; omitted keeps Pierre's limit. */
+  readonly tokenizeMaxLength?: number;
 }) {
   const { name, text, onPostRender: onFilePostRender } = props;
   const resolvedTheme = useRenderedAppearance();
@@ -81,7 +83,8 @@ export default function ReadOnlySourcePreview(props: {
         }}
       >
         <Virtualizer
-          key={`${props.name}:${resolvedTheme}:${props.text.length}`}
+          // Not keyed on the text: a file that grows or finishes downloading keeps its scroll position.
+          key={`${props.name}:${resolvedTheme}`}
           className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
           config={{ overscrollSize: 600, intersectionObserverMargin: 1200 }}
         >
@@ -96,6 +99,9 @@ export default function ReadOnlySourcePreview(props: {
               overflow: wordWrap ? "wrap" : "scroll",
               theme: resolveDiffThemeName(resolvedTheme),
               preferredHighlighter: PREFERRED_HIGHLIGHTER,
+              ...(props.tokenizeMaxLength === undefined
+                ? {}
+                : { tokenizeMaxLength: props.tokenizeMaxLength }),
               themeType: resolvedTheme,
               unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
               onPostRender: drawSelection,
