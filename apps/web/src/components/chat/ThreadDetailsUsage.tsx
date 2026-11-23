@@ -40,6 +40,7 @@ export interface ThreadDetailsUsageInput {
   readonly providers: readonly ServerProvider[];
   readonly sources: UsageLimitSourceSnapshots;
   readonly contextWindow: ContextWindowSnapshot | null;
+  readonly cwd?: string | null | undefined;
 }
 
 type UsageTone = "error" | "warning" | null;
@@ -56,24 +57,26 @@ export function ThreadDetailsUsage({
   model,
   providers,
   sources,
+  cwd,
 }: Omit<ThreadDetailsUsageInput, "contextWindow">) {
   const gt = useGT();
   const nowMinute = useNowMinute();
   const now = Date.parse(`${nowMinute}:00Z`);
-  const resolved = resolveThreadDetailsLimits(providerInstanceId, model, providers, sources, now);
+  const resolved = resolveThreadDetailsLimits(providerInstanceId, model, providers, sources, now, cwd);
   if (!resolved) return null;
+  const borrowedCodex = resolved.kind === "instance" && resolved.borrowedCodex === true;
 
   return (
     <ThreadDetailsSection
       headingId="thread-details-usage-heading"
-      title={gt("Usage limits")}
-      showHeading={false}
+      title={borrowedCodex ? gt("Codex usage") : gt("Usage limits")}
+      showHeading={borrowedCodex}
     >
       <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
         {resolved.kind === "pool" ? (
           resolved.windows.map((window) => <PoolRow key={window.id} window={window} now={now} />)
         ) : (
-          <InstanceRows limits={resolved.limits} now={now} />
+          <InstanceRows limits={resolved.limits} now={now} sourceLabel={resolved.sourceLabel} />
         )}
       </div>
     </ThreadDetailsSection>
@@ -83,9 +86,11 @@ export function ThreadDetailsUsage({
 function InstanceRows({
   limits,
   now,
+  sourceLabel,
 }: {
   readonly limits: ServerProviderUsageLimits;
   readonly now: number;
+  readonly sourceLabel?: string | undefined;
 }) {
   const gt = useGT();
   const m = useMessages();
@@ -102,7 +107,9 @@ function InstanceRows({
       />
     );
   }
-  return limits.windows.map((window) => <LimitRow key={window.id} window={window} now={now} />);
+  return limits.windows.map((window) => (
+    <LimitRow key={window.id} window={window} now={now} sourceLabel={sourceLabel} />
+  ));
 }
 
 /** The thread's context window. The bar fills as context is used; the tick marks auto-compaction. */
@@ -175,9 +182,11 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
 function LimitRow({
   window,
   now,
+  sourceLabel,
 }: {
   readonly window: ServerProviderUsageWindow;
   readonly now: number;
+  readonly sourceLabel?: string | undefined;
 }) {
   const gt = useGT();
   const m = useMessages();
@@ -197,6 +206,9 @@ function LimitRow({
       opensUsage
       tooltip={
         <>
+          {sourceLabel ? (
+            <span className="text-muted-foreground">{sourceLabel} subscription</span>
+          ) : null}
           <span className="text-foreground">
             {gt("{label}: {left}% left", { label: window.label, left })}
           </span>
