@@ -14,45 +14,38 @@ export { canonicalizePullRequestUrl as canonicalizeGitCafePullRequestUrl } from 
 /**
  * GitHub comes first as the client default for unknown hosts. GitCafe, TanStack Source and Origin
  * claim URLs first: GitHub and Forgejo accept the same routes on any hostname. TanStack Source is a
- * private beta a server may leave out; clients always know it, for a server that has it.
+ * private beta: every reader knows its URLs, and only a server with its flag on offers the forge.
  */
-export function makeBuiltInSourceControlDefinitions(options: { readonly tanStackSource: boolean }) {
-  const tanStackSource = options.tanStackSource ? [TanStackSource.definition] : [];
-  return makeSourceControlDefinitionRegistry(
-    [
-      GitHub.definition,
-      CursorOrigin.definition,
-      GitLab.definition,
-      GitCafe.definition,
-      ...tanStackSource,
-      Forgejo.definition,
-      Bitbucket.definition,
-      AzureDevOps.definition,
-      AzureDevOpsServer.definition,
+export const builtInSourceControlDefinitions = makeSourceControlDefinitionRegistry(
+  [
+    GitHub.definition,
+    CursorOrigin.definition,
+    GitLab.definition,
+    GitCafe.definition,
+    TanStackSource.definition,
+    Forgejo.definition,
+    Bitbucket.definition,
+    AzureDevOps.definition,
+    AzureDevOpsServer.definition,
+  ],
+  {
+    claimChangeRequestUrlsFirst: [
+      AzureDevOpsServer.definition.kind,
+      GitCafe.definition.kind,
+      TanStackSource.definition.kind,
+      CursorOrigin.definition.kind,
+      AzureDevOps.definition.kind,
     ],
-    {
-      claimChangeRequestUrlsFirst: [
-        AzureDevOpsServer.definition.kind,
-        GitCafe.definition.kind,
-        ...tanStackSource.map((definition) => definition.kind),
-        CursorOrigin.definition.kind,
-        AzureDevOps.definition.kind,
-      ],
-      recognizeRemotesIn: [
-        AzureDevOpsServer.definition.kind,
-        GitCafe.definition.kind,
-        ...tanStackSource.map((definition) => definition.kind),
-        CursorOrigin.definition.kind,
-        Forgejo.definition.kind,
-        GitHub.definition.kind,
-        GitLab.definition.kind,
-        AzureDevOps.definition.kind,
-        Bitbucket.definition.kind,
-      ],
-    },
-  );
-}
-
-export const builtInSourceControlDefinitions = makeBuiltInSourceControlDefinitions({
-  tanStackSource: true,
-});
+    recognizeRemotesIn: [
+      AzureDevOpsServer.definition.kind,
+      GitCafe.definition.kind,
+      TanStackSource.definition.kind,
+      CursorOrigin.definition.kind,
+      Forgejo.definition.kind,
+      GitHub.definition.kind,
+      GitLab.definition.kind,
+      AzureDevOps.definition.kind,
+      Bitbucket.definition.kind,
+    ],
+  },
+);
