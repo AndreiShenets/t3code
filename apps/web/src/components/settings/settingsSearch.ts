@@ -975,6 +975,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
+    id: "custom-build",
+    title: msg("Custom build"),
+    to: "/settings/general",
+    searchTerms: ["AndreiShenets custom check download install update release"],
+    desktopOnly: true,
+    windowsOnly: true,
+  },
+  {
     id: "mobile-app",
     title: msg("Mobile app"),
     to: "/settings/about",
