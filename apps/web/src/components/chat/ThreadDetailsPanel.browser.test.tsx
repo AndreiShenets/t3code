@@ -176,6 +176,7 @@ function Panel({
         showOpenInPicker={false}
         openInShortcutEnabled={false}
         gitCwd={state.folder}
+        mcpProvider={null}
         workspaceMutationId={null}
         isGitRepo={false}
         offersWorkspaceModes={false}
