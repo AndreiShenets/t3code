@@ -2003,6 +2003,7 @@ export function threadShellFromProjection(
       projection.providerThreads,
       projection.thread.activeProviderThreadId,
     ),
+    subagentCostUsd: undefined,
     itemCount: activeLocalTurnItems(projection).length,
     visibleItemCount: projection.visibleTurnItems.length,
     createdAt: projection.thread.createdAt,
@@ -2127,6 +2128,7 @@ type ShellThreadState = {
   readonly pendingBackgroundTasks: OrchestrationV2ThreadShell["pendingBackgroundTasks"];
   readonly providerInstanceHistory: OrchestrationV2ThreadShell["providerInstanceHistory"];
   readonly goal: OrchestrationV2ThreadShell["goal"];
+  readonly subagentCostUsd: OrchestrationV2ThreadShell["subagentCostUsd"];
   readonly itemCount: number;
   readonly runlessItemCount: number;
   readonly updatedAt: OrchestrationV2ThreadProjection["updatedAt"];
@@ -2304,6 +2306,7 @@ function shellFromState(input: {
     pendingBackgroundTasks: input.state.pendingBackgroundTasks,
     providerInstanceHistory: input.state.providerInstanceHistory,
     goal: input.state.goal,
+    subagentCostUsd: input.state.subagentCostUsd,
     itemCount: input.state.itemCount,
     visibleItemCount: input.visibleItemCount,
     createdAt: input.state.thread.createdAt,
@@ -8739,6 +8742,33 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             WHERE thread_id IN (SELECT value FROM json_each(${encodeIdList(threadIds)}))
           `;
 
+    const selectSubagentCostRows = (threadIds: ReadonlyArray<ThreadId>) => sql<{
+      readonly thread_id: string;
+      readonly cost: number | null;
+    }>`
+      WITH RECURSIVE children AS MATERIALIZED (
+        SELECT thread_id,
+          json_extract(payload_json, '$.lineage.parentThreadId') AS parent_id,
+          json_extract(payload_json, '$.activeProviderThreadId') AS provider_thread_id
+        FROM orchestration_v2_projection_threads
+        WHERE json_extract(payload_json, '$.lineage.relationshipToParent') = 'subagent'
+      ), descendants(thread_id, child_id) AS (
+        SELECT parent_id, thread_id FROM children
+        WHERE parent_id IN (SELECT value FROM json_each(${encodeIdList(threadIds)}))
+        UNION
+        SELECT descendants.thread_id, children.thread_id
+        FROM descendants JOIN children ON children.parent_id = descendants.child_id
+      )
+      SELECT descendants.thread_id,
+        SUM(CASE WHEN json_extract(p.payload_json, '$.contextUsage.cost.currency') = 'USD'
+          THEN json_extract(p.payload_json, '$.contextUsage.cost.amount') END) AS cost
+      FROM descendants
+      JOIN children ON children.thread_id = descendants.child_id
+      LEFT JOIN orchestration_v2_projection_provider_threads p
+        ON p.provider_thread_id = children.provider_thread_id
+      GROUP BY descendants.thread_id
+    `;
+
     const selectShellPendingTurnItemRows = (
       threadIds?: ReadonlyArray<ThreadId>,
       activeRunIds: ReadonlyArray<string> = [],
@@ -9064,6 +9094,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       /* Runs once per shell row; the enclosing snapshot or thread read owns the span. */
       Effect.fnUntraced(function* (input: {
         readonly row: ShellThreadRow;
+        readonly subagentCosts: ReadonlyMap<string, number | null>;
         readonly runsByThreadId: ReadonlyMap<ThreadId, Map<RunId, ShellRun>>;
         readonly itemCountsByThreadId: ReadonlyMap<ThreadId, Map<RunId, number>>;
         readonly shellItemCountsByThreadId: ReadonlyMap<
@@ -9244,6 +9275,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             providerThreadsByThreadId.get(thread.id) ?? [],
             thread.activeProviderThreadId,
           ),
+          subagentCostUsd: input.subagentCosts.get(thread.id) ?? undefined,
           itemCount: shellItemCountsByThreadId.get(thread.id)?.itemCount ?? 0,
           runlessItemCount: shellItemCountsByThreadId.get(thread.id)?.runlessItemCount ?? 0,
           updatedAt: thread.updatedAt,
@@ -9301,6 +9333,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         sequenceRows,
         providerThreadRows,
         pendingTurnItemRows,
+        subagentCostRows,
       ] = yield* Effect.all([
         readForThreadIds(selectShellRunRows, forkSourceIds),
         readForThreadIds(selectShellRunItemCounts, forkSourceIds),
@@ -9322,6 +9355,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             ),
           ),
         ),
+        readForThreadIds(selectSubagentCostRows),
       ]);
       return {
         targetThreadIds,
@@ -9332,6 +9366,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         sequenceRows,
         providerThreadRows,
         pendingTurnItemRows,
+        subagentCostRows,
       };
     });
 
@@ -9344,6 +9379,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       sequenceRows,
       providerThreadRows,
       pendingTurnItemRows,
+      subagentCostRows,
     }: Effect.Success<ReturnType<typeof readShellSnapshotRows>>) {
       const { runsByThreadId, itemCountsByThreadId } = runMapsByThreadId({
         runRows,
@@ -9352,9 +9388,11 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       const shellItemCountsByThreadId = shellItemCountMap(shellItemCountRows);
       const { providerThreadsByThreadId, pendingTurnItemsByThreadId } =
         yield* pendingBackgroundDataByThreadId({ providerThreadRows, pendingTurnItemRows });
+      const subagentCosts = new Map(subagentCostRows.map((row) => [row.thread_id, row.cost]));
       const states = yield* Effect.forEach(threadRows, (row) =>
         shellThreadStateFromRow({
           row,
+          subagentCosts,
           runsByThreadId,
           itemCountsByThreadId,
           shellItemCountsByThreadId,
@@ -9461,6 +9499,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           shellThreadStateFromRow({
             row,
             // Awareness never consumes timeline counts or inherited fork history.
+            subagentCosts: new Map(),
             runsByThreadId: new Map(),
             itemCountsByThreadId: new Map(),
             shellItemCountsByThreadId: new Map(),
@@ -9825,6 +9864,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               shellItemCountRows,
               providerThreadRows,
               pendingTurnItemRows,
+              subagentCostRows,
             ] = yield* Effect.all([
               forkSourceIds.length === 0
                 ? Effect.succeed([] as ReadonlyArray<ShellRunRow>)
@@ -9842,6 +9882,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                     : [],
                 ),
               ),
+              selectSubagentCostRows(threadIds),
             ]);
             const { runsByThreadId, itemCountsByThreadId } = runMapsByThreadId({
               runRows,
@@ -9850,10 +9891,12 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             const shellItemCountsByThreadId = shellItemCountMap(shellItemCountRows);
             const { providerThreadsByThreadId, pendingTurnItemsByThreadId } =
               yield* pendingBackgroundDataByThreadId({ providerThreadRows, pendingTurnItemRows });
+            const subagentCosts = new Map(subagentCostRows.map((row) => [row.thread_id, row.cost]));
 
             const states = yield* Effect.forEach([...rowsByThreadId.values()], (row) =>
               shellThreadStateFromRow({
                 row,
+                subagentCosts,
                 runsByThreadId,
                 itemCountsByThreadId,
                 shellItemCountsByThreadId,

@@ -556,6 +556,8 @@
   "0bf42b196261df62": "No se encontró el endpoint del entorno.",
   "f5bf314f4bd18441": "Este dispositivo está esperando aprobación en el host.",
   "94c2caab0a9d17a6": "El entorno no pudo autorizar la conexión.",
+  "72422582a2f6cac6": "Costo de la sesión",
+  "e11787ba7bf3de2f": "Incluye los costos informados de los agentes delegados.",
   "d084f7f88e5bf041": "{host} se bloqueó durante {seconds} s",
   "ca97b6934f016952": "Su CPU está sobrecargada (carga {load} en {cpuCount} núcleos).",
   "93e37fedae7eaa5b": "T3 Code en {host} estaba demasiado ocupado para responder.",
