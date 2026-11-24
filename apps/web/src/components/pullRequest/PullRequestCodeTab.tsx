@@ -1438,12 +1438,12 @@ function PullRequestCodeTab({
   };
   const toolbar = (
     <div className="@container flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-background px-4 py-1 text-xs text-muted-foreground">
-      <div className="flex min-w-0 basis-full flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-1 @xl:basis-0 @xl:flex-nowrap">
+      <div className="flex min-w-0 basis-full flex-wrap items-center gap-x-3 gap-y-1 overflow-x-clip @xl:flex-1 @xl:basis-0 @xl:flex-nowrap">
         {orderedCommits.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={<Button size="xs" variant="secondary" />}
-              className="min-w-0 max-w-64"
+              className="min-w-0 max-w-64 shrink-[999]"
               aria-label={gt("Diff scope: {scope}", { scope: scopeLabel })}
             >
               <span className="truncate">{scopeLabel}</span>
