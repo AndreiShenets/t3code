@@ -15,7 +15,7 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { useIssuesSupported, usePullRequestsSupported } from "../../state/environments";
-import { T3Wordmark } from "../T3Wordmark";
+import { AsCodeMark } from "../AsCodeMark";
 import {
   resolveEnvironmentIdentificationPillLabel,
   resolveSidebarStageBackdropVariant,
@@ -168,10 +168,8 @@ function HistoryNavigationButton({
 }
 
 function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
-  const gt = useGT();
   return (
     <Link
-      aria-label={gt("T3 Code home")}
       className={cn(
         "relative z-10 ml-[var(--workspace-titlebar-content-left)] hidden h-7 w-fit min-w-0 shrink-0 items-center overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset md:flex",
         onBackdrop ? "text-white" : "text-foreground",
@@ -184,17 +182,21 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
 }
 
 function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
+  const gt = useGT();
   return (
-    <span className="inline-flex min-w-0 items-baseline gap-1 text-sm font-medium tracking-tight">
-      <T3Wordmark aria-label="T3" className="h-[1cap] w-auto shrink-0" />
-      <span
-        className={cn(
-          "truncate [text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:py-1",
-          onBackdrop ? "text-white/70" : "text-muted-foreground",
-        )}
-      >
-        {/* oxlint-disable-next-line t3code/no-untranslated-copy -- product wordmark */}
-        {"Code"}
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <AsCodeMark className="size-5 shrink-0" />
+      <span className="flex min-w-0 flex-col">
+        {/* oxlint-disable-next-line t3code/no-untranslated-copy -- product name */}
+        <span className="text-sm leading-4 font-semibold tracking-tight">AS Code</span>
+        <span
+          className={cn(
+            "truncate text-3xs leading-3",
+            onBackdrop ? "text-white/80" : "text-muted-foreground",
+          )}
+        >
+          {gt("unofficial {upstream} fork", { upstream: "T3 Code" })}
+        </span>
       </span>
     </span>
   );
