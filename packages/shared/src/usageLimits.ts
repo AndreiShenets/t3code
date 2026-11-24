@@ -1030,14 +1030,22 @@ export function collectProviderUsageLimits(
   providers: readonly ServerProvider[],
   sources: UsageLimitSourceSnapshots,
   now: number,
-  selection: string | null | {
-    readonly model?: string | null | undefined;
-    readonly cwd?: string | null | undefined;
-  } = null,
+  selection:
+    | string
+    | null
+    | {
+        readonly model?: string | null | undefined;
+        readonly cwd?: string | null | undefined;
+      } = null,
 ): UsageLimitsReport | null {
   const context = typeof selection === "string" ? { model: selection } : selection;
   const model = context?.model ?? null;
-  const selected = resolveProviderUsageLimitSource(instanceId, providers, now, context ?? undefined);
+  const selected = resolveProviderUsageLimitSource(
+    instanceId,
+    providers,
+    now,
+    context ?? undefined,
+  );
   if (!selected) return null;
   if (selected.instanceId !== instanceId || (selected.driver === "opencode" && model)) {
     providers = [selected];
