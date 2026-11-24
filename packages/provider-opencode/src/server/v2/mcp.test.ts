@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as UrlParams from "effect/http/UrlParams";
@@ -53,6 +54,7 @@ const setup = Effect.gen(function* () {
   );
   const mcp = yield* Mcp.make.pipe(
     Effect.provideService(OpenCode2Server.OpenCode2Server, {
+      connections: Stream.empty,
       forget: Effect.void,
       withConnection: (use) =>
         use({ ...api, url: "http://opencode.test", version: "2.0.28", external: true }),
@@ -124,6 +126,7 @@ describe("OpenCode V2 MCP runtime management", () => {
       });
       const mcp = yield* Mcp.make.pipe(
         Effect.provideService(OpenCode2Server.OpenCode2Server, {
+          connections: Stream.empty,
           forget: Effect.void,
           withConnection: () => Effect.fail(cause),
         }),
