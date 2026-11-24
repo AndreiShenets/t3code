@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./mcpCommands": {
+      "types": "./src/mcpCommands.ts",
+      "default": "./src/mcpCommands.ts"
+    },
     "./pull-request-diff-fold": {
       "types": "./src/pullRequestDiffFold.ts",
       "default": "./src/pullRequestDiffFold.ts"
