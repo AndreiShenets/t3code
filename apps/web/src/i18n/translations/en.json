@@ -556,6 +556,8 @@
   "0bf42b196261df62": "The environment endpoint could not be found.",
   "f5bf314f4bd18441": "This device is waiting for approval on the host.",
   "94c2caab0a9d17a6": "The environment could not authorize the connection.",
+  "72422582a2f6cac6": "Session cost",
+  "e11787ba7bf3de2f": "Includes reported delegated-agent costs.",
   "d084f7f88e5bf041": "{host} froze for {seconds}s",
   "ca97b6934f016952": "Its CPU is overloaded (load {load} on {cpuCount} cores).",
   "93e37fedae7eaa5b": "T3 Code on {host} was too busy to answer.",
