@@ -1523,6 +1523,7 @@ export default function ChatView(props: ChatViewProps) {
     environmentId,
     threadKey: routeThreadKey,
     panelKey: usageLimitsKey,
+    cwd: activeThread?.worktreePath ?? draftThread?.worktreePath ?? activeProject?.workspaceRoot,
     providerInstanceId: activeProviderInstanceId,
     model: activeUsageModel,
     providerDriver: activeProviderStatus?.driver ?? null,
@@ -4185,6 +4186,7 @@ export default function ChatView(props: ChatViewProps) {
                   usage={{
                     providerInstanceId: activeProviderInstanceId,
                     model: activeUsageModel,
+                    cwd: gitCwd,
                     providers: providerStatuses,
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
