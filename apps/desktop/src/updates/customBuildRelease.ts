@@ -44,16 +44,19 @@ export function selectCustomBuild(releases: typeof CustomBuildReleases.Type) {
         const match = /^as-custom-v(\d+\.\d+\.\d+)-(\d{12})$/.exec(release.tag_name);
         if (release.draft || !match) return [];
         const [, version, stamp] = match;
-        const name = `T3-Code-AS-Custom-${version}-${stamp}-x64.exe`;
-        const installer = release.assets.find((asset) => asset.name === name && asset.size > 0);
-        const checksums = release.assets.find((asset) => asset.name === "SHA256SUMS");
         const prefix = `https://github.com/${CUSTOM_BUILD_REPOSITORY}/releases/download/${release.tag_name}/`;
-        if (
-          !installer ||
-          !checksums ||
-          installer.browser_download_url !== `${prefix}${name}` ||
-          checksums.browser_download_url !== `${prefix}SHA256SUMS`
-        ) {
+        const suffix = `${version}-${stamp}-x64.exe`;
+        const matchesAsset = (asset: (typeof release.assets)[number], name: string) =>
+          asset.name === name && asset.browser_download_url === `${prefix}${name}`;
+        const installer =
+          release.assets.find(
+            (asset) => asset.size > 0 && matchesAsset(asset, `AS-Code-${suffix}`),
+          ) ??
+          release.assets.find(
+            (asset) => asset.size > 0 && matchesAsset(asset, `T3-Code-AS-Custom-${suffix}`),
+          );
+        const checksums = release.assets.find((asset) => matchesAsset(asset, "SHA256SUMS"));
+        if (!installer || !checksums) {
           return [];
         }
         return [{ stamp: stamp!, label: `${version} ${stamp}`, installer, checksums }];

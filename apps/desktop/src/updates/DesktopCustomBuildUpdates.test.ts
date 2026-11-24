@@ -30,9 +30,9 @@ import { customBuildChecksum, selectCustomBuild } from "./customBuildRelease.ts"
 
 const installer = "fixture Windows installer";
 const checksum = NodeCrypto.createHash("sha256").update(installer).digest("hex");
-const release = (stamp = "202610171539", version = "0.1.1") => {
+const release = (stamp = "202610171539", version = "0.1.1", brand = "AS-Code") => {
   const tag = `as-custom-v${version}-${stamp}`;
-  const name = `T3-Code-AS-Custom-${version}-${stamp}-x64.exe`;
+  const name = `${brand}-${version}-${stamp}-x64.exe`;
   const asset = (name: string, size: number) => ({
     name,
     size,
@@ -402,6 +402,8 @@ it.layer(NodeServices.layer)("custom builds", (it) => {
 
 it("ignores drafts, unrelated, incomplete and foreign-repository assets", () => {
   const good = release();
+  const legacy = release("202610171000", "0.1.1", "T3-Code-AS-Custom");
+  assert.equal(selectCustomBuild([legacy])?.installer.name, legacy.assets[0]?.name);
   assert.equal(
     selectCustomBuild([
       { ...release("202610181000"), draft: true },
@@ -414,6 +416,7 @@ it("ignores drafts, unrelated, incomplete and foreign-repository assets", () => 
         })),
       },
       good,
+      legacy,
     ])?.stamp,
     "202610171539",
   );
