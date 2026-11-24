@@ -394,6 +394,8 @@ it.effect.each(["interrupt", "timeout"] as const)(
         Effect.sync(() =>
           NodeNet.createServer((socket) => {
             sockets.add(socket);
+            // Windows can reset the socket when the clean filter is killed.
+            socket.on("error", (error) => assert.propertyVal(error, "code", "ECONNRESET"));
             connected.resolve();
           }),
         ),
