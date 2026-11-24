@@ -1,4 +1,5 @@
 import * as AzureDevOpsDriver from "@t3tools/source-control-azure-devops/server/driver";
+import * as AzureDevOpsServerDriver from "@t3tools/source-control-azure-devops/server/customDriver";
 import * as BitbucketDriver from "@t3tools/source-control-bitbucket/server/driver";
 import * as CursorOriginDriver from "@t3tools/source-control-cursor-origin/server/driver";
 import { builtInSourceControlDefinitions } from "@t3tools/source-control-definitions/registry";
@@ -21,6 +22,7 @@ export const BUILT_IN_SOURCE_CONTROL_DRIVER_LIST = [
   ForgejoDriver.driver,
   BitbucketDriver.driver,
   AzureDevOpsDriver.driver,
+  AzureDevOpsServerDriver.driver,
 ];
 
 export const sourceControlDefinitions = builtInSourceControlDefinitions;
