@@ -1,6 +1,6 @@
 # Brand icons
 
-AS Code uses `as-code/icon.svg` on web and desktop. Run `node scripts/export-as-code-icons.ts` from the
+AS Code uses `as-code/icon.svg` on web and desktop. Run `vp run icons:export:as-code` from the
 repository root to regenerate its desktop and browser assets on any platform. The upstream icon
 projects below remain separate and are not copied into the AS Code web build.
 
