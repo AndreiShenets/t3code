@@ -580,6 +580,8 @@
   "355234f96f858555": "Le flux de l’appareil est bloqué. Reconnexion…",
   "64b197cdb9380c6b": "Échec de la connexion du flux de l’appareil. Reconnexion…",
   "569b183f80eb68df": "Le flux de l’appareil n’a pas encore trouvé de candidat réseau. Nouvelle tentative…",
+  "5717fb8ba7e64068": "Aujourd’hui",
+  "cd88e18ab9eba9c8": "Aujourd’hui depuis minuit",
   "12cce1bb98aa42a8": "Échec de l’offre du flux de l’appareil ({status}). Nouvelle tentative…",
   "c5a9ce61ab77276b": "Le flux de l’appareil a renvoyé une réponse non valide. Nouvelle tentative…",
   "e25e5c200b5bfdb3": "Passage à WebRTC.",
