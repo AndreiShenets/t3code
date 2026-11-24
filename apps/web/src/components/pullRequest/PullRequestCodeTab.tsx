@@ -25,9 +25,7 @@ import type {
   PullRequestDetailView,
   PullRequestDiffSide,
   PullRequestDiffResult,
-  PullRequestOmittedFileStat,
   PullRequestRef,
-  PullRequestReviewPosition,
   PullRequestReviewThread,
   PullRequestThreadCommentsResult,
 } from "@t3tools/contracts";
@@ -59,8 +57,10 @@ import {
   useContext,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
+  type ComponentProps,
   type ReactNode,
 } from "react";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
@@ -87,8 +87,8 @@ import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
 import { orderDiffFilesForReview } from "@t3tools/client-runtime/diff-file-order";
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/mediaPreview";
 import {
+  buildFileDiffContentVersion,
   buildFileDiffIdentityKey,
-  buildFileDiffRenderKey,
   fnv1a32,
   getDiffLineStat,
   getRenderablePatch,
@@ -150,7 +150,13 @@ import {
   toViewerSide,
 } from "./PullRequestReviewAnnotation";
 import { pullRequestCompletionScope } from "./PullRequestMarkdownTextarea";
-import { getFileViewedRange, isLineInFileDiff } from "./pullRequestDiff.logic";
+import {
+  getFileViewedRange,
+  isLineInFileDiff,
+  reconcileDiffSlices,
+  type DiffSlice,
+} from "./pullRequestDiff.logic";
+import type { PullRequestDraftAnchor, PullRequestViewStateStore } from "./pullRequestViewState";
 import { PullRequestDiffStat, PullRequestMetaLine } from "./pullRequestPresentation";
 import { PullRequestDiffUnavailableState } from "./PullRequestDiffUnavailableState";
 import { usePullRequestFilesViewed } from "./usePullRequestFilesViewed";
@@ -200,17 +206,6 @@ const COMMIT_PAGE_SIZE = 10;
 
 const PULL_REQUEST_FILE_TREE_STORAGE_KEY = "t3code.pullRequestFileTreeOpen";
 const PULL_REQUEST_HIDE_REVIEWED_FILES_STORAGE_KEY = "t3code.pullRequestHideReviewedFiles";
-
-interface DiffSlice {
-  readonly headSha: string | undefined;
-  readonly baseSha: string | undefined;
-  readonly source: PullRequestDiffResult;
-  readonly cursor: string | null;
-  readonly patch: string;
-  readonly truncated: boolean;
-  readonly nextCursor: string | null;
-  readonly omittedFileStats: ReadonlyArray<PullRequestOmittedFileStat>;
-}
 
 // Show host counts outside the shadow root; hunk totals are zero when hosts withhold hunks.
 const REPLACE_FILE_COUNTS_CSS = `
@@ -282,7 +277,7 @@ function diffModel(
           ? parsed.files.map(
               (file, index) =>
                 [
-                  buildFileDiffRenderKey(file),
+                  buildFileDiffIdentityKey(file),
                   getDiffLineStat([parsed.sourceFiles[index] ?? file]),
                 ] as const,
             )
@@ -387,27 +382,36 @@ interface MutableAnnotationGroup {
   draft: boolean;
 }
 
-interface DraftAnchor {
-  readonly headSha: string | undefined;
-  readonly baseSha: string | undefined;
-  readonly fileKey: string;
-  readonly path: string;
-  readonly oldPath: string | null;
-  readonly position: PullRequestReviewPosition;
-  readonly startPosition?: PullRequestReviewPosition;
-  readonly range: SelectedLineRange;
+// Keep keystrokes local: changing the viewer's annotation renderer recreates its portals.
+function PullRequestDraftCommentAnnotation({
+  draft,
+  viewState,
+  ...props
+}: Omit<ComponentProps<typeof DiffCommentAnnotation>, "text" | "onTextChange"> & {
+  draft: PullRequestDraftAnchor;
+  viewState: PullRequestViewStateStore | undefined;
+}) {
+  const [text, setText] = useState(() => {
+    const code = viewState?.getState().code;
+    return code?.draft === draft ? (code.draftText ?? "") : "";
+  });
+  return (
+    <DiffCommentAnnotation
+      {...props}
+      text={text}
+      onTextChange={(text) => {
+        setText(text);
+        viewState?.setState((state) =>
+          state.code?.draft === draft ? { code: { ...state.code, draftText: text } } : state,
+        );
+      }}
+    />
+  );
 }
 
 export interface PullRequestAgentSelectionInput {
   readonly comment: ReviewCommentContext;
   readonly request: string;
-}
-
-// A test's fold belongs to the file even when filtering or a refresh replaces its viewer item.
-function buildFileDiffFoldKey(fileDiff: FileDiffMetadata): string {
-  return isTestChangedFile(resolveFileDiffPath(fileDiff))
-    ? buildFileDiffIdentityKey(fileDiff)
-    : buildFileDiffRenderKey(fileDiff);
 }
 
 function isRemovedLine(fileDiff: FileDiffMetadata, oldLine: number): boolean {
@@ -437,6 +441,7 @@ function PullRequestCodeTab({
   onRefresh,
   refreshToken = 0,
   backgroundRefreshToken = 0,
+  viewState,
   revealRequest = null,
   onOpenFile,
   fileWorkspace,
@@ -458,6 +463,7 @@ function PullRequestCodeTab({
   onRefresh: () => void;
   refreshToken?: number;
   backgroundRefreshToken?: number;
+  viewState?: PullRequestViewStateStore;
   /** A clicked link to a file or line range, until onRevealSettled reports it shown. */
   revealUrl?: string | undefined;
   onRevealSettled?: ((revealUrl: string) => void) | undefined;
@@ -470,6 +476,15 @@ function PullRequestCodeTab({
     fileWorkspace?.workspaceRoot,
     fileWorkspace?.repositoryRoot,
   );
+  const referenceKey = pullRequestReviewKey(reference);
+  // A selected commit may no longer belong to the PR after a force-push.
+  const commit =
+    selectedCommitOid !== null && detail.commits.some((entry) => entry.oid === selectedCommitOid)
+      ? selectedCommitOid
+      : null;
+  const scopeKey = JSON.stringify([environmentId, referenceKey, commit]);
+  const savedView = viewState?.getState();
+  const savedCode = savedView?.code?.scopeKey === scopeKey ? savedView.code : undefined;
   const gt = useGT();
   const messages = useMessages();
   const fixFindingLabel = requestedFixFindingLabel ?? gt("Fix in a thread");
@@ -482,7 +497,7 @@ function PullRequestCodeTab({
     diffLayout: settings.diffLayout,
     wordWrap: settings.wordWrap,
   }));
-  const [folds, setFolds] = useState(EMPTY_PULL_REQUEST_DIFF_FOLDS);
+  const [folds, setFolds] = useState(savedCode?.folds ?? EMPTY_PULL_REQUEST_DIFF_FOLDS);
   const foldGroup = (path: string) => {
     const group = isTestChangedFile(path) ? folds.test : folds.source;
     return group.override === null && settings.diffFilesCollapsed
@@ -494,11 +509,17 @@ function PullRequestCodeTab({
     update: (choices: FileDiffFoldChoices) => FileDiffFoldChoices,
   ) => setFolds((current) => withPullRequestDiffFold(current, isTestChangedFile(path), update));
   const [lastViewedFileKey, setLastViewedFileKey] = useState<string | null>(null);
-  const [visibleCommitCount, setVisibleCommitCount] = useState(COMMIT_PAGE_SIZE);
+  const [visibleCommitCount, setVisibleCommitCount] = useState(
+    savedCode?.visibleCommitCount ?? COMMIT_PAGE_SIZE,
+  );
   const diffLayout = settings.diffLayout;
-  const [wordWrapOverride, setWordWrapOverride] = useState<boolean | null>(null);
+  const [wordWrapOverride, setWordWrapOverride] = useState<boolean | null>(
+    savedCode?.wordWrap ?? null,
+  );
   const wordWrap = wordWrapOverride ?? settings.wordWrap;
-  const [ignoreWhitespace, setIgnoreWhitespace] = useState(settings.diffIgnoreWhitespace);
+  const [ignoreWhitespace, setIgnoreWhitespace] = useState(
+    savedCode?.ignoreWhitespace ?? settings.diffIgnoreWhitespace,
+  );
   const [fileTreeOpen, setFileTreeOpen] = useLocalStorage(
     PULL_REQUEST_FILE_TREE_STORAGE_KEY,
     false,
@@ -514,8 +535,8 @@ function PullRequestCodeTab({
   const [selectedLines, setSelectedLines] = useState<{
     id: string;
     range: SelectedLineRange;
-  } | null>(null);
-  const [draft, setDraft] = useState<DraftAnchor | null>(null);
+  } | null>(savedCode?.selectedLines ?? null);
+  const [draft, setDraft] = useState<PullRequestDraftAnchor | null>(savedCode?.draft ?? null);
   const [threadPending, setThreadPending] = useState(false);
   const [orphansOpen, setOrphansOpen] = useState(false);
   // Scope slices before reset to prevent using a previous pull request's data or cursor.
@@ -523,20 +544,15 @@ function PullRequestCodeTab({
     readonly key: string;
     readonly cursor: string | null;
     readonly slices: ReadonlyArray<DiffSlice>;
-  }>({ key: "", cursor: null, slices: NO_SLICES });
+  }>(() => ({ key: scopeKey, cursor: null, slices: savedCode?.slices ?? NO_SLICES }));
   const [viewer, setViewer] = useState<CodeViewHandle<ReviewAnnotationGroup, undefined> | null>(
     null,
   );
+  const scrollToRestore = useRef(
+    savedCode && savedView?.scrollByTab.code ? { ...savedView.scrollByTab.code, scopeKey } : null,
+  );
   useDiffSearchShortcut(viewer);
 
-  const referenceKey = pullRequestReviewKey(reference);
-  // A commit opened from the timeline or left selected across a force-push may no longer be
-  // part of the pull request; read it as "All commits" instead of requesting its diff.
-  const commit =
-    selectedCommitOid !== null && detail.commits.some((entry) => entry.oid === selectedCommitOid)
-      ? selectedCommitOid
-      : null;
-  const scopeKey = JSON.stringify([environmentId, referenceKey, commit]);
   // The panel keeps this mounted across pull requests, so an open composer would otherwise
   // survive the switch and attach its comment to whichever one is on screen when it is sent.
   const [stateScopeKey, setStateScopeKey] = useState(scopeKey);
@@ -565,22 +581,28 @@ function PullRequestCodeTab({
     }),
     messages,
   );
+  const [revalidateAfter, setRevalidateAfter] = useState(() => (savedCode ? Date.now() : 0));
   const [appliedPage, setAppliedPage] = useState<{
     readonly data: typeof diffQuery.data;
     readonly cursor: string | null;
     readonly scopeKey: string;
+    readonly dataUpdatedAt: number;
   } | null>(null);
   const data = diffQuery.data;
   if (
     data !== null &&
+    !diffQuery.isPending &&
+    diffQuery.error === null &&
+    diffQuery.dataUpdatedAt >= revalidateAfter &&
     (appliedPage?.data !== data ||
       appliedPage.cursor !== cursor ||
-      appliedPage.scopeKey !== scopeKey)
+      appliedPage.scopeKey !== scopeKey ||
+      appliedPage.dataUpdatedAt !== diffQuery.dataUpdatedAt)
   ) {
-    setAppliedPage({ data, cursor, scopeKey });
+    setAppliedPage({ data, cursor, scopeKey, dataUpdatedAt: diffQuery.dataUpdatedAt });
     setSliceState((previous) => {
       const slices = previous.key === scopeKey ? previous.slices : NO_SLICES;
-      const next = {
+      const next = reconcileDiffSlices(slices, {
         headSha: data.headSha,
         baseSha: data.baseSha,
         source: data,
@@ -589,35 +611,10 @@ function PullRequestCodeTab({
         truncated: data.truncated,
         nextCursor: data.nextCursor,
         omittedFileStats: data.omittedFileStats ?? [],
-      };
-      const index = slices.findIndex((slice) => slice.cursor === cursor);
-      if (index === -1) {
-        return { key: scopeKey, cursor, slices: [...slices, next] };
-      }
-      const existing = slices[index];
-      if (
-        existing !== undefined &&
-        existing.patch === next.patch &&
-        existing.headSha === next.headSha &&
-        existing.baseSha === next.baseSha &&
-        existing.truncated === next.truncated &&
-        existing.nextCursor === next.nextCursor &&
-        existing.source.withheldFilesReadable === next.source.withheldFilesReadable &&
-        existing.omittedFileStats.length === next.omittedFileStats.length &&
-        existing.omittedFileStats.every((file, index) => {
-          const refreshed = next.omittedFileStats[index];
-          return (
-            refreshed !== undefined &&
-            refreshed.path === file.path &&
-            refreshed.additions === file.additions &&
-            refreshed.deletions === file.deletions
-          );
-        })
-      ) {
-        return previous;
-      }
-      // Drop later slices when replacing a changed page; their cursors target the old diff.
-      return { key: scopeKey, cursor, slices: [...slices.slice(0, index), next] };
+      });
+      return next.slices === slices && next.cursor === previous.cursor && previous.key === scopeKey
+        ? previous
+        : { key: scopeKey, ...next };
     });
   }
   const refreshFirstDiffPage = useAtomRefresh(
@@ -691,12 +688,51 @@ function PullRequestCodeTab({
   useEffect(() => {
     if (appliedBackgroundRefreshToken.current === backgroundRefreshToken) return;
     appliedBackgroundRefreshToken.current = backgroundRefreshToken;
-    // Keeping slices mounted preserves scroll; the page merge invalidates changed pages.
+    // Background reads must not unmount the viewer or discard its later pages.
+    setRevalidateAfter(Date.now());
     setSliceState((previous) => ({ ...previous, cursor: null }));
     refreshFirstDiffPage();
     refreshWithheldFiles();
     refreshFilesViewed();
   }, [backgroundRefreshToken, refreshFirstDiffPage, refreshFilesViewed]);
+  const {
+    dataUpdatedAt,
+    isPending: diffPending,
+    error: diffError,
+    refresh: refreshDiffPage,
+  } = diffQuery;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Revalidate server diff pages when restoring a retained review snapshot.
+  useEffect(() => {
+    if (data !== null && !diffPending && diffError === null && dataUpdatedAt < revalidateAfter) {
+      refreshDiffPage();
+    }
+  }, [data, diffPending, diffError, dataUpdatedAt, refreshDiffPage, revalidateAfter]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Retain the review snapshot in its owning tab's external store before unmount.
+  useLayoutEffect(() => {
+    viewState?.setState((state) => ({
+      code: {
+        scopeKey,
+        slices: loadedSlices,
+        folds,
+        visibleCommitCount,
+        wordWrap: wordWrapOverride,
+        ignoreWhitespace,
+        draft,
+        draftText: state.code?.draft === draft ? (state.code.draftText ?? "") : "",
+        selectedLines,
+      },
+    }));
+  }, [
+    viewState,
+    scopeKey,
+    loadedSlices,
+    folds,
+    visibleCommitCount,
+    wordWrapOverride,
+    ignoreWhitespace,
+    draft,
+    selectedLines,
+  ]);
 
   const codeViewReveal = useCodeViewFileReveal();
   const attachViewer = useStableCallback(
@@ -768,9 +804,9 @@ function PullRequestCodeTab({
       if (hasCutLines(data.patch)) cutFiles.add(file);
     } else withheldStatuses.set(path, "empty");
   });
-  // A withheld patch opens on first load and keeps its choice when its fold key changes.
+  // A withheld file opens on first load and keeps the reader's fold choice after refetch.
   const rekeyed = [...withheldFiles].flatMap(([path, file]) => {
-    const key = buildFileDiffFoldKey(file);
+    const key = buildFileDiffIdentityKey(file);
     return withheldLoads.shownKeys.get(path) === key ? [] : [[path, key] as const];
   });
   if (withheldLoads.scope === scopeKey && rekeyed.length > 0) {
@@ -793,6 +829,20 @@ function PullRequestCodeTab({
         pagedFiles.map((file) =>
           file.hunks.length === 0 ? (withheldFiles.get(resolveFileDiffPath(file)) ?? file) : file,
         );
+  // Content changes repaint the file, not its identity or the reader's fold/scroll state.
+  const fileVersions = new Map(
+    loadedFiles.map((file) => [buildFileDiffIdentityKey(file), buildFileDiffContentVersion(file)]),
+  );
+  if (draft !== null) {
+    const version = fileVersions.get(draft.fileKey);
+    const fileRemoved =
+      version === undefined && loadedSlices.length > 0 && loadedSlices.at(-1)?.nextCursor === null;
+    // Never attach a saved comment to lines in a different version of its file.
+    if (fileRemoved || (version !== undefined && version !== draft.fileVersion)) {
+      setDraft(null);
+      setSelectedLines(null);
+    }
+  }
   const loadWithheldFile = (path: string) => {
     // The read is keyed without the head, so even a first load must not reuse an older one.
     atomRegistry.refresh(withheldFileDiff(path));
@@ -879,7 +929,7 @@ function PullRequestCodeTab({
       : null;
 
   const annotatedFiles = files.map((fileDiff) => {
-    const fileKey = buildFileDiffRenderKey(fileDiff);
+    const fileKey = buildFileDiffIdentityKey(fileDiff);
     const path = resolveFileDiffPath(fileDiff);
     const groups = new Map<string, MutableAnnotationGroup>();
     // Stacked view draws a context row once, so its old side shares the new side's annotation.
@@ -951,7 +1001,7 @@ function PullRequestCodeTab({
     }
     return {
       fileKey,
-      foldKey: buildFileDiffFoldKey(fileDiff),
+      foldKey: fileKey,
       path,
       fileDiff,
       annotations,
@@ -1036,7 +1086,9 @@ function PullRequestCodeTab({
         fileDiff,
         annotations,
         collapsed,
-        version: fnv1a32(`${collapsed ? "1" : "0"}:${viewedMark}:${annotationsVersion}`),
+        version: fnv1a32(
+          `${fileVersions.get(fileKey)}:${collapsed ? "1" : "0"}:${viewedMark}:${annotationsVersion}`,
+        ),
       };
     },
   );
@@ -1049,6 +1101,7 @@ function PullRequestCodeTab({
   // Do not re-arm the visible sentinel after failure; it would retry indefinitely.
   const canLoadNextSlice =
     nextCursor !== null &&
+    cursor === (loadedSlices.at(-1)?.cursor ?? null) &&
     nextCursor !== cursor &&
     !diffQuery.isPending &&
     diffQuery.error === null;
@@ -1105,9 +1158,7 @@ function PullRequestCodeTab({
     const item = items.find((candidate) => resolveFileDiffPath(candidate.fileDiff) === path);
     if (item === undefined) return;
     // Record the unfold even when already open, so a Viewed mark that loads later cannot fold it.
-    setFoldChoices(path, (current) =>
-      withFileDiffFold(current, buildFileDiffFoldKey(item.fileDiff), false),
-    );
+    setFoldChoices(path, (current) => withFileDiffFold(current, item.id, false));
     if (range) setSelectedLines({ id: item.id, range });
     codeViewReveal.request(item.id, range);
   };
@@ -1137,7 +1188,7 @@ function PullRequestCodeTab({
     if (!range || !canSelectLines || withheldRefetching) return;
     const item = context.item;
     if (item.type !== "diff") return;
-    const file = files.find((candidate) => buildFileDiffRenderKey(candidate) === item.id);
+    const file = files.find((candidate) => buildFileDiffIdentityKey(candidate) === item.id);
     if (!file) return;
     // On a host without ranged comments a range collapses to its last line: one that silently
     // lost its first line there would be worse than one line.
@@ -1160,19 +1211,21 @@ function PullRequestCodeTab({
       headSha: snapshot?.headSha,
       baseSha: snapshot?.baseSha,
       fileKey: item.id,
+      fileVersion: buildFileDiffContentVersion(file),
       path,
       oldPath: previousPath === path ? null : previousPath,
       ...anchor,
       range,
     });
+    setSelectedLines({ id: item.id, range });
   };
 
   const finishSelection = (
-    anchor: DraftAnchor,
+    anchor: PullRequestDraftAnchor,
     text: string,
     onFinish: (comment: ReviewCommentContext) => void,
   ) => {
-    const file = files.find((candidate) => buildFileDiffRenderKey(candidate) === anchor.fileKey);
+    const file = files.find((candidate) => buildFileDiffIdentityKey(candidate) === anchor.fileKey);
     const comment =
       file === undefined
         ? null
@@ -1297,11 +1350,7 @@ function PullRequestCodeTab({
     ) => {
       if (nextItem.type !== "diff") return;
       setFoldChoices(resolveFileDiffPath(nextItem.fileDiff), (current) =>
-        withFileDiffFold(
-          current,
-          buildFileDiffFoldKey(nextItem.fileDiff),
-          nextItem.collapsed === true,
-        ),
+        withFileDiffFold(current, nextItem.id, nextItem.collapsed === true),
       );
     },
   };
@@ -1424,13 +1473,14 @@ function PullRequestCodeTab({
         />
       ))}
       {annotation.metadata.draft && draft && canSelectLines ? (
-        <DiffCommentAnnotation
+        <PullRequestDraftCommentAnnotation
+          draft={draft}
+          viewState={viewState}
           environmentId={environmentId}
           projectId={reference.projectId}
           ownerKey={JSON.stringify([environmentId, reviewKey, draft])}
           kind="draft"
           rangeLabel={`${draft.path}:${getReviewPositionAnchor(draft.position).line}`}
-          text=""
           completionScope={canCommentOnLines ? completionScope : null}
           submitLabel={canCommentOnLines ? gt("Add to review") : gt("Add to agent")}
           {...(canCommentOnLines && onAddToAgentSelection
@@ -1875,6 +1925,19 @@ function PullRequestCodeTab({
       </div>
     </div>
   );
+  const hasDiffItems = items.length > 0;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Restore the native viewer scroll after its diff items attach.
+  useLayoutEffect(() => {
+    const position = scrollToRestore.current;
+    if (position === null || position.scopeKey !== scopeKey || !hasDiffItems) return;
+    const instance = viewer?.getInstance();
+    const container = instance?.getContainerElement();
+    if (!container) return;
+    // The items are installed now. Restore the raw offset: viewer.scrollTo subtracts the
+    // sticky header's height, which would move the review up one header on every return.
+    container.scrollTo({ top: position.top, left: position.left });
+    scrollToRestore.current = null;
+  }, [viewer, scopeKey, hasDiffItems, scrollToRestore]);
   // A file not loaded yet pages forward each time a slice arrives; once loaded, the viewer
   // positions it when it renders it.
   const answerReveal = useEffectEvent(() => {
