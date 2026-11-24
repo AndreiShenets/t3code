@@ -15,7 +15,6 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { useIssuesSupported, usePullRequestsSupported } from "../../state/environments";
-import { AsCodeMark } from "../AsCodeMark";
 import {
   resolveEnvironmentIdentificationPillLabel,
   resolveSidebarStageBackdropVariant,
@@ -75,7 +74,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
           aria-label={gt("Toggle main sidebar")}
         />
       </div>
-      <div className="relative z-10 flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden py-0.5">
+      <div className="relative z-10 flex h-7 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden">
         <div className="flex shrink-0 items-center gap-1">
           <SidebarBrand onBackdrop={backdropVariant !== null} />
           {isElectron ? (
@@ -117,7 +116,7 @@ export function SidebarBrandWidthProbe({
       ref={observeWidth}
     >
       <div className="ml-[var(--workspace-titlebar-content-left)] flex gap-1">
-        <SidebarBrandMark onBackdrop={false} />
+        <SidebarBrandText onBackdrop={false} />
         {isElectron ? <div className="w-[calc(2*var(--workspace-titlebar-control-size))]" /> : null}
       </div>
     </div>
@@ -176,27 +175,24 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       )}
       to="/"
     >
-      <SidebarBrandMark onBackdrop={onBackdrop} />
+      <SidebarBrandText onBackdrop={onBackdrop} />
     </Link>
   );
 }
 
-function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
+function SidebarBrandText({ onBackdrop }: { onBackdrop: boolean }) {
   const gt = useGT();
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      <AsCodeMark className="size-5 shrink-0" />
-      <span className="flex min-w-0 flex-col">
-        {/* oxlint-disable-next-line t3code/no-untranslated-copy -- product name */}
-        <span className="text-sm leading-4 font-semibold tracking-tight">AS Code</span>
-        <span
-          className={cn(
-            "truncate text-3xs leading-3",
-            onBackdrop ? "text-white/80" : "text-muted-foreground",
-          )}
-        >
-          {gt("unofficial {upstream} fork", { upstream: "T3 Code" })}
-        </span>
+    <span className="flex min-w-0 flex-col">
+      {/* oxlint-disable-next-line t3code/no-untranslated-copy -- product name */}
+      <span className="text-sm leading-none font-semibold tracking-tight">AS Code</span>
+      <span
+        className={cn(
+          "truncate text-3xs leading-none",
+          onBackdrop ? "text-white/80" : "text-muted-foreground",
+        )}
+      >
+        {gt("unofficial {upstream} fork", { upstream: "T3 Code" })}
       </span>
     </span>
   );
