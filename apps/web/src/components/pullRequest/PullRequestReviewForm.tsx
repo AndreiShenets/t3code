@@ -1,7 +1,7 @@
 import { useAtomCommand } from "~/state/use-atom-command";
 import type { EnvironmentId, PullRequestRef, PullRequestReviewVerdict } from "@t3tools/contracts";
 import { CheckIcon, MessageSquareIcon, XCircleIcon } from "lucide-react";
-import { msg, useGT, useMessages } from "gt-react";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 
 import { m } from "~/i18n/messages";
@@ -68,10 +68,12 @@ export function PullRequestReviewForm({
   term,
   verdicts,
   requestChangesSummaryRequired,
+  verdictOnly = false,
   textareaRef,
   pending,
   onPendingChange,
   onSubmitted,
+  onPartial,
   onRefused,
 }: {
   environmentId: EnvironmentId;
@@ -84,10 +86,12 @@ export function PullRequestReviewForm({
   term: ChangeRequestTermKind;
   verdicts: ReadonlyArray<PullRequestReviewVerdict>;
   requestChangesSummaryRequired: boolean;
+  verdictOnly?: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   pending: boolean;
   onPendingChange: (pending: boolean) => void;
   onSubmitted: () => void;
+  onPartial: () => void;
   onRefused: () => void;
 }) {
   const gt = useGT();
@@ -96,7 +100,9 @@ export function PullRequestReviewForm({
   const comments = usePendingReviewComments(reference);
   const reviewKey = pullRequestReviewKey(reference);
   const body = usePullRequestReviewStore((store) => store.summaries[reviewKey] ?? "");
-  const removeComments = usePullRequestReviewStore((store) => store.removeComments);
+  const applySubmission = usePullRequestReviewStore((store) => store.applySubmission);
+  const uncertain = usePullRequestReviewStore((store) => store.uncertain[reviewKey] === true);
+  const acknowledge = usePullRequestReviewStore((store) => store.acknowledge);
   const setSummary = usePullRequestReviewStore((store) => store.setSummary);
   const speech = useTextFieldSpeech({
     environmentId,
@@ -112,7 +118,6 @@ export function PullRequestReviewForm({
   useEffect(() => {
     if (!active) cancel();
   }, [active, cancel]);
-  const clearSummary = usePullRequestReviewStore((store) => store.clearSummary);
   const submitReview = useAtomCommand(pullRequestEnvironment.submitReview, {
     reportFailure: false,
   });
@@ -123,7 +128,7 @@ export function PullRequestReviewForm({
 
   const submit = async (verdict: (typeof VERDICTS)[number], text: string) => {
     const submittedComments = usePullRequestReviewStore.getState().drafts[reviewKey] ?? [];
-    if (pending || !canSubmit(verdict.value, text, submittedComments.length)) return;
+    if (pending || uncertain || !canSubmit(verdict.value, text, submittedComments.length)) return;
     const submittedBody = text;
     onPendingChange(true);
     const result = await submitReview({
@@ -150,11 +155,21 @@ export function PullRequestReviewForm({
       return;
     }
     // Preserve comments and summary edits made during submission.
-    removeComments(
-      reviewKey,
-      submittedComments.map((comment) => comment.id),
-    );
-    clearSummary(reviewKey, submittedBody);
+    applySubmission(reviewKey, submittedComments, submittedBody, result.value);
+    if (result.value?.status === "partial") {
+      const feedbackPosted =
+        submittedComments.every((_, index) => result.value?.postedCommentIndexes.includes(index)) &&
+        (submittedBody.trim().length === 0 || result.value.summaryPosted);
+      toastManager.add({
+        type: "error",
+        title: feedbackPosted
+          ? m(msg("Review feedback posted; vote not confirmed"))
+          : m(msg("Some review feedback was not posted")),
+        description: result.value.message,
+      });
+      onPartial();
+      return;
+    }
     toastManager.add({ type: "success", title: verdict.sent(term) });
     onSubmitted();
   };
@@ -163,7 +178,10 @@ export function PullRequestReviewForm({
   const canSubmit = (verdict: PullRequestReviewVerdict, summary: string, commentCount: number) =>
     verdict === "request-changes" && requestChangesSummaryRequired
       ? summary.trim().length > 0
-      : verdict === "approve" || summary.trim().length > 0 || commentCount > 0;
+      : verdict === "approve" ||
+        (verdict === "request-changes" && verdictOnly) ||
+        summary.trim().length > 0 ||
+        commentCount > 0;
   const placeholder =
     selectedVerdict === undefined || canSubmit(selectedVerdict.value, "", comments.length)
       ? gt("Summarize your review (optional)")
@@ -173,6 +191,17 @@ export function PullRequestReviewForm({
 
   return (
     <>
+      {uncertain ? (
+        <div role="alert" className="mb-2 text-xs">
+          <T>
+            The host may have accepted more of this review. Refresh and check the pull request
+            before retrying to avoid duplicates.
+          </T>
+          <Button size="xs" onClick={() => acknowledge(reviewKey)}>
+            <T>I checked the PR; allow retry</T>
+          </Button>
+        </div>
+      ) : null}
       <PullRequestMarkdownTextarea
         ref={textareaRef}
         completionScope={completionScope}
@@ -227,6 +256,7 @@ export function PullRequestReviewForm({
           disabled={
             speech.preparing ||
             pending ||
+            uncertain ||
             selectedVerdict === undefined ||
             (!canSubmit(selectedVerdict.value, body, comments.length) && !speech.blocksSubmission)
           }

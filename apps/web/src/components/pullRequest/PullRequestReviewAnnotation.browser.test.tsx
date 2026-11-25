@@ -33,6 +33,16 @@ it("leaves IME keys in a review reply to the composition", async () => {
       canReply
       canResolve={false}
       canReact={false}
+      capabilities={{
+        diff: true,
+        comment: true,
+        search: false,
+        actions: [],
+        mergeMethods: [],
+        review: { inlineComment: false, reply: true, resolve: false, verdicts: [] },
+        reviewers: { request: false, listCandidates: false },
+        edit: { changeRequest: false, comment: false },
+      }}
       environmentId={EnvironmentId.make("environment")}
       reference={{ projectId: ProjectId.make("project"), repository: "owner/repo", number: 1 }}
       completionScope={null}
