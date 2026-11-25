@@ -26,7 +26,12 @@ import { ModelPickerContent, resolveModelPickerSelectedModel } from "./ModelPick
 import { retainedModelWhileProviderLocked } from "./ProviderModelPicker.logic";
 import { ChatGptSharingControl } from "./ChatGptSharingControl";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
-import { ModelEsque, getDisplayModelName, getTriggerDisplayModelName } from "./providerIconUtils";
+import {
+  ModelEsque,
+  getProviderRowLabel,
+  getDisplayModelName,
+  getTriggerDisplayModelName,
+} from "./providerIconUtils";
 import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
 import { ComposerControl, type ComposerControlSize } from "./ComposerControl";
 import { takeOpenTarget, useComposerMenuProps } from "./composerEventScope";
@@ -254,6 +259,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       fullLabel: model
         ? withUnavailable(getDisplayModelName(model), model.isUnavailable)
         : selection.model,
+      providerLabel: entry
+        ? getProviderRowLabel(entry.displayName, model?.subProvider)
+        : selection.instanceId,
     };
   });
   const multipleLabel = selectedEntries
@@ -270,13 +278,23 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         : selectedEntries.map((selection) => selection.label).join(", ")
     : undefined;
   const allModelNames = selectedEntries
-    ? selectedEntries.map((selection) => selection.fullLabel).join(", ") || gt("Choose models")
+    ? selectedEntries
+        .map((selection) => `${selection.fullLabel} (${selection.providerLabel})`)
+        .join(", ") || gt("Choose models")
     : undefined;
-  const triggerTooltipContent = [
-    props.triggerLabel ?? allModelNames ?? triggerLabel,
-    props.triggerDetail,
-    shortcutLabel,
-  ]
+  const providerLabel =
+    props.triggerLabel !== undefined
+      ? undefined
+      : selectedEntries
+        ? [...new Set(selectedEntries.map((selection) => selection.providerLabel))].join(", ")
+        : activeEntry
+          ? getProviderRowLabel(activeEntry.displayName, selectedModel?.subProvider)
+          : undefined;
+  const modelDescription =
+    props.triggerLabel ??
+    allModelNames ??
+    (providerLabel ? `${triggerLabel} (${providerLabel})` : triggerLabel);
+  const triggerTooltipContent = [modelDescription, props.triggerDetail, shortcutLabel]
     .filter(Boolean)
     .join(" · ");
 
@@ -286,9 +304,22 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       "min-w-0 flex-1 overflow-hidden truncate",
       // Long names such as "Fusion (Claude Opus 5.5 Medium + SWE-2 High)" would push the composer.
       props.isComposerOwned && "max-w-56",
+      providerLabel && "flex flex-col py-0! text-center [text-box:normal]!",
     ),
     "data-chat-provider-model-picker-label": "true",
   } as const;
+  const triggerContent = (
+    <>
+      <span className={cn("truncate", providerLabel && "w-full pb-px leading-none")}>
+        {triggerText}
+      </span>
+      {providerLabel ? (
+        <span className="w-full truncate pb-px text-6xs font-normal leading-none text-muted-foreground">
+          {providerLabel}
+        </span>
+      ) : null}
+    </>
+  );
 
   const picker = (
     <ModelPickerContent
@@ -351,10 +382,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         render={
           <ComposerControl
             ref={triggerRef}
-            aria-label={[
-              props.triggerAriaLabel ?? props.triggerLabel ?? allModelNames ?? triggerLabel,
-              props.triggerDetail,
-            ]
+            aria-label={[props.triggerAriaLabel ?? modelDescription, props.triggerDetail]
               .filter(Boolean)
               .join(", ")}
             size={size}
@@ -433,10 +461,12 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             </span>
           ) : null}
           {props.isComposerOwned ? (
-            <span {...triggerTextProps}>{triggerText}</span>
+            <span {...triggerTextProps}>{triggerContent}</span>
           ) : (
             <Tooltip>
-              <TooltipTrigger render={<span {...triggerTextProps} />}>{triggerText}</TooltipTrigger>
+              <TooltipTrigger render={<span {...triggerTextProps} />}>
+                {triggerContent}
+              </TooltipTrigger>
               <TooltipPopup side="top">{triggerTooltipContent}</TooltipPopup>
             </Tooltip>
           )}
