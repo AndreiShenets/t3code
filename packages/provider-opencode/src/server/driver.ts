@@ -1,6 +1,7 @@
 import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   ProviderDriverKind,
+  ProviderMcpError,
   settingsSecretLiteral,
   type ServerProviderModel,
 } from "@t3tools/contracts";
@@ -64,6 +65,7 @@ import {
 import * as OpenCodeServerOwner from "./OpenCodeServerOwner.ts";
 import * as OpenCode2Client from "./v2/OpenCode2Client.ts";
 import * as OpenCode2Server from "./v2/OpenCode2Server.ts";
+import * as OpenCode2Mcp from "./v2/mcp.ts";
 import { replaceOutdatedService } from "./v2/OpenCode2Service.ts";
 import {
   defaultProviderContinuationIdentity,
@@ -403,6 +405,17 @@ export const OpenCodeDriver: ProviderDriver<
         Effect.provideService(OpenCode2Server.OpenCode2Server, openCode2Server),
       ),
     });
+    const mcpManagement = yield* OpenCode2Mcp.make.pipe(
+      Effect.provideService(OpenCode2Server.OpenCode2Server, openCode2Server),
+    );
+    const requireOpenCode2 = runtimeProbe.get.pipe(
+      Effect.mapError((cause) => new ProviderMcpError({ reason: "request-failed", cause })),
+      Effect.flatMap((runtime) =>
+        runtime.generation === "v2"
+          ? Effect.void
+          : Effect.fail(new ProviderMcpError({ reason: "unsupported" })),
+      ),
+    );
     const catalogWatch = yield* makeOpenCode2CatalogWatch(processEnv);
     // An external server may not have the host's cwd; without a location it uses its own default.
     const machineDirectory = (connection: OpenCode2Server.OpenCode2Connection) =>
@@ -850,6 +863,11 @@ export const OpenCodeDriver: ProviderDriver<
       invalidateCaches: openCode2Server.forget,
       afterUpdate,
       orchestrationAdapter,
+      mcpManagement: {
+        list: (cwd) => requireOpenCode2.pipe(Effect.andThen(mcpManagement.list(cwd))),
+        setEnabled: (input) =>
+          requireOpenCode2.pipe(Effect.andThen(mcpManagement.setEnabled(input))),
+      },
       textGeneration,
     } satisfies ProviderInstance;
   }),

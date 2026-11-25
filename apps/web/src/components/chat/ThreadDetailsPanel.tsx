@@ -4,8 +4,10 @@ import type {
   ProjectId,
   ProjectScript,
   ResolvedKeybindingsConfig,
+  ServerProvider,
   ThreadId,
 } from "@t3tools/contracts";
+import { supportsMcpManagement } from "@t3tools/client-runtime/mcpCommands";
 
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
@@ -26,6 +28,7 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { ThreadMcpControl } from "./ThreadMcpControl";
 import { ThreadRepositorySections } from "./ThreadRepositorySections";
 import { ThreadServersPanel } from "./ThreadServersPanel";
 import {
@@ -69,6 +72,7 @@ interface ThreadDetailsPanelProps extends Pick<
   showOpenInPicker: boolean;
   openInShortcutEnabled: boolean;
   gitCwd: string | null;
+  mcpProvider: ServerProvider | null;
   workspaceMutationId: string | null;
   isGitRepo: boolean;
   /** False when no worktree can come from this folder, so it offers no workspace modes. */
@@ -188,6 +192,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
           environment: density === "full" && visible.environment,
           openIn: density !== "essential" && visible.openIn && props.showOpenInPicker,
           scripts: visible.scripts && props.activeProjectScripts !== undefined,
+          mcp: props.gitCwd !== null && supportsMcpManagement(props.mcpProvider),
           branch: offersGit && folderIsRepo && visible.branch,
           // Without a branch selector, linked pull requests still need somewhere to show.
           pullRequests: !(offersGit && folderIsRepo) && visible.branch,
@@ -203,7 +208,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         return (
           <>
             <div className="group/details-items">
-              {show.environment || show.openIn || show.scripts ? (
+              {show.environment || show.openIn || show.scripts || show.mcp ? (
                 <ThreadDetailsSection
                   headingId="thread-details-workspace-heading"
                   title={gt("Workspace")}
@@ -252,6 +257,16 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                         onDeleteScript={props.onDeleteProjectScript}
                       />
                     ) : null}
+                    <ThreadMcpControl
+                      key={JSON.stringify([
+                        props.environmentId,
+                        props.mcpProvider?.instanceId,
+                        props.gitCwd,
+                      ])}
+                      environmentId={props.environmentId}
+                      provider={props.mcpProvider}
+                      cwd={props.gitCwd}
+                    />
                   </div>
                 </ThreadDetailsSection>
               ) : null}
