@@ -94,6 +94,7 @@ function compactionSnapshot(
   item: CompactionItem,
   maxTokens: number | null,
   updatedAt: string,
+  cost: Exclude<ContextWindowSnapshot["cost"], undefined>,
 ): ContextWindowSnapshot | null {
   const usedTokens = asFiniteNumber(item.afterTokenCount);
   if (usedTokens === null || usedTokens < 0) return null;
@@ -119,7 +120,7 @@ function compactionSnapshot(
     durationMs: null,
     compactsAutomatically: true,
     autoCompactThreshold: null,
-    cost: null,
+    cost,
     updatedAt,
   };
 }
@@ -130,7 +131,14 @@ export function deriveLatestContextWindowSnapshot(
   }>,
   liveUsage?: OrchestrationV2ProviderTurnTokenUsage | null,
   providerThread?: Pick<OrchestrationV2ProviderThread, "id" | "contextUsage" | "updatedAt"> | null,
+  subagentCostUsd?: number | null,
 ): ContextWindowSnapshot | null {
+  const ownCost = providerThread?.contextUsage?.cost;
+  const cost =
+    subagentCostUsd != null && (ownCost === undefined || ownCost.currency === "USD")
+      ? { amount: (ownCost?.amount ?? 0) + subagentCostUsd, currency: "USD" }
+      : (ownCost ?? null);
+
   const latestCompletedCompaction = entries.findLast(
     (entry): entry is { readonly item: CompactionItem } =>
       entry.item.type === "compaction" &&
@@ -151,6 +159,7 @@ export function deriveLatestContextWindowSnapshot(
         latestCompletedCompaction,
         liveUsage?.maxTokens ?? asFiniteNumber(providerThread?.contextUsage?.maxTokens),
         compactedAt,
+        cost,
       );
     }
   }
@@ -183,7 +192,7 @@ export function deriveLatestContextWindowSnapshot(
       durationMs: null,
       compactsAutomatically: true,
       autoCompactThreshold: liveUsage.autoCompactThreshold ?? null,
-      cost: null,
+      cost,
       updatedAt: liveUsage.updatedAt,
     };
   }
@@ -217,7 +226,7 @@ export function deriveLatestContextWindowSnapshot(
       toolUses: asFiniteNumber(providerUsage.toolUses),
       durationMs: asFiniteNumber(providerUsage.durationMs),
       compactsAutomatically: providerUsage.compactsAutomatically ?? null,
-      cost: providerUsage.cost ?? null,
+      cost,
       autoCompactThreshold: providerUsage.autoCompactThreshold ?? null,
       updatedAt: DateTime.formatIso(providerUsageUpdatedAt),
     };
@@ -231,6 +240,7 @@ export function deriveLatestContextWindowSnapshot(
       item,
       null,
       DateTime.formatIso(item.startedAt ?? item.updatedAt),
+      cost,
     );
     if (snapshot !== null) return snapshot;
   }
