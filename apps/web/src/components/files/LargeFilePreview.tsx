@@ -29,7 +29,7 @@ export default function LargeFilePreview(props: {
   readonly workspaceMutationId: string | null;
   readonly copyContents: RefObject<(() => Promise<string>) | null>;
   readonly onRetry: () => void;
-  readonly onPostRender?: FileOptions<unknown, undefined>["onPostRender"];
+  readonly onPostRender?: FileOptions<undefined, undefined>["onPostRender"];
   readonly revealLine: number | null;
   readonly revealRequestId: number;
   readonly wordWrap: boolean;
