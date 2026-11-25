@@ -197,6 +197,15 @@ describe("hourly usage formatting", () => {
     );
   });
 
+  it("uses a 12-hour clock in locales that default to 24-hour", () => {
+    const instant = "2026-11-24T18:03:00.000Z";
+    for (const locale of ["fr", "de", "es"]) {
+      expect(formatHourShort(instant, "UTC", true, locale)).not.toContain("18");
+    }
+    expect(formatDateTimeShort(instant, "UTC", true, "fr")).not.toContain("18");
+    expect(formatHourShort(instant, "UTC", false, "es")).toBe("18:00");
+  });
+
   it.each([
     [true, "2 PM", "12 AM"],
     [false, "14:00", "00:00"],
