@@ -46,6 +46,7 @@ it("submits only the line comments still in the draft when dictation finishes", 
       pending={false}
       onPendingChange={vi.fn()}
       onSubmitted={vi.fn()}
+      onPartial={vi.fn()}
       onRefused={vi.fn()}
     />,
   );
