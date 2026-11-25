@@ -578,6 +578,10 @@ export interface ProjectionStoreV2Shape {
     limit: number,
   ) => Effect.Effect<number, ProjectionStoreV2Error>;
   readonly getSubagentCount: (threadId: ThreadId) => Effect.Effect<number, ProjectionStoreV2Error>;
+  /** Native session ids of the thread and its subagent descendants, including archived ones. */
+  readonly listNativeSessionIds: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<string>, ProjectionStoreV2Error>;
   readonly getRunCount: (threadId: ThreadId) => Effect.Effect<number, ProjectionStoreV2Error>;
   /** Child threads of the thread's app-owned tasks, in task order, without decoding the tasks. */
   readonly listAppOwnedChildThreadIds: (
@@ -6822,6 +6826,28 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         Effect.map((rows) => rows[0]?.count ?? 0),
         Effect.mapError(controlReadError(threadId)),
       );
+    const listNativeSessionIds: ProjectionStoreV2Shape["listNativeSessionIds"] = (threadId) =>
+      sql<{ readonly native_id: string | null }>`
+        WITH RECURSIVE children AS MATERIALIZED (
+          SELECT thread_id, json_extract(payload_json, '$.lineage.parentThreadId') AS parent_id
+          FROM orchestration_v2_projection_threads
+          WHERE json_extract(payload_json, '$.lineage.relationshipToParent') = 'subagent'
+        ), tree(thread_id) AS (
+          SELECT ${threadId}
+          UNION
+          SELECT children.thread_id FROM children JOIN tree ON children.parent_id = tree.thread_id
+        )
+        SELECT json_extract(payload_json, '$.nativeThreadRef.nativeId') AS native_id
+        FROM orchestration_v2_projection_provider_threads
+        WHERE thread_id IN (SELECT thread_id FROM tree)
+        UNION
+        SELECT json_extract(payload_json, '$.nativeThreadRef.nativeId') AS native_id
+        FROM orchestration_v2_projection_provider_turns
+        WHERE thread_id IN (SELECT thread_id FROM tree)
+      `.pipe(
+        Effect.map((rows) => rows.flatMap((row) => (row.native_id ? [row.native_id] : []))),
+        Effect.mapError(controlReadError(threadId)),
+      );
     const listAppOwnedChildThreadIds: ProjectionStoreV2Shape["listAppOwnedChildThreadIds"] = (
       threadId,
     ) =>
@@ -10046,6 +10072,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getMessageCount: readOnReader(getMessageCount),
       getTranscriptByteFloor: readOnReader(getTranscriptByteFloor),
       getSubagentCount: readOnReader(getSubagentCount),
+      listNativeSessionIds: readOnReader(listNativeSessionIds),
       getRunCount: readOnReader(getRunCount),
       listAppOwnedChildThreadIds: readOnReader(listAppOwnedChildThreadIds),
       hasPendingDelegatedCompletion: readOnReader(hasPendingDelegatedCompletion),

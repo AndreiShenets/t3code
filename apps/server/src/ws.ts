@@ -1,4 +1,8 @@
-import { GitCommandError, OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import {
+  GitCommandError,
+  OrchestrationDispatchCommandError,
+  UsageReadError,
+} from "@t3tools/contracts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- A synchronous digest inside the pure provider mapping.
 import * as NodeCrypto from "node:crypto";
 import * as FeatureFlags from "@t3tools/shared/FeatureFlags";
@@ -2875,7 +2879,20 @@ export const layerWsRpc = (
           processResourceMonitor.readHistory(input),
         [WS_METHODS.serverGetResourceTelemetryHistory]: (input) =>
           resourceTelemetry.readHistory(input),
-        [WS_METHODS.serverGetUsageSummary]: (input) => usage.readSummary(input),
+        [WS_METHODS.serverGetUsageSummary]: (input) =>
+          input.threadId === undefined
+            ? usage.readSummary(input)
+            : threadManagement.listNativeSessionIds(input.threadId).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new UsageReadError({
+                      reason: "scanFailed",
+                      detail: "Could not read the thread's provider sessions.",
+                      cause,
+                    }),
+                ),
+                Effect.flatMap((sessionIds) => usage.readSummary(input, sessionIds)),
+              ),
         [WS_METHODS.serverRefreshUsageRates]: (_input) => usage.refreshRates,
         [WS_METHODS.serverRetryResourceTelemetry]: (_input) => resourceTelemetry.retry,
         [WS_METHODS.serverCheckOtlpEndpoint]: (input) => otlpEndpointCheck.check(input),

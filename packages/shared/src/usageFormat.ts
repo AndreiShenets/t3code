@@ -338,3 +338,29 @@ export function makeWindow(
     resolution,
   };
 }
+
+/** A window from `sinceMs` to now: hourly while it fits the server's 24-hour limit, else daily. */
+export function makeSpanWindow(sinceMs: number, now = new Date()): UsageSummaryInput {
+  const daily = makeWindow(1, now, "day");
+  const sinceTimeMs = Math.floor(Math.min(sinceMs, now.getTime()) / HOUR_MS) * HOUR_MS;
+  const untilTimeMs = Math.max(Math.floor(now.getTime() / 60_000) * 60_000, sinceTimeMs + 60_000);
+  const format = dateTimeFormatter("en-CA", {
+    timeZone: daily.timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  if (untilTimeMs - sinceTimeMs <= 24 * HOUR_MS) {
+    const sinceTime = new Date(sinceTimeMs);
+    const untilTime = new Date(untilTimeMs);
+    return {
+      sinceDay: UsageDay.make(format.format(sinceTime)),
+      untilDay: UsageDay.make(format.format(untilTime)),
+      timeZone: daily.timeZone,
+      resolution: "hour",
+      sinceTime: sinceTime.toISOString(),
+      untilTime: untilTime.toISOString(),
+    };
+  }
+  return { ...daily, sinceDay: UsageDay.make(format.format(new Date(sinceMs))) };
+}

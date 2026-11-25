@@ -7159,10 +7159,16 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
             ...projection.providerThreads[0]!,
             id: providerThreadId,
             appThreadId: child.id,
+            nativeThreadRef: { driver, nativeId: `native:${child.id}`, strength: "strong" },
             contextUsage: { usedTokens: 999_999, cost: { amount: child.amount, currency: "USD" } },
           },
         });
       }
+      assert.deepEqual([...(yield* projectionStore.listNativeSessionIds(threadId))].toSorted(), [
+        "native:thread:provider-goal:delegated",
+        "native:thread:provider-goal:native",
+        "native:thread:provider-goal:nested",
+      ]);
       const listed = (yield* projectionStore.getShellSnapshot()).threads.find(
         (thread) => thread.id === threadId,
       );
