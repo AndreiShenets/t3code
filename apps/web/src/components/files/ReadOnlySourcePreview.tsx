@@ -1,5 +1,6 @@
 import type { CodeViewItem, File as FileInstance, FileDiff, PostRenderPhase } from "@pierre/diffs";
 import type { FileOptions } from "@pierre/diffs/react";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { type ClipboardEvent, useEffect, useRef, useState } from "react";
 
 import { StyledDiffCodeView } from "~/components/diffs/StyledDiffCodeView";
@@ -22,6 +23,7 @@ export default function ReadOnlySourcePreview(props: {
   readonly name: string;
   readonly text: string;
   readonly cacheKey?: string;
+  readonly workspace?: { readonly environmentId: EnvironmentId; readonly cwd: string };
   readonly onPostRender?: FileOptions<unknown, undefined>["onPostRender"];
   /** A preview's own wrap toggle; omitted follows the word wrap setting. */
   readonly wordWrap?: boolean;

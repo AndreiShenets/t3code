@@ -68,7 +68,8 @@ import { usePreparePullRequestThreadAction } from "~/state/sourceControlActions"
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import type { ReviewCommentContext } from "~/reviewCommentContext";
-import { useProjects, useServerConfigs } from "~/state/entities";
+import { useProjects, useQuietThreadShell, useServerConfigs } from "~/state/entities";
+import { resolveDiffPathForWorkspace } from "~/diffFileActions";
 import { useEnvironments } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
@@ -178,6 +179,7 @@ import { resolveFilterOptions } from "./pullRequestListOptions";
 import { PullRequestGuideTab } from "./PullRequestGuideTab";
 import { guideRunKey, useGuideRunStore } from "./guide/guideRunStore";
 import { useReviewGuideWriter } from "./guide/useReviewGuideWriter";
+import { resolvePullRequestFileWorkspace } from "./pullRequestFileEditing.logic";
 
 import { changeRequestTermKind, type ChangeRequestTermKind } from "./changeRequestTerm";
 
@@ -281,6 +283,7 @@ const TABS: ReadonlyArray<{ value: PullRequestDetailTab; label: string }> = [
 // Defer the diff viewer's worker pool until Code is approached.
 const loadCodeTab = () => import("./PullRequestCodeTab");
 const PullRequestCodeTab = lazy(loadCodeTab);
+const PullRequestFileEditor = lazy(() => import("./PullRequestFileEditor"));
 
 function reportCheckoutCommandError(error: Error) {
   toastManager.add({
@@ -410,6 +413,13 @@ export function PullRequestDetailPanel({
   const resolve = useMessages();
   const environmentConfigs = useServerConfigs();
   const projects = useProjects();
+  const thread = useQuietThreadShell(threadRef);
+  const [editingFile, setEditingFile] = useState<{
+    pullRequestKey: string;
+    environmentId: EnvironmentId;
+    workspaceRoot: string;
+    relativePath: string;
+  } | null>(null);
   const project = projects.find(
     (project) =>
       project.id === requestedReference.projectId && project.environmentId === environmentId,
@@ -613,6 +623,44 @@ export function PullRequestDetailPanel({
   const [handoff, setHandoff] = useState<string | null>(null);
   const turnRefresh = usePullRequestTurnRefresh(environmentId);
   const handoffSummary = detail ?? sharedSummary;
+  const fileWorkspace = detail
+    ? resolvePullRequestFileWorkspace({
+        environmentId,
+        reference: { ...reference, url: detail.url },
+        projects,
+        thread:
+          thread && threadRef
+            ? { ref: threadRef, projectId: thread.projectId, worktreePath: thread.worktreePath }
+            : null,
+      })
+    : null;
+  const openCheckoutFile =
+    fileWorkspace === null
+      ? undefined
+      : (filePath: string) => {
+          const relativePath = resolveDiffPathForWorkspace({
+            filePath,
+            workspaceRoot: fileWorkspace.workspaceRoot,
+            repositoryRoot: fileWorkspace.repositoryRoot,
+          });
+          if (relativePath === null) {
+            toastManager.add({
+              type: "error",
+              title: m(msg("This file is outside the project checkout.")),
+            });
+            return;
+          }
+          if (fileWorkspace.threadRef) {
+            useRightPanelStore.getState().openFile(fileWorkspace.threadRef, relativePath);
+          } else {
+            setEditingFile({
+              pullRequestKey,
+              environmentId: fileWorkspace.environmentId,
+              workspaceRoot: fileWorkspace.workspaceRoot,
+              relativePath,
+            });
+          }
+        };
   const terminology = sourceControlClients.get(
     handoffSummary?.provider ?? listEntry?.provider ?? repositoryIdentity?.provider,
   ).changeRequest;
@@ -2303,6 +2351,8 @@ export function PullRequestDetailPanel({
                       refreshToken={refreshToken}
                       backgroundRefreshToken={turnRefresh ?? 0}
                       revealRequest={codeRevealRequest}
+                      onOpenFile={openCheckoutFile}
+                      fileWorkspace={fileWorkspace}
                       revealUrl={tab === "code" ? revealUrl : undefined}
                       onRevealSettled={settleReveal}
                     />
@@ -2334,6 +2384,12 @@ export function PullRequestDetailPanel({
               openReviewRequest={openReviewRequest}
             />
           </div>
+        ) : null}
+        {editingFile?.pullRequestKey === pullRequestKey &&
+        editingFile.environmentId === environmentId ? (
+          <Suspense fallback={null}>
+            <PullRequestFileEditor {...editingFile} onClose={() => setEditingFile(null)} />
+          </Suspense>
         ) : null}
       </div>
     </SharedTooltipProvider>
