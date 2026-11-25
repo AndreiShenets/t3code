@@ -24,6 +24,19 @@ reload. In a worktree thread of a project with several repositories it adds a wo
 repository to the thread instead; see [Worktree threads](multi-repo-projects.md#worktree-threads). A
 worktree thread of a single repository does not offer it.
 
+## Tab width and whitespace
+
+On web and desktop, file and diff views display tabs using the applicable `.editorconfig`:
+`tab_width`, falling back to `indent_size`, or two columns when neither is set. Pull request
+views use the reviewed revision's configuration; workspace views use the current files.
+This changes only the display, not the file contents.
+
+To inspect indentation, enable **Settings → General → Show whitespace
+characters**. File and diff views show spaces as dots and tabs as arrows. This preference is
+off by default and saved separately on each device or browser.
+
+## Review local commits
+
 On web and desktop, open the Diff pane source picker and choose **Commits** to review one local
 commit at a time. The list shows the newest 100 commits in the branch comparison. A merge commit
 shows its changes against its first parent.

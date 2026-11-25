@@ -121,6 +121,25 @@ function supersedesReading(current: PullRequestReading | undefined, next: PullRe
   return (next.observedAt ?? -Infinity) >= (current.observedAt ?? -Infinity);
 }
 
+function isEditorConfigSnapshot(input: PullRequestDiffFileContentsInput): boolean {
+  if (
+    input.changeType !== "new" ||
+    input.commit === undefined ||
+    (input.commit.length !== 40 && input.commit.length !== 64) ||
+    /[^0-9a-f]/i.test(input.commit) ||
+    input.oldPath !== input.newPath ||
+    // Azure's Windows CLI passes these paths through cmd.exe more than once.
+    /[\\:"%&|<>^!\p{Cc}]/u.test(input.newPath)
+  ) {
+    return false;
+  }
+  const segments = input.newPath.split("/");
+  return (
+    segments.at(-1) === ".editorconfig" &&
+    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..")
+  );
+}
+
 // Providers request one extra row; 99 stays within GitHub/GitLab's 100-row API limit.
 const DEFAULT_REPOSITORY_LIST_LIMIT = 99;
 const REPOSITORY_CONCURRENCY = 12;
@@ -4188,15 +4207,16 @@ export const make = Effect.gen(function* () {
         );
     return walk(undefined);
   };
-  // PR read access does not grant arbitrary repository reads with the project credential; restrict to changed files.
+  // Pinned display configuration is the only unchanged-file exception: PR read access
+  // must not grant general repository reads through the project's own credential.
   const listedActivity = credentialCached(activity);
   const diffFileContents: PullRequestService["Service"]["diffFileContents"] = (input) =>
     withListedCommit("diffFileContents", input, listedActivity).pipe(
-      Effect.flatMap((input) =>
-        changesFile(input).pipe(
+      Effect.flatMap((listedInput) =>
+        (isEditorConfigSnapshot(input) ? Effect.succeed(true) : changesFile(listedInput)).pipe(
           Effect.flatMap((changed) =>
             changed
-              ? readDiffFileContents(input)
+              ? readDiffFileContents(listedInput)
               : Effect.fail(
                   new PullRequestOperationError({
                     operation: "diffFileContents",

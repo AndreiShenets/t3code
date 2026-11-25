@@ -1,9 +1,9 @@
 import type { CodeViewItem, File as FileInstance, FileDiff, PostRenderPhase } from "@pierre/diffs";
 import type { FileOptions } from "@pierre/diffs/react";
-import type { EnvironmentId } from "@t3tools/contracts";
 import { type ClipboardEvent, useEffect, useRef, useState } from "react";
 
 import { StyledDiffCodeView } from "~/components/diffs/StyledDiffCodeView";
+import type { CodeDisplayWorkspace } from "~/hooks/useCodeDisplay";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useRenderedAppearance } from "~/hooks/useTheme";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
@@ -23,17 +23,17 @@ export default function ReadOnlySourcePreview(props: {
   readonly name: string;
   readonly text: string;
   readonly cacheKey?: string;
-  readonly workspace?: { readonly environmentId: EnvironmentId; readonly cwd: string };
+  readonly workspace?: CodeDisplayWorkspace;
   readonly onPostRender?: FileOptions<unknown, undefined>["onPostRender"];
   /** A preview's own wrap toggle; omitted follows the word wrap setting. */
   readonly wordWrap?: boolean;
   /** Files with more lines than this render without highlighting; omitted keeps Pierre's limit. */
   readonly tokenizeMaxLength?: number;
 }) {
+  const { text, onPostRender } = props;
   const resolvedTheme = useRenderedAppearance();
   const defaultWordWrap = useClientSettings((settings) => settings.wordWrap);
   const wordWrap = props.wordWrap ?? defaultWordWrap;
-  const { text, onPostRender } = props;
   const wrapper = useRef<HTMLDivElement>(null);
   const [selection] = useState(() => new SourceSelection());
   // CodeView only re-renders a reused item when its version changes; bump it as streaming or
@@ -121,6 +121,7 @@ export default function ReadOnlySourcePreview(props: {
         key={`${props.name}:${resolvedTheme}`}
         className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
         items={items}
+        workspace={props.workspace ?? null}
         unsafeCSSExtra={READ_ONLY_SOURCE_UNSAFE_CSS}
         options={{
           disableFileHeader: true,
