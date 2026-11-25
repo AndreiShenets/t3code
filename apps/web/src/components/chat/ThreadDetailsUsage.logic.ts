@@ -13,12 +13,18 @@ import {
   displayLimitWindows,
   hubRoutes,
   instanceHubs,
+  resolveProviderUsageLimitSource,
   type LimitPoolWindow,
 } from "@t3tools/shared/usageLimits";
 import { limitsNotice } from "@t3tools/shared/usageLimitsCopy";
 
 export type ThreadDetailsLimits =
-  | { readonly kind: "instance"; readonly limits: ServerProviderUsageLimits }
+  | {
+      readonly kind: "instance";
+      readonly limits: ServerProviderUsageLimits;
+      readonly sourceLabel?: string;
+      readonly borrowedCodex?: boolean;
+    }
   | { readonly kind: "pool"; readonly windows: readonly LimitPoolWindow[] };
 
 // collectLimitAccounts keys its input by environment; the card reads one, so any id serves.
@@ -30,16 +36,32 @@ export function resolveThreadDetailsLimits(
   providers: readonly ServerProvider[],
   sources: UsageLimitSourceSnapshots,
   now: number,
+  cwd?: string | null,
 ): ThreadDetailsLimits | null {
-  const provider = providers.find((entry) => entry.instanceId === providerInstanceId);
+  if (providerInstanceId === null) return null;
+  const provider = resolveProviderUsageLimitSource(providerInstanceId, providers, now, {
+    model,
+    cwd,
+  });
   if (!provider) return null;
-  const report = collectProviderUsageLimits(provider.instanceId, providers, sources, now, model);
+  const report = collectProviderUsageLimits(providerInstanceId, providers, sources, now, {
+    model,
+    cwd,
+  });
   // Only this instance's data: the report keeps one instance per login, and any other entry may be
   // a different login or workspace, so fall back to the instance's own snapshot.
   const own =
     report?.accounts.find((entry) => entry.instanceId === provider.instanceId)?.limits ??
     provider.usageLimits;
   if (!own) return null;
+  if (provider.instanceId !== providerInstanceId) {
+    return {
+      kind: "instance",
+      limits: own,
+      sourceLabel: provider.displayName ?? provider.driver,
+      borrowedCodex: provider.driver === "codex",
+    };
+  }
   const hubs = instanceHubs(provider, sources);
   if (limitsNotice(own) === null || hubs.length === 0) return { kind: "instance", limits: own };
   // An instance sent to a hub reads no limits of its own; its hub pools the accounts it spends.
