@@ -16,19 +16,29 @@ const WEB_ICON_FILENAMES = [
 ];
 
 it.layer(NodeServices.layer)("apply-web-brand-assets", (it) => {
-  it.effect("copies the icons into an absolute target directory as given", () =>
+  it.effect("copies the AS Code icons into an absolute target directory for every channel", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const targetDirectory = yield* fs.makeTempDirectoryScoped({
-        prefix: "apply-web-brand-assets-",
-      });
-
-      yield* applyWebBrandAssets("production", targetDirectory);
-
-      assert.deepStrictEqual(
-        (yield* fs.readDirectory(targetDirectory)).toSorted(),
-        WEB_ICON_FILENAMES,
+      const path = yield* Path.Path;
+      const publicDirectory = yield* path.fromFileUrl(
+        new URL("../apps/web/public", import.meta.url),
       );
+      for (const brand of ["development", "nightly", "production"] as const) {
+        const targetDirectory = yield* fs.makeTempDirectoryScoped({
+          prefix: "apply-web-brand-assets-",
+        });
+        yield* applyWebBrandAssets(brand, targetDirectory);
+
+        assert.deepStrictEqual(
+          (yield* fs.readDirectory(targetDirectory)).toSorted(),
+          WEB_ICON_FILENAMES,
+        );
+        for (const file of WEB_ICON_FILENAMES) {
+          const actual = yield* fs.readFile(path.join(targetDirectory, file));
+          const expected = yield* fs.readFile(path.join(publicDirectory, file));
+          assert.isTrue(Buffer.from(actual).equals(expected), `${brand} ${file}`);
+        }
+      }
     }),
   );
 
