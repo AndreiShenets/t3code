@@ -22,7 +22,7 @@ import ProjectScriptsControl, {
   type ProjectScriptActionResult,
 } from "../ProjectScriptsControl";
 import { T, useGT } from "gt-react";
-import { useState, type ComponentProps } from "react";
+import { lazy, Suspense, useState, type ComponentProps } from "react";
 import { ThreadDetailsCard } from "./ThreadDetailsCard";
 import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
@@ -33,13 +33,14 @@ import { ThreadRepositorySections } from "./ThreadRepositorySections";
 import { ThreadServersPanel } from "./ThreadServersPanel";
 import {
   ThreadDetailsContext,
+  ThreadDetailsSessionCost,
   ThreadDetailsUsage,
   type ThreadDetailsUsageInput,
 } from "./ThreadDetailsUsage";
 import { ThreadDetailsItemsMenuItems } from "./ThreadDetailsItemsMenu";
 import { resolveThreadDetailsVisibility, THREAD_DETAILS_ITEMS } from "./threadDetailsItems";
 import { useClientSettings } from "../../hooks/useSettings";
-import { useProject, useServerConfigs } from "../../state/entities";
+import { useProject, useQuietThreadShell, useServerConfigs } from "../../state/entities";
 import { filesystemEnvironment } from "../../state/filesystem";
 import { useEnvironmentQuery } from "../../state/query";
 import { ThreadDetailsThreadPrRows } from "./ThreadDetailsPrRows";
@@ -51,6 +52,8 @@ import {
   THREAD_DETAILS_PANEL_LABEL_CLASS,
 } from "./threadDetailsPanelStyles";
 import { Menu, MenuPopup } from "../ui/menu";
+
+const ThreadUsageDialog = lazy(() => import("../usage/ThreadUsageDialog"));
 
 interface ThreadDetailsPanelProps extends Pick<
   ComponentProps<typeof ThreadDetailsCard>,
@@ -105,11 +108,13 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
   const visible = useClientSettings(resolveThreadDetailsVisibility);
   const gt = useGT();
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [threadUsageOpen, setThreadUsageOpen] = useState(false);
   const t3File = useT3ProjectFileState(
     props.environmentId,
     props.activeProjectScripts && visible.scripts ? props.gitCwd : null,
   );
   const activeThreadRef = { environmentId: props.environmentId, threadId: props.threadId };
+  const threadCreatedAt = useQuietThreadShell(activeThreadRef)?.createdAt ?? null;
   const project = useProject(scopeProjectRef(props.environmentId, props.projectId));
   const serverConfig = useServerConfigs().get(props.environmentId);
   const tracksFolders = (project?.trackedFolders?.length ?? 0) > 0;
@@ -346,6 +351,23 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
 
               {visible.context && props.usage.contextWindow ? (
                 <ThreadDetailsContext usage={props.usage.contextWindow} />
+              ) : null}
+
+              {visible.sessionCost && props.usage.contextWindow?.cost != null ? (
+                <ThreadDetailsSessionCost
+                  cost={props.usage.contextWindow.cost}
+                  onOpenUsage={() => setThreadUsageOpen(true)}
+                />
+              ) : null}
+              {threadUsageOpen && threadCreatedAt !== null ? (
+                <Suspense fallback={null}>
+                  <ThreadUsageDialog
+                    environmentId={props.environmentId}
+                    threadId={props.threadId}
+                    sinceMs={Date.parse(threadCreatedAt)}
+                    onClose={() => setThreadUsageOpen(false)}
+                  />
+                </Suspense>
               ) : null}
 
               {/* Shown only when no section above has content, so an emptied card can be refilled. */}
