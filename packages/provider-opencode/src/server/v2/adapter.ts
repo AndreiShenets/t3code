@@ -471,20 +471,21 @@ const sessionRules = (
 ): ReadonlyArray<Rule> => [
   ...(policy.runtimeMode === "full-access"
     ? [rule("*", "allow")]
-    : [
-        rule("shell", "ask"),
-        rule("edit", policy.runtimeMode === "auto-accept-edits" ? "allow" : "ask"),
-        rule("external_directory", "ask"),
-        // The thread's other folders count as workspace; `edit` still decides whether writes ask.
-        // A glob character in the path would allow sibling folders, so such a root keeps asking.
-        ...(policy.workspace?.extraRoots ?? [])
-          .filter((root) => !/[*?]/.test(root))
-          .map((root): Rule => ({
-            action: "external_directory",
-            resource: `${root.replace(/\/$/, "")}/*`,
-            effect: "allow",
-          })),
-      ]),
+    : policy.runtimeMode === "auto"
+      ? []
+      : [
+          rule("shell", "ask"),
+          rule("edit", policy.runtimeMode === "auto-accept-edits" ? "allow" : "ask"),
+          rule("external_directory", "ask"),
+          // Glob characters could admit sibling folders; leave those roots subject to prompts.
+          ...(policy.workspace?.extraRoots ?? [])
+            .filter((root) => !/[*?]/.test(root))
+            .map((root): Rule => ({
+              action: "external_directory",
+              resource: `${root.replace(/\/$/, "")}/*`,
+              effect: "allow",
+            })),
+        ]),
   ...grants,
   // Plan edits are re-allowed only for plan paths; free-tier sessions refuse denied shell/read.
   ...(policy.interactionMode === "plan" ? [rule("edit", "deny")] : []),
