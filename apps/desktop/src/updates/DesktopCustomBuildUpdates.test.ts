@@ -2,6 +2,7 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import type { DatabaseMigrationProgress } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -96,7 +97,7 @@ const harness = (
         backendReady,
         canInstallUpdates,
         primaryBackendStartup,
-        databaseMigrationProgress: yield* Ref.make(null),
+        databaseMigrationProgress: yield* Ref.make<DatabaseMigrationProgress | null>(null),
       }),
       Layer.mock(ElectronWindow.ElectronWindow)({
         sendAll: () => Queue.offer(changes, undefined).pipe(Effect.asVoid),
