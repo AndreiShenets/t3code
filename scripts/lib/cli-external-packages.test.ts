@@ -30,6 +30,13 @@ type PackageManifest = typeof PackageManifest.Type;
 const decodeManifest = Schema.decodeUnknownSync(Schema.fromJsonString(PackageManifest));
 
 describe("shouldBundleCliDependency", () => {
+  it("bundles undici imports while retaining the file-backed outbound HTTP client", () => {
+    for (const id of ["undici", "undici/index.js"]) {
+      assert.strictEqual(shouldBundleCliDependency(id), true, id);
+      assert.strictEqual(isRuntimeExternalCliDependency(id), true, id);
+    }
+  });
+
   it("leaves native addons and their dlopen wrappers external", () => {
     for (const id of [
       "node-pty",
