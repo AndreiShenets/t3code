@@ -569,7 +569,12 @@ export function PullRequestDetailPanel({
   // Each tab restores the condensed state its own scrolling left behind.
   const [condensedByTab, setCondensedByTab] = useState<
     Partial<Record<PullRequestDetailTab, boolean>>
-  >(() => savedView?.condensedByTab ?? { summary: summaryCondensedByScopeKey.get(tabScopeKey) ?? false });
+  >(
+    () =>
+      savedView?.condensedByTab ?? {
+        summary: summaryCondensedByScopeKey.get(tabScopeKey) ?? false,
+      },
+  );
   const condensed = condensedByTab[tab] ?? false;
   const scrollerByTab = useRef<Partial<Record<PullRequestDetailTab, HTMLElement | null>>>({});
   // Fresh ref callbacks would detach and reattach every scroller on each render.

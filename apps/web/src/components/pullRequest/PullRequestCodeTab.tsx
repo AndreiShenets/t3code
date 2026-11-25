@@ -374,6 +374,8 @@ interface MutableAnnotationGroup {
   draft: boolean;
 }
 
+const draftCommentTexts = new WeakMap<PullRequestDraftAnchor, string>();
+
 // Keep keystrokes local: changing the viewer's annotation renderer recreates its portals.
 function PullRequestDraftCommentAnnotation({
   draft,
@@ -385,7 +387,7 @@ function PullRequestDraftCommentAnnotation({
 }) {
   const [text, setText] = useState(() => {
     const code = viewState?.getState().code;
-    return code?.draft === draft ? (code.draftText ?? "") : "";
+    return draftCommentTexts.get(draft) ?? (code?.draft === draft ? (code.draftText ?? "") : "");
   });
   return (
     <DiffCommentAnnotation
@@ -393,31 +395,10 @@ function PullRequestDraftCommentAnnotation({
       text={text}
       onTextChange={(text) => {
         setText(text);
+        draftCommentTexts.set(draft, text);
         viewState?.setState((state) =>
           state.code?.draft === draft ? { code: { ...state.code, draftText: text } } : state,
         );
-      }}
-    />
-  );
-}
-
-// The viewer remounts a file's annotations when a refresh re-keys it, so draft text lives outside.
-const draftCommentTexts = new WeakMap<DraftAnchor, string>();
-
-function PullRequestDraftCommentAnnotation({
-  draft,
-  ...props
-}: Omit<ComponentProps<typeof DiffCommentAnnotation>, "text" | "onTextChange"> & {
-  readonly draft: DraftAnchor;
-}) {
-  const [text, setText] = useState(() => draftCommentTexts.get(draft) ?? "");
-  return (
-    <DiffCommentAnnotation
-      {...props}
-      text={text}
-      onTextChange={(next) => {
-        setText(next);
-        draftCommentTexts.set(draft, next);
       }}
     />
   );
@@ -867,7 +848,9 @@ function PullRequestCodeTab({
       ? undefined
       : loadedFiles.find((file) => buildFileDiffIdentityKey(file) === draft.fileKey);
   const draftFileKey =
-    draft !== null && draftFile !== undefined && fileVersions.get(draft.fileKey) === draft.fileVersion
+    draft !== null &&
+    draftFile !== undefined &&
+    fileVersions.get(draft.fileKey) === draft.fileVersion
       ? draft.fileKey
       : null;
   if (draft !== null && draftFileKey === null) {
@@ -1145,9 +1128,7 @@ function PullRequestCodeTab({
     const item = items.find((candidate) => resolveFileDiffPath(candidate.fileDiff) === path);
     if (item === undefined) return;
     // Record the unfold even when already open, so a Viewed mark that loads later cannot fold it.
-    setFoldChoices(path, (current) =>
-      withFileDiffFold(current, item.id, false),
-    );
+    setFoldChoices(path, (current) => withFileDiffFold(current, item.id, false));
     if (range) setSelectedLines({ id: item.id, range });
     codeViewReveal.request(item.id, range);
   };
@@ -1326,11 +1307,7 @@ function PullRequestCodeTab({
     ) => {
       if (nextItem.type !== "diff") return;
       setFoldChoices(resolveFileDiffPath(nextItem.fileDiff), (current) =>
-        withFileDiffFold(
-          current,
-          nextItem.id,
-          nextItem.collapsed === true,
-        ),
+        withFileDiffFold(current, nextItem.id, nextItem.collapsed === true),
       );
     },
   };
