@@ -43,6 +43,19 @@ const encodeServerSettings = Schema.encodeSync(ServerSettings);
 const encodeServerSettingsPatch = Schema.encodeSync(ServerSettingsPatch);
 const decodeClaudeSettings = Schema.decodeUnknownSync(ClaudeSettings);
 
+describe("ClientSettings whitespace characters", () => {
+  it("defaults whitespace markers off and round-trips explicit preferences", () => {
+    expect(decodeClientSettings({}).showWhitespace).toBe(false);
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("showWhitespace");
+    for (const showWhitespace of [true, false]) {
+      const preference = { showWhitespace };
+      const stored = encodeClientSettings(decodeClientSettings(preference));
+      expect(decodeClientSettings(stored)).toMatchObject(preference);
+      expect(decodeClientSettingsPatch(preference)).toEqual(preference);
+    }
+  });
+});
+
 it("drops theme defaults from a client's settings patch", () => {
   expect(
     decodeClientServerSettingsPatch({
