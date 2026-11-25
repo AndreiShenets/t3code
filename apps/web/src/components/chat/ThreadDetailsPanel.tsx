@@ -51,6 +51,7 @@ import {
 import { Menu, MenuPopup } from "../ui/menu";
 
 const ThreadUsageDialog = lazy(() => import("../usage/ThreadUsageDialog"));
+const NO_REPORTED_COST = { amount: 0, currency: "USD" };
 
 interface ThreadDetailsPanelProps extends Pick<
   ComponentProps<typeof ThreadDetailsCard>,
@@ -338,9 +339,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 <ThreadDetailsContext usage={props.usage.contextWindow} />
               ) : null}
 
-              {visible.sessionCost && props.usage.contextWindow?.cost != null ? (
+              {/* Only OpenCode reports a cost; other providers show $0 and price from logs on click. */}
+              {visible.sessionCost && threadCreatedAt !== null ? (
                 <ThreadDetailsSessionCost
-                  cost={props.usage.contextWindow.cost}
+                  cost={props.usage.contextWindow?.cost ?? NO_REPORTED_COST}
                   onOpenUsage={() => setThreadUsageOpen(true)}
                 />
               ) : null}
