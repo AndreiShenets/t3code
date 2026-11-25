@@ -49,7 +49,7 @@ export default function ThreadUsageDialog({
   const locale = useLocale();
   const hour12 = usePrimarySettings((settings) => resolveHour12(settings.timestampFormat));
   const [window, setWindow] = useState(() => ({ ...makeSpanWindow(sinceMs), threadId }));
-  const [metric, setMetric] = useState<"cost" | "tokens">("cost");
+  const [pickedMetric, setMetric] = useState<"cost" | "tokens" | null>(null);
   const [hiddenProviders, setHiddenProviders] = useState(NO_HIDDEN_PROVIDERS);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [priceModel, setPriceModel] = useState<string | null>(null);
@@ -66,6 +66,9 @@ export default function ThreadUsageDialog({
     environments,
     hiddenProviders.size === 0 ? undefined : (bucket) => !hiddenProviders.has(bucket.provider),
   );
+  // A free or unpriced thread has nothing to chart by cost, but its tokens are still worth reading.
+  const metric =
+    pickedMetric ?? (merged.costUsd === 0 && merged.totalTokens > 0 ? "tokens" : "cost");
   const hourly = window.resolution === "hour";
   const days = enumerateDays(window.sinceDay, window.untilDay);
   const hours =
