@@ -7,7 +7,7 @@ import {
   type PullRequestDiffResult,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import type { ComponentProps } from "react";
+import { memo, type ComponentProps } from "react";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -110,12 +110,14 @@ vi.mock(import("~/state/usePullRequestStack"), () => ({
   })) as never,
 }));
 vi.mock(import("./PullRequestSummaryTab"), () => ({
-  PullRequestSummaryTab: ({
-    scrollerRef,
-  }: ComponentProps<typeof import("./PullRequestSummaryTab").PullRequestSummaryTab>) => (
-    <div ref={scrollerRef} data-testid="summary-scroller" className="h-full overflow-y-auto">
-      <div className="h-[3000px]" />
-    </div>
+  PullRequestSummaryTab: memo(
+    ({
+      scrollerRef,
+    }: ComponentProps<typeof import("./PullRequestSummaryTab").PullRequestSummaryTab>) => (
+      <div ref={scrollerRef} data-testid="summary-scroller" className="h-full overflow-y-auto">
+        <div className="h-[3000px]" />
+      </div>
+    ),
   ),
 }));
 

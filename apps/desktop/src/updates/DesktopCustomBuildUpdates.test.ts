@@ -96,6 +96,7 @@ const harness = (
         backendReady,
         canInstallUpdates,
         primaryBackendStartup,
+        databaseMigrationProgress: yield* Ref.make(null),
       }),
       Layer.mock(ElectronWindow.ElectronWindow)({
         sendAll: () => Queue.offer(changes, undefined).pipe(Effect.asVoid),
