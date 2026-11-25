@@ -12,6 +12,7 @@ import {
   TraeIcon,
   VisualStudioCode,
   VisualStudioCodeInsiders,
+  VisualStudioIcon,
   VSCodium,
   Zed,
 } from "./Icons";
@@ -137,6 +138,11 @@ export function editorIconOptions(platform: string): ReadonlyArray<EditorIconOpt
     {
       Icon: WebStormIcon,
       value: "webstorm",
+      kind: "brand",
+    },
+    {
+      Icon: VisualStudioIcon,
+      value: "visual-studio",
       kind: "brand",
     },
     {
