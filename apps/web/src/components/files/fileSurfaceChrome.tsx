@@ -5,6 +5,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { Button } from "~/components/ui/button";
 import { Toggle } from "~/components/ui/toggle";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
+import { CODE_WHITESPACE_UNSAFE_CSS } from "~/lib/codeWhitespace";
 import { cn } from "~/lib/utils";
 import { SharedTooltipTrigger } from "~/components/ui/shared-tooltip";
 
@@ -15,6 +16,7 @@ export const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
 
 export const FILE_LINK_REVEAL_UNSAFE_CSS = `
   ${DIFF_SURFACE_THEME_UNSAFE_CSS}
+  ${CODE_WHITESPACE_UNSAFE_CSS}
 
   diffs-container {
     --diffs-bg: var(--code-background, var(--background)) !important;
