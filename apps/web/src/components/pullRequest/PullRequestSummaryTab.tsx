@@ -796,6 +796,7 @@ export const PullRequestSummaryTab = memo(function PullRequestSummaryTab({
       className="ml-auto justify-end"
       reactions={comment.reactions ?? []}
       canReact={canReactPullRequestComment(detail, comment)}
+      capabilities={detail.capabilities}
       subjectId={comment.id}
       environmentId={environmentId}
       reference={reference}
@@ -953,20 +954,39 @@ export const PullRequestSummaryTab = memo(function PullRequestSummaryTab({
                   <T context="no reviewers">None</T>
                 </span>
               ) : (
-                <span className="flex items-center -space-x-1">
+                <span
+                  className={
+                    detail.reviewers.some((reviewer) => reviewer.reviewOutcome !== undefined)
+                      ? "flex flex-wrap items-center gap-2"
+                      : "flex items-center -space-x-1"
+                  }
+                >
                   {reviewerEntries.map((entry) => {
                     const login = entry.actor?.login ?? "ghost";
                     const named =
                       entry.actor?.name && entry.actor.name !== login
                         ? `${entry.actor.name} (@${login})`
                         : login;
+                    const vote = entry.actor?.reviewOutcome;
+                    const voteLabel =
+                      vote === "approved"
+                        ? "Approved"
+                        : vote === "approved-with-suggestions"
+                          ? "Approved with suggestions"
+                          : vote === "waiting"
+                            ? "Waiting for author"
+                            : vote === "rejected"
+                              ? "Rejected"
+                              : vote === "none"
+                                ? "No vote"
+                                : null;
                     return (
                       <SharedTooltipTrigger
                         key={entry.key}
                         render={
                           <span
                             className={cn(
-                              "relative rounded-full hover:z-10",
+                              "relative inline-flex items-center gap-1 rounded-full hover:z-10",
                               entry.outcome
                                 ? pullRequestReviewOutcomeRingClassName(entry.outcome, entry.stale)
                                 : undefined,
@@ -974,13 +994,15 @@ export const PullRequestSummaryTab = memo(function PullRequestSummaryTab({
                           />
                         }
                         label={
-                          entry.outcome
-                            ? `${named}: ${
-                                entry.stale
-                                  ? pullRequestReviewOutcomeStaleLabel(entry.outcome, resolve)
-                                  : pullRequestReviewOutcomeLabel(entry.outcome, resolve)
-                              }`
-                            : named
+                          voteLabel
+                            ? `${named}: ${voteLabel}`
+                            : entry.outcome
+                              ? `${named}: ${
+                                  entry.stale
+                                    ? pullRequestReviewOutcomeStaleLabel(entry.outcome, resolve)
+                                    : pullRequestReviewOutcomeLabel(entry.outcome, resolve)
+                                }`
+                              : named
                         }
                         side="bottom"
                       >
@@ -989,6 +1011,7 @@ export const PullRequestSummaryTab = memo(function PullRequestSummaryTab({
                           tooltip={false}
                           variant="avatar"
                         />
+                        {voteLabel ? <span className="text-xs">{voteLabel}</span> : null}
                         {entry.outcome ? (
                           <>
                             <PullRequestReviewOutcomeAvatarBadge

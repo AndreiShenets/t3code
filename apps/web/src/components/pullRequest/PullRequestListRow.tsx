@@ -4,6 +4,7 @@ import type {
   PullRequestState,
 } from "@t3tools/contracts";
 import type { ReactNode } from "react";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 
 import { cn } from "~/lib/utils";
 import { RelativeTime } from "~/components/RelativeTime";
@@ -119,7 +120,7 @@ export function PullRequestRowAuthor({
       label={actor?.name && actor.name !== login ? `${actor.name} (@${login})` : login}
     >
       <PullRequestActorAvatar actor={actor} className="size-3.5" />
-      <span className={cn("truncate", labelClassName)}>{login}</span>
+      <span className={cn("truncate", labelClassName)}>{getPullRequestActorName(actor)}</span>
     </SharedTooltipTrigger>
   );
 }
