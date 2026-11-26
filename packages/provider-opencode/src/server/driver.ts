@@ -40,6 +40,7 @@ import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textG
 import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
 import { openCodeUsageReader, type OpenCodeUsageReaderEnv } from "./usage.ts";
 import { readOpenCodeGoUsageLimits } from "./usageLimits.ts";
+import { readOpenCodeSubscriptionAccounts } from "./subscriptionAccounts.ts";
 import { loadOpenCode2Catalog, loadOpenCode2DirectoryCatalog } from "./openCode2Catalog.ts";
 import {
   checkOpenCodeProviderStatus,
@@ -505,7 +506,7 @@ export const OpenCodeDriver: ProviderDriver<
     const listOpenCode2Workspace = (cwd: string) =>
       openCode2Server.withConnection((connection) =>
         Effect.gen(function* () {
-          const { client, events, url } = connection;
+          const { client, events, external, url } = connection;
           const [, stream] = yield* Effect.all(
             [followScans(connection), events.pipe(Effect.option)],
             {
@@ -555,7 +556,27 @@ export const OpenCodeDriver: ProviderDriver<
           if (!wasListed && (skillUpdates.get(directory) ?? 0) !== skillUpdatesBeforeRead) {
             yield* Queue.offer(skillRescans, cwd);
           }
-          return workspace;
+          const noSubscriptions = { subscriptionAccounts: [] };
+          const subscriptions = external
+            ? noSubscriptions
+            : yield* Effect.all({
+                providers: client.provider.list({ location }).pipe(Effect.map((list) => list.data)),
+                credentials: client.credential.list(),
+              }).pipe(
+                Effect.flatMap(({ providers, credentials }) =>
+                  readOpenCodeSubscriptionAccounts({
+                    providers,
+                    credentials,
+                    environment: processEnv,
+                    codexUsageSource: effectiveConfig.codexUsageSource,
+                  }),
+                ),
+                Effect.provideService(FileSystem.FileSystem, fileSystem),
+                Effect.provideService(Path.Path, pathService),
+                Effect.timeout("5 seconds"),
+                Effect.orElseSucceed(() => noSubscriptions),
+              );
+          return { ...workspace, ...subscriptions };
         }).pipe(Effect.scoped),
       );
     const serverOwner = yield* OpenCodeServerOwner.make({
@@ -888,15 +909,18 @@ export const OpenCodeDriver: ProviderDriver<
                     ],
                     { concurrency: "unbounded" },
                   ).pipe(
-                    Effect.map(([machineSnapshot, cwdModels, { skills, commands }]) => ({
-                      ...machineSnapshot,
-                      ...workspaceModelsFor(machineSnapshot.models, cwdModels),
-                      skills: openCode2SkillsToServerProviderSkills(skills),
-                      slashCommands: openCode2CommandsToServerProviderSlashCommands(commands),
-                      // A finished scan lists at least the built-ins. None means it
-                      // timed out, so the registry decides from the provider's health.
-                      slashCommandsPending: commands.length > 0 ? false : undefined,
-                    })),
+                    Effect.map(
+                      ([machineSnapshot, cwdModels, { skills, commands, ...subscriptions }]) => ({
+                        ...machineSnapshot,
+                        ...subscriptions,
+                        ...workspaceModelsFor(machineSnapshot.models, cwdModels),
+                        skills: openCode2SkillsToServerProviderSkills(skills),
+                        slashCommands: openCode2CommandsToServerProviderSlashCommands(commands),
+                        // A finished scan lists at least the built-ins. None means it
+                        // timed out, so the registry decides from the provider's health.
+                        slashCommandsPending: commands.length > 0 ? false : undefined,
+                      }),
+                    ),
                   ),
                   v1: Effect.all([
                     snapshot.getSnapshot,

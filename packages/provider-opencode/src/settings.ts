@@ -3,6 +3,7 @@ import {
   CustomModelSetting,
   makeBinaryPathSetting,
   makeProviderSettingsSchema,
+  ProviderInstanceId,
   secretSetting,
   SettingsSecretValue,
   TrimmedString,
@@ -49,6 +50,9 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
           clearWhenEmpty: "omit",
         },
       }),
+    ),
+    codexUsageSource: Schema.optionalKey(Schema.NullOr(ProviderInstanceId)).pipe(
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
     customModels: Schema.Array(CustomModelSetting).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),

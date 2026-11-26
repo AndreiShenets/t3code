@@ -142,6 +142,22 @@ export const ServerProviderWorkspaceSnapshot = Schema.Struct({
   slashCommandsPending: Schema.optional(Schema.Boolean),
   skills: Schema.Array(ServerProviderSkill),
   optionDescriptors: Schema.optional(Schema.Array(ProviderOptionDescriptor)),
+  subscriptionAccounts: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        modelProviderId: TrimmedNonEmptyString,
+        driver: ProviderDriverKind,
+        email: TrimmedNonEmptyString,
+        workspaceId: TrimmedNonEmptyString,
+      }),
+    ),
+  ),
+  codexUsageSource: Schema.optional(
+    Schema.Struct({
+      modelProviderIds: Schema.Array(TrimmedNonEmptyString),
+      instanceId: Schema.optionalKey(Schema.NullOr(ProviderInstanceId)),
+    }),
+  ),
   // Absent means the provider's machine `models`, which keeps most snapshots small.
   models: Schema.optional(Schema.Array(ServerProviderModel)),
   modelsPending: Schema.optional(Schema.Boolean),
