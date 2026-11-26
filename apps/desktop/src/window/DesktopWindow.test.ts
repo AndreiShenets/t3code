@@ -1,4 +1,3 @@
-import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
@@ -9,6 +8,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -1544,6 +1544,7 @@ describe("DesktopWindow", () => {
     "isolates preview guests and passes them the primary-paste setting (enabled: $primaryPasteEnabled)",
     ({ primaryPasteEnabled, expected }) =>
       Effect.gen(function* () {
+        const path = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
         const fakeWindow = makeFakeBrowserWindow();
         const layer = layerTest({
           window: fakeWindow.window,
@@ -1570,7 +1571,7 @@ describe("DesktopWindow", () => {
           assert.isTrue(webPreferences.contextIsolation);
           assert.equal(
             webPreferences.preload,
-            NodePath.join(environmentInput.dirname, "preview-pick-preload.cjs"),
+            path.join(environmentInput.dirname, "preview-pick-preload.cjs"),
           );
         }).pipe(Effect.provide(layer));
       }),
