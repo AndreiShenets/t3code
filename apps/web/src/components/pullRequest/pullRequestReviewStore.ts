@@ -1,4 +1,8 @@
-import { type PullRequestRef, PullRequestReviewCommentDraft } from "@t3tools/contracts";
+import {
+  type PullRequestRef,
+  PullRequestReviewCommentDraft,
+  type PullRequestSubmitReviewResult,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -25,6 +29,14 @@ export function pullRequestReviewKey(reference: PullRequestRef): string {
 interface PullRequestReviewStoreState {
   readonly drafts: Readonly<Record<string, ReadonlyArray<PendingReviewComment>>>;
   readonly summaries: Readonly<Record<string, string>>;
+  readonly uncertain: Readonly<Record<string, boolean>>;
+  readonly acknowledge: (key: string) => void;
+  readonly applySubmission: (
+    key: string,
+    comments: ReadonlyArray<PendingReviewComment>,
+    body: string,
+    result: PullRequestSubmitReviewResult,
+  ) => void;
   readonly addComment: (key: string, comment: PendingReviewComment) => void;
   readonly removeComment: (key: string, commentId: string) => void;
   readonly removeComments: (key: string, commentIds: ReadonlyArray<string>) => void;
@@ -60,6 +72,31 @@ export const usePullRequestReviewStore = create<PullRequestReviewStoreState>()(
     (set) => ({
       drafts: {},
       summaries: {},
+      uncertain: {},
+      acknowledge: (key) => set((state) => ({ uncertain: { ...state.uncertain, [key]: false } })),
+      applySubmission: (key, comments, body, result) =>
+        set((state) => {
+          const posted =
+            result === undefined
+              ? comments
+              : result.postedCommentIndexes.flatMap((index) =>
+                  comments[index] ? [comments[index]] : [],
+                );
+          return {
+            drafts: {
+              ...state.drafts,
+              [key]: (state.drafts[key] ?? EMPTY).filter((comment) => !posted.includes(comment)),
+            },
+            summaries: {
+              ...state.summaries,
+              [key]:
+                (result === undefined || result.summaryPosted) && state.summaries[key] === body
+                  ? ""
+                  : (state.summaries[key] ?? ""),
+            },
+            uncertain: { ...state.uncertain, [key]: result?.outcomeUnknown === true },
+          };
+        }),
       addComment: (key, comment) =>
         set((state) => ({
           drafts: { ...state.drafts, [key]: [...(state.drafts[key] ?? EMPTY), comment] },

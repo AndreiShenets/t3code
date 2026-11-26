@@ -1,4 +1,5 @@
 import type { PullRequestReviewPosition, PullRequestReviewThread } from "@t3tools/contracts";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
@@ -92,7 +93,7 @@ export function annotatePullRequestDiff(
     attach(
       anchor,
       `discussion:${thread.id}`,
-      `${first?.author?.login ?? resolve(msg("Discussion"))}${
+      `${getPullRequestActorName(first?.author, resolve(msg("Discussion")))}${
         thread.isResolved
           ? ` · ${resolve(msg("Resolved", { $context: "review thread state" }))}`
           : ""

@@ -19,6 +19,24 @@ Install Git and authenticate on the machine running your T3 Code server (for rem
 
 > Note: Git `push` and `clone` still require Git SSH/HTTPS credentials on the server, separate from API tokens.
 
+### Azure DevOps Custom
+
+For Azure DevOps Server 2022 (REST API 7.0), open **Settings → Source control & issues → Azure DevOps Custom**
+and enter the full collection URL, including any installation path and port. A saved PAT takes
+precedence; an invalid PAT reports an error. Without a PAT, Windows uses the server's account
+through system curl; macOS and Linux require a PAT. The availability indicator reports successful
+authentication. Credentials stay on the server and apply only to that collection.
+
+The integration supports editing your comments, resolving or reopening inline discussions, and
+liking comments. **Request changes** casts Azure's **Waiting for author** vote; a comment-only
+review leaves the vote unchanged. Re-check drafts against a refreshed diff if a PR changes. If a
+review is only partly submitted, T3 Code keeps the unposted drafts.
+
+You can watch builds, status checks, policy failures, comments, review votes, and merge conflicts
+without the Azure CLI. CI success requires a current-iteration status or build policy tied to
+the current head. Pipelines without one of those signals are unverified. Review-vote updates
+depend on Azure's vote-event history; merging, abandoning, or unwatching ends the watch.
+
 ## Start, clone, or publish a project
 
 - **New project**: Run **New project** from the command palette (`Cmd/Ctrl+K`) or **Add Project** to initialize a new Git repo in `~/.t3/projects/<slug>` with a README, icon, and first commit (optionally creating a private GitHub repo).
@@ -38,13 +56,13 @@ A turn's diff shows only that turn's own edits, commits, and conflict fixes—ex
 - **Create**: Commit, push, and open PRs from a thread's Git actions. Configure AI-generated commit/PR writing style in **Settings → Source control & issues → Commits & pull requests** (**Repository conventions** or **Custom instructions**).
 - **Review**: Open **Pull requests** to inspect diffs, comments, checks, commits, and request reviewers. Draft line comments stay local until submitted. If new commits are pushed while you review, click **Load new commits** before merging or submitting.
 - **Saved views**: Save and update filter/sort setups under **Views → Save current view** (stored per device).
-- **Mark files viewed**: Check off files in the **Code** tab to collapse them (reopens as **Changed** on new pushes). Syncs natively with GitHub; stored on your T3 Code server for other hosts.
+- **Mark files viewed**: Check off files in the **Code** tab to collapse them (reopens as **Changed** on new pushes). GitHub and Azure DevOps Custom sync marks with the host; other hosts keep them on your T3 Code server. For Azure DevOps Custom, use the same account on the website as the Windows or PAT account running the integration. Earlier T3-only marks aren't uploaded; failed syncs are reported.
 - **Mobile**: Open **Pull requests** across environments (cached lists, details, guides, and diffs stay readable offline). Tap **Work on PR** to start a worktree thread on the PR's branch.
 - **Quick actions & options**:
   - Enable **Remove agent credits when merging** in **Settings → Source control & issues** to strip recognized agent co-author/generated-by trailers on GitHub merge/squash commits (keeps human co-authors).
   - Hold `Shift` in the GitHub PR list (web/desktop) to drag-close multiple PRs (`Esc` cancels).
   - GitHub, GitLab, and Azure DevOps support auto-merge; GitHub also supports approving fork workflows and opening revert PRs.
-  - Azure DevOps comments must be edited on the host site; Bitbucket cannot reopen declined PRs.
+  - Azure DevOps cloud comments must be edited on the host site; Bitbucket cannot reopen declined PRs.
 
 ### Review guides (beta)
 
