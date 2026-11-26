@@ -15,6 +15,22 @@ T3 Code detects your installed version automatically. OpenCode 1.x has **Limited
 - **External server**: Set **Server URL** and password in provider settings (does not forward local `OPENCODE_SERVER_PASSWORD`).
 - **Updating a local service**: When **Server URL** points to a local OpenCode background service (using its exact host/port—`127.0.0.1` for `0.0.0.0`, `[::1]` for `[::]`, not `localhost`), T3 Code upgrades the CLI and restarts the service (interrupting active turns; configure service env vars with `opencode service set env <name> <value>`). Other external servers must be restarted manually.
 
+## Subscription usage limits
+
+For local OpenCode 2, thread usage limits can reuse an enabled Codex or Claude provider's
+limits when both logins have the same email and workspace or organization. Select an OpenAI
+subscription model or a Claude Agent model in OpenCode. API-key, proxy, cloud, and external-server
+connections do not inherit subscription limits. Refresh provider status after changing a login.
+
+For OpenAI models signed in with ChatGPT token sharing, **Codex usage** shows the Session and
+Weekly limits reported by Codex. A lone Codex instance is preselected. To choose a different
+instance or turn it off with **None**, go to **Settings → Providers → OpenCode → Runtime → Codex usage source**.
+
+Local OpenCode 2 threads using GitHub Copilot device sign-in can show monthly AI-credit usage
+through an installed GitHub Copilot CLI. The meter uses the active OpenCode login, not the CLI's
+separate login. Use `/usage-limits` in the thread to see the meter or open GitHub Copilot usage if
+the CLI cannot read the allowance.
+
 ## Compaction, approvals, and catalog refresh
 
 - **Compaction**: Send `/compact` manually, or configure `compaction` (`auto`, `buffer`, `keep.tokens`) in `opencode.json` on OpenCode 2.

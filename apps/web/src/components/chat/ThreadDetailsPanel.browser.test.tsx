@@ -1,8 +1,12 @@
 import {
+  DEFAULT_CLIENT_SETTINGS,
   EnvironmentId,
   ProjectId,
+  ProviderDriverKind,
+  ProviderInstanceId,
   ThreadId,
   type ScopedThreadRef,
+  type ServerProvider,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -10,6 +14,10 @@ import { expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 
 const SCRATCH_ROOT = "/home/user/.t3/scratch";
+
+vi.mock(import("~/hooks/useNowMinute"), () => ({
+  useNowMinute: () => "2026-11-26T10:13",
+}));
 
 const state = vi.hoisted(() => ({
   workspaceRoot: "",
@@ -123,9 +131,11 @@ vi.mock(import("~/state/vcs"), async (importOriginal) => {
 });
 
 import { render } from "../../../test/render";
+import { __setClientSettingsForTests, getClientSettings } from "../../hooks/useSettings";
 import { useRightPanelStore } from "../../rightPanelStore";
 import { PopoverCreateHandle } from "../ui/popover";
 import { ChatCanvasContext } from "./ChatCanvasContext";
+import type { ThreadDetailsUsageInput } from "./ThreadDetailsUsage";
 import { resolveChatCanvasLayout } from "./chatCanvasLayout";
 import { ThreadDetailsPanel } from "./ThreadDetailsPanel";
 
@@ -179,12 +189,14 @@ function Panel({
   draftEnvMode,
   onMachines = false,
   withScripts = false,
+  usage,
 }: {
   fixture: ReturnType<typeof setup>;
   /** Renders an unsent draft in this mode instead of a started thread. */
   draftEnvMode?: "local" | "worktree";
   onMachines?: boolean;
   withScripts?: boolean;
+  usage?: ThreadDetailsUsageInput;
 }) {
   const noop = () => {};
   const scriptResult = async () => ({ ok: true }) as never;
@@ -235,11 +247,74 @@ function Panel({
         onAddProjectScript={scriptResult}
         onUpdateProjectScript={scriptResult}
         onDeleteProjectScript={scriptResult}
-        usage={{} as never}
+        usage={usage ?? ({} as never)}
       />
     </ChatCanvasContext>
   );
 }
+
+it.each(["acpRegistry", "opencode"] as const)(
+  "shows the Copilot credit meter on %s threads",
+  async (driver) => {
+    using fixture = setup({ workspaceRoot: SCRATCH_ROOT, folder: SCRATCH_ROOT });
+    const checkedAt = "2026-11-26T10:13:00.000Z";
+    const label = "Copilot: 54,450 / 110,000 AI credits";
+    const limits = {
+      checkedAt,
+      windows: [{ id: "github-copilot-monthly", kind: "monthly", label, usedPercent: 49.5 }],
+    } as const;
+    const instanceId = ProviderInstanceId.make(driver);
+    const provider: ServerProvider = {
+      instanceId,
+      driver: ProviderDriverKind.make(driver),
+      enabled: true,
+      installed: true,
+      version: null,
+      status: "ready",
+      auth: { status: "authenticated" },
+      checkedAt,
+      models: [],
+      skills: [],
+      slashCommands: [],
+      ...(driver === "acpRegistry"
+        ? { usageLimits: limits }
+        : {
+            workspaceSnapshots: [
+              {
+                cwd: SCRATCH_ROOT,
+                checkedAt,
+                skills: [],
+                slashCommands: [],
+                copilotUsageLimits: { "github-copilot": limits },
+              },
+            ],
+          }),
+    };
+    const previous = getClientSettings();
+    __setClientSettingsForTests({
+      ...DEFAULT_CLIENT_SETTINGS,
+      threadDetailsItems: { usage: true },
+    });
+    try {
+      await using _screen = await render(
+        <Panel
+          fixture={fixture}
+          usage={{
+            model: driver === "opencode" ? "github-copilot/gpt-5" : "gpt-5",
+            cwd: SCRATCH_ROOT,
+            providerInstanceId: instanceId,
+            providers: [provider],
+            contextWindow: null,
+            sources: [],
+          }}
+        />,
+      );
+      await expect.element(page.getByRole("link", { name: `${label}: 51% left` })).toBeVisible();
+    } finally {
+      __setClientSettingsForTests(previous);
+    }
+  },
+);
 
 it("offers no git controls in a No project thread, but shows its linked pull request", async () => {
   using fixture = setup({
