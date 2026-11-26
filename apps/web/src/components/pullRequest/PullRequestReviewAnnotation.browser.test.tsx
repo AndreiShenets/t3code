@@ -1,4 +1,9 @@
-import { EnvironmentId, ProjectId, type PullRequestReviewThread } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  type PullRequestCapabilities,
+  type PullRequestReviewThread,
+} from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
@@ -25,6 +30,17 @@ const thread: PullRequestReviewThread = {
   ],
 };
 
+const capabilities: PullRequestCapabilities = {
+  diff: true,
+  comment: true,
+  search: false,
+  actions: [],
+  mergeMethods: [],
+  review: { inlineComment: false, reply: true, resolve: false, verdicts: [] },
+  reviewers: { request: false, listCandidates: false },
+  edit: { changeRequest: false, comment: false },
+};
+
 it("leaves IME keys in a review reply to the composition", async () => {
   const onReply = vi.fn(async () => true);
   await using screen = await render(
@@ -34,16 +50,7 @@ it("leaves IME keys in a review reply to the composition", async () => {
       canReply
       canResolve={false}
       canReact={false}
-      capabilities={{
-        diff: true,
-        comment: true,
-        search: false,
-        actions: [],
-        mergeMethods: [],
-        review: { inlineComment: false, reply: true, resolve: false, verdicts: [] },
-        reviewers: { request: false, listCandidates: false },
-        edit: { changeRequest: false, comment: false },
-      }}
+      capabilities={capabilities}
       environmentId={EnvironmentId.make("environment")}
       reference={{ projectId: ProjectId.make("project"), repository: "owner/repo", number: 1 }}
       completionScope={null}
@@ -109,6 +116,7 @@ it("Escape cancels a review reply without closing the right panel sheet", async 
         canReply
         canResolve={false}
         canReact={false}
+        capabilities={capabilities}
         environmentId={EnvironmentId.make("environment")}
         reference={{ projectId: ProjectId.make("project"), repository: "owner/repo", number: 1 }}
         completionScope={null}
