@@ -1898,28 +1898,24 @@ function PullRequestCodeTab({
           </SharedTooltipTrigger>
         ) : null}
         {filesViewedEnabled && loadedFiles.length > 0 ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Toggle
-                  aria-label={gt("Hide reviewed files")}
-                  variant="segmented"
-                  size="sm"
-                  pressed={hideReviewedFiles}
-                  onPressedChange={(pressed) => setHideReviewedFiles(Boolean(pressed))}
-                />
-              }
-            >
-              {hideReviewedFiles ? (
-                <SquareIcon className="size-3.5" />
-              ) : (
-                <SquareCheckIcon className="size-3.5" />
-              )}
-            </TooltipTrigger>
-            <TooltipPopup side="top">
-              {hideReviewedFiles ? gt("Show reviewed files") : gt("Hide reviewed files")}
-            </TooltipPopup>
-          </Tooltip>
+          <SharedTooltipTrigger
+            render={
+              <Toggle
+                aria-label={gt("Hide reviewed files")}
+                variant="segmented"
+                size="sm"
+                pressed={hideReviewedFiles}
+                onPressedChange={(pressed) => setHideReviewedFiles(Boolean(pressed))}
+              />
+            }
+            label={hideReviewedFiles ? gt("Show reviewed files") : gt("Hide reviewed files")}
+          >
+            {hideReviewedFiles ? (
+              <SquareIcon className="size-3.5" />
+            ) : (
+              <SquareCheckIcon className="size-3.5" />
+            )}
+          </SharedTooltipTrigger>
         ) : null}
         {testFileCount > 0 ? (
           <SharedTooltipTrigger
