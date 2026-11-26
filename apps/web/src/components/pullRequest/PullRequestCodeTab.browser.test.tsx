@@ -446,17 +446,16 @@ it("pages past reviewed files and applies both filters to the diff and file tree
   await expect.element(screen.getByRole("treeitem", { name: "late.test.ts" })).toBeVisible();
   await expect.element(screen.getByText("early-0.ts", { exact: true })).not.toBeInTheDocument();
   await screen.getByRole("button", { name: "Hide test files" }).click();
+  await expect.element(screen.getByText("0 files", { exact: true })).toBeVisible();
+  await expect.element(screen.getByText("2 test files hidden", { exact: true })).toBeVisible();
   await expect
-    .element(screen.getByText("All files are hidden by the current filters."))
-    .toBeVisible();
-  await expect
-    .element(screen.getByRole("button", { name: "2 test files hidden", exact: true }))
-    .toBeVisible();
+    .element(screen.getByRole("treeitem", { name: "late.test.ts" }))
+    .not.toBeInTheDocument();
   await expect
     .element(screen.getByRole("button", { name: "39 reviewed files hidden", exact: true }))
     .toBeVisible();
   await expect.element(screen.getByText("40 / 41", { exact: true })).toBeVisible();
-  await screen.getByRole("button", { name: "2 test files hidden", exact: true }).click();
+  await screen.getByRole("button", { name: "Show test files", exact: true }).click();
   await expectFileHeaderShown(screen, container, "late.test.ts");
 
   await screen.rerender(<div />);
