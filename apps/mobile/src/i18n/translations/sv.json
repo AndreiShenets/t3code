@@ -585,6 +585,8 @@
   "355234f96f858555": "Enhetsströmmen stannade. Återansluter…",
   "64b197cdb9380c6b": "Anslutningen för enhetsströmmen misslyckades. Återansluter…",
   "569b183f80eb68df": "Enhetsströmmen har inte hittat några nätverkskandidater än. Försöker igen…",
+  "5717fb8ba7e64068": "I dag",
+  "cd88e18ab9eba9c8": "I dag sedan midnatt",
   "12cce1bb98aa42a8": "Erbjudandet för enhetsströmmen misslyckades ({status}). Försöker igen…",
   "c5a9ce61ab77276b": "Enhetsströmmen returnerade ett ogiltigt svar. Försöker igen…",
   "e25e5c200b5bfdb3": "Växlar till WebRTC.",

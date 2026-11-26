@@ -11,6 +11,7 @@ export const METRIC_OPTIONS = [
 ] as const satisfies readonly { value: UsageMetric; label: string; command: KeybindingCommand }[];
 
 export const WINDOW_OPTIONS = [
+  { days: "today", label: msg("Today"), command: "usage.period.today" },
   { days: 1, label: msg("Past 24h"), command: "usage.period.day" },
   { days: 7, label: msg("7 days"), command: "usage.period.week" },
   { days: 30, label: msg("30 days"), command: "usage.period.month" },
