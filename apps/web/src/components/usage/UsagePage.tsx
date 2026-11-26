@@ -142,11 +142,11 @@ const selectedUsageModelKeyAtom = Atom.make<string | null>(null).pipe(
   Atom.withLabel("usage:selected-model-key"),
 );
 
-function selectUsageModel(key: string | null): void {
+export function selectUsageModel(key: string | null): void {
   appAtomRegistry.set(selectedUsageModelKeyAtom, key);
 }
 
-function UsageModelDialogHost({
+export function UsageModelDialogHost({
   models,
   onSetPrice,
   ...dialogProps
@@ -609,7 +609,7 @@ export function UsagePage() {
   );
 }
 
-function UsageOverview({
+export function UsageOverview({
   merged,
   shownWindow,
   hour12,
@@ -1328,7 +1328,7 @@ function UsageEnvironmentFilter({
   );
 }
 
-function UsageProviderFilter({
+export function UsageProviderFilter({
   hiddenProviders,
   onChange,
 }: {
@@ -1390,7 +1390,7 @@ function UsageProviderFilter({
   );
 }
 
-function UsageSkeleton() {
+export function UsageSkeleton() {
   const gt = useGT();
   return (
     <>
