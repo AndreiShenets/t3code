@@ -44,6 +44,8 @@ import {
   PilcrowIcon,
   Rows3Icon,
   Settings2Icon,
+  SquareCheckIcon,
+  SquareIcon,
   TextWrapIcon,
   TriangleAlertIcon,
   ChevronsDownUpIcon,
@@ -197,6 +199,7 @@ type ReviewAnnotation = DiffLineAnnotation<ReviewAnnotationGroup>;
 const COMMIT_PAGE_SIZE = 10;
 
 const PULL_REQUEST_FILE_TREE_STORAGE_KEY = "t3code.pullRequestFileTreeOpen";
+const PULL_REQUEST_HIDE_REVIEWED_FILES_STORAGE_KEY = "t3code.pullRequestHideReviewedFiles";
 
 interface DiffSlice {
   readonly headSha: string | undefined;
@@ -531,6 +534,11 @@ function PullRequestCodeTab({
     Schema.Boolean,
   );
   const [hideTestFiles, setHideTestFiles] = useHideTestFiles();
+  const [hideReviewedFiles, setHideReviewedFiles] = useLocalStorage(
+    PULL_REQUEST_HIDE_REVIEWED_FILES_STORAGE_KEY,
+    false,
+    Schema.Boolean,
+  );
   const [selectedLines, setSelectedLines] = useState<{
     id: string;
     range: SelectedLineRange;
@@ -672,6 +680,8 @@ function PullRequestCodeTab({
     isViewed: isFileViewed,
     isStale: isFileViewedStale,
   } = filesViewed;
+  const foldsAsViewed = (path: string) =>
+    filesViewedEnabled && isFileViewed(path) && !isFileViewedStale(path);
   const [withheldLoads, setWithheldLoads] = useState<{
     readonly scope: string;
     readonly paths: ReadonlyArray<string>;
@@ -818,7 +828,7 @@ function PullRequestCodeTab({
         )
       : undefined;
   const pendingLinkPath = linkFile ? resolveFileDiffPath(linkFile) : null;
-  // The linked file stays shown past the test-file filter after the link settles.
+  // The linked file stays shown past the filters after the link settles.
   const [revealedLink, setRevealedLink] = useState<{
     readonly scope: string;
     readonly path: string;
@@ -827,14 +837,22 @@ function PullRequestCodeTab({
   const testFileCount = loadedFiles.filter((file) =>
     isTestChangedFile(resolveFileDiffPath(file)),
   ).length;
-  // A requested file stays visible so a jump to a hidden test still lands.
-  const files = hideTestFiles
+  // A requested file stays visible so a jump past the filters still lands.
+  const testFilteredFiles = hideTestFiles
     ? loadedFiles.filter((file) => {
         const path = resolveFileDiffPath(file);
         return path === revealRequest?.path || path === linkPath || !isTestChangedFile(path);
       })
     : loadedFiles;
-  const hiddenTestFileCount = loadedFiles.length - files.length;
+  const hiddenTestFileCount = loadedFiles.length - testFilteredFiles.length;
+  const files = hideReviewedFiles
+    ? testFilteredFiles.filter((file) => {
+        const path = resolveFileDiffPath(file);
+        return path === revealRequest?.path || path === linkPath || !foldsAsViewed(path);
+      })
+    : testFilteredFiles;
+  const hiddenReviewedFileCount = testFilteredFiles.length - files.length;
+  const filePaths = loadedFiles.map((file) => resolveFileDiffPath(file));
   const nextCursor = loadedSlices.at(-1)?.nextCursor ?? null;
   const draftFile =
     draft === null
@@ -851,7 +869,6 @@ function PullRequestCodeTab({
       setSelectedLines(null);
     }
   }
-  const filePaths = files.map((file) => resolveFileDiffPath(file));
   const omittedFileStats = new Map(
     loadedSlices.flatMap((slice) =>
       slice.omittedFileStats.map((file) => [file.path, file] as const),
@@ -1027,8 +1044,6 @@ function PullRequestCodeTab({
       </div>
     );
 
-  const foldsAsViewed = (path: string) =>
-    filesViewedEnabled && isFileViewed(path) && !isFileViewedStale(path);
   const items: CodeViewDiffItem<ReviewAnnotationGroup>[] = annotatedFiles.map(
     ({ fileKey, foldKey, path, fileDiff, annotations, annotationsVersion }) => {
       const group = foldGroup(path);
@@ -1579,10 +1594,23 @@ function PullRequestCodeTab({
               </span>
             ) : null}
           </span>
-          {filesViewed.enabled && files.length > 0 ? (
+          {hiddenReviewedFileCount > 0 ? (
+            <Button
+              type="button"
+              size="xs"
+              variant="link"
+              onClick={() => setHideReviewedFiles(false)}
+            >
+              {gt(
+                "{count, plural, one {{count} reviewed file hidden} other {{count} reviewed files hidden}}",
+                { count: hiddenReviewedFileCount },
+              )}
+            </Button>
+          ) : null}
+          {filesViewed.enabled && loadedFiles.length > 0 ? (
             <span className="flex min-w-0 items-center gap-1 tabular-nums">
               <span className="shrink-0">
-                {filePaths.filter(isFileViewed).length} / {files.length}
+                {filePaths.filter(isFileViewed).length} / {loadedFiles.length}
               </span>
               <span className="truncate">
                 {viewedFilesStore === "environment"
@@ -1813,6 +1841,30 @@ function PullRequestCodeTab({
             )}
           </SharedTooltipTrigger>
         ) : null}
+        {filesViewedEnabled && loadedFiles.length > 0 ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Toggle
+                  aria-label={gt("Hide reviewed files")}
+                  variant="segmented"
+                  size="sm"
+                  pressed={hideReviewedFiles}
+                  onPressedChange={(pressed) => setHideReviewedFiles(Boolean(pressed))}
+                />
+              }
+            >
+              {hideReviewedFiles ? (
+                <SquareIcon className="size-3.5" />
+              ) : (
+                <SquareCheckIcon className="size-3.5" />
+              )}
+            </TooltipTrigger>
+            <TooltipPopup side="top">
+              {hideReviewedFiles ? gt("Show reviewed files") : gt("Hide reviewed files")}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
         {testFileCount > 0 ? (
           <SharedTooltipTrigger
             render={
@@ -1975,12 +2027,14 @@ function PullRequestCodeTab({
     }
     return withToolbar(
       <p className="px-4 py-5 text-sm text-muted-foreground">
-        {commit === null
-          ? gt(
-              "This {term, select, mr {merge request} cr {change request} other {pull request}} has no file changes.",
-              { term },
-            )
-          : gt("This commit has no file changes.")}
+        {hiddenReviewedFileCount > 0 || hiddenTestFileCount > 0
+          ? gt("All files are hidden by the current filters.")
+          : commit === null
+            ? gt(
+                "This {term, select, mr {merge request} cr {change request} other {pull request}} has no file changes.",
+                { term },
+              )
+            : gt("This commit has no file changes.")}
       </p>,
     );
   }
