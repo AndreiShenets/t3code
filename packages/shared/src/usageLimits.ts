@@ -45,6 +45,7 @@ export function exhaustedUsageWindow(
   const exhausted = windows.filter(
     (window) =>
       (window.usedPercent ?? 0) >= 100 &&
+      !window.canContinueAfterExhaustion &&
       (model === undefined ||
         (provider?.driver === "opencode"
           ? openCodeUsageWindowCoversModel(window, model)
@@ -853,11 +854,22 @@ export function hasProviderUsageLimits(
 ): boolean {
   return (
     providersWithLimits(providers).some((provider) => provider.driver === driver) ||
+    providersWithWorkspaceLimits(providers).some((provider) => provider.driver === driver) ||
     sources.some(
       (source) =>
         source.accounts.some((account) => account.driver === driver) ||
         (source.error !== undefined && source.accounts.length === 0),
     )
+  );
+}
+
+function providersWithWorkspaceLimits(providers: readonly ServerProvider[]) {
+  return providers.filter(
+    (provider) =>
+      provider.enabled &&
+      provider.installed &&
+      isProviderAvailable(provider) &&
+      provider.workspaceSnapshots?.some((snapshot) => snapshot.copilotUsageLimits !== undefined),
   );
 }
 
@@ -885,6 +897,7 @@ export function withUsageLimitsCommands(
 ): ServerProvider[] {
   const supportedDrivers = new Set([
     ...providersWithLimits(providers).map((provider) => provider.driver),
+    ...providersWithWorkspaceLimits(providers).map((provider) => provider.driver),
     ...sources.flatMap((source) => source.accounts.map((account) => account.driver)),
   ]);
   const unreadableSource = sources.some(
@@ -947,6 +960,9 @@ export function resolveProviderUsageLimitSource(
   const workspace = selected.workspaceSnapshots?.find((snapshot) => snapshot.cwd === selection.cwd);
   if (!workspace || !isProviderWorkspaceSnapshotCurrent(workspace, now)) return native;
   const modelProviderId = selection.model.split("/")[0];
+  if (modelProviderId !== undefined && workspace.copilotUsageLimits?.[modelProviderId]) {
+    return { ...selected, usageLimits: workspace.copilotUsageLimits[modelProviderId] };
+  }
   const accounts = workspace.subscriptionAccounts?.filter(
     (account) => account.modelProviderId === modelProviderId,
   );
@@ -1042,6 +1058,7 @@ export function collectProviderUsageLimits(
   );
   if (!selected) return null;
   if (selected.instanceId !== instanceId || (selected.driver === "opencode" && model)) {
+    if (selected.usageLimits === undefined) return null;
     providers = [selected];
     sources = [];
   }

@@ -36,7 +36,11 @@ export interface ProviderDriverMetadata {
 export type ProviderWorkspaceSnapshot = ServerProvider &
   Pick<
     ServerProviderWorkspaceSnapshot,
-    "slashCommandsPending" | "optionDescriptors" | "subscriptionAccounts" | "codexUsageSource"
+    | "slashCommandsPending"
+    | "optionDescriptors"
+    | "subscriptionAccounts"
+    | "codexUsageSource"
+    | "copilotUsageLimits"
   > & {
     /** Set only when the directory's catalog differs from the machine snapshot's. */
     readonly workspaceModels?: ServerProviderWorkspaceSnapshot["models"];

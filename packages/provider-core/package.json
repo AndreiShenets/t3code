@@ -31,6 +31,10 @@
       "types": "./src/server/collectStreamText.ts",
       "import": "./src/server/collectStreamText.ts"
     },
+    "./server/copilotUsageLimits": {
+      "types": "./src/server/copilotUsageLimits.ts",
+      "import": "./src/server/copilotUsageLimits.ts"
+    },
     "./server/driver": {
       "types": "./src/server/driver.ts",
       "import": "./src/server/driver.ts"

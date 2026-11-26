@@ -34,6 +34,7 @@ export class ProviderHost extends Context.Service<
   ProviderHost,
   {
     readonly paths: ProviderHostPaths;
+    readonly managedBinaryDirectories?: Effect.Effect<readonly string[]>;
     readonly settings: {
       readonly get: Effect.Effect<ServerSettings, ServerSettingsError>;
       /** Runs `use` on a settings snapshot that no settings write can change until it finishes. */

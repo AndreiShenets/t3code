@@ -26,6 +26,11 @@ For OpenAI models signed in with ChatGPT token sharing, **Codex usage** shows th
 Weekly limits reported by Codex. A lone Codex instance is preselected. To choose a different
 instance or turn it off with **None**, go to **Settings → Providers → OpenCode → Runtime → Codex usage source**.
 
+Local OpenCode 2 threads using GitHub Copilot device sign-in can show monthly AI-credit usage
+through an installed GitHub Copilot CLI. The meter uses the active OpenCode login, not the CLI's
+separate login. Use `/usage-limits` in the thread to see the meter or open GitHub Copilot usage if
+the CLI cannot read the allowance.
+
 ## Compaction, approvals, and catalog refresh
 
 - **Compaction**: Send `/compact` manually, or configure `compaction` (`auto`, `buffer`, `keep.tokens`) in `opencode.json` on OpenCode 2.

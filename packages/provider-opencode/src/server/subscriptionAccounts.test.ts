@@ -124,6 +124,49 @@ it.effect("scopes the Codex reference to a direct OpenAI token-sharing credentia
   }).pipe(Effect.provide(NodeServices.layer)),
 );
 
+it.effect("passes only the active GitHub Copilot device login for direct Copilot models", () =>
+  Effect.gen(function* () {
+    const provider = { id: "github-copilot", integrationID: "github-copilot" };
+    const credential = {
+      integrationID: "github-copilot",
+      active: true,
+      value: { type: "oauth", methodID: "device", access: "example-token" },
+    };
+    const read = (providers: readonly unknown[], credentials: readonly unknown[]) =>
+      readOpenCodeSubscriptionAccounts({ providers, credentials, environment: {} });
+
+    const alias = { ...provider, id: "work-copilot" };
+    NodeAssert.deepEqual((yield* read([provider, alias], [credential])).copilotCredential, {
+      modelProviderIds: ["github-copilot", "work-copilot"],
+      token: "example-token",
+    });
+    NodeAssert.strictEqual(
+      (yield* read([provider], [credential, credential])).copilotCredential,
+      undefined,
+    );
+    for (const override of [
+      { settings: { baseURL: "https://proxy.example/v1" } },
+      { settings: { apiKey: "overridden" } },
+      { headers: { Authorization: "overridden" } },
+    ]) {
+      NodeAssert.strictEqual(
+        (yield* read([{ ...provider, ...override }], [credential])).copilotCredential,
+        undefined,
+      );
+    }
+    for (const invalid of [
+      { ...credential, active: false },
+      { ...credential, value: { ...credential.value, methodID: "other" } },
+      {
+        ...credential,
+        value: { ...credential.value, metadata: { enterpriseUrl: "https://ghe.example" } },
+      },
+    ]) {
+      NodeAssert.strictEqual((yield* read([provider], [invalid])).copilotCredential, undefined);
+    }
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
 it.effect("reads Claude Agent's own login and rejects API, proxy, and cloud overrides", () =>
   Effect.gen(function* () {
     const provider = { id: "claude-agent", integrationID: "claude-agent", settings: {} };

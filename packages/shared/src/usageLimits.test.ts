@@ -59,6 +59,48 @@ function provider(overrides: Partial<ServerProvider>): ServerProvider {
 }
 
 describe("OpenCode subscription limit sources", () => {
+  it("shows the Copilot account only for its workspace and model provider", () => {
+    const copilot = {
+      ...window,
+      id: "github-copilot-monthly",
+      kind: "monthly",
+      usedPercent: 100,
+      canContinueAfterExhaustion: true,
+    } as const;
+    const limits = { checkedAt, windows: [copilot] };
+    const opencode = provider({
+      driver: ProviderDriverKind.make("opencode"),
+      workspaceSnapshots: [
+        {
+          cwd: "/project",
+          checkedAt,
+          slashCommands: [],
+          skills: [],
+          copilotUsageLimits: { "github-copilot": limits },
+        },
+      ],
+    });
+    const model = "github-copilot/gpt-5";
+    const selection = { model, cwd: "/project" };
+    const report = (context = selection, at = now) =>
+      collectProviderUsageLimits(opencode.instanceId, [opencode], [], at, context);
+    expect(report()?.accounts[0]?.limits).toEqual(limits);
+    expect(report({ ...selection, model: "openai/gpt-5" })).toBeNull();
+    expect(report({ ...selection, cwd: "/other-project" })).toBeNull();
+    expect(report(selection, now + 300_000)).toBeNull();
+
+    expect(
+      withUsageLimitsCommands([opencode], [])[0]?.workspaceSnapshots?.[0]?.slashCommands,
+    ).toEqual([expect.objectContaining({ name: "usage-limits" })]);
+    const selected = resolveProviderUsageLimitSource(
+      opencode.instanceId,
+      [opencode],
+      now,
+      selection,
+    );
+    expect(exhaustedUsageWindow(selected, now, model)).toBeUndefined();
+  });
+
   it("shows only the chosen Codex instance's limits for an OpenCode token-sharing model", () => {
     const codex = provider({
       auth: { status: "authenticated", type: "chatgpt" },

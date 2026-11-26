@@ -158,6 +158,9 @@ export const ServerProviderWorkspaceSnapshot = Schema.Struct({
       instanceId: Schema.optionalKey(Schema.NullOr(ProviderInstanceId)),
     }),
   ),
+  copilotUsageLimits: Schema.optional(
+    Schema.Record(TrimmedNonEmptyString, ServerProviderUsageLimits),
+  ),
   // Absent means the provider's machine `models`, which keeps most snapshots small.
   models: Schema.optional(Schema.Array(ServerProviderModel)),
   modelsPending: Schema.optional(Schema.Boolean),

@@ -31,6 +31,7 @@ import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { mergePathEntries } from "@t3tools/shared/shell";
 import { compareSemverVersions } from "@t3tools/shared/semver";
 import * as OpenCodeAdapterV2 from "./adapter.ts";
 import * as OpenCode2AdapterV2 from "./v2/adapter.ts";
@@ -40,6 +41,7 @@ import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
 import { openCodeUsageReader, type OpenCodeUsageReaderEnv } from "./usage.ts";
 import { readOpenCodeGoUsageLimits } from "./usageLimits.ts";
 import { readOpenCodeSubscriptionAccounts } from "./subscriptionAccounts.ts";
+import { readCopilotUsageLimits } from "@t3tools/provider-core/server/copilotUsageLimits";
 import { loadOpenCode2Catalog, loadOpenCode2DirectoryCatalog } from "./openCode2Catalog.ts";
 import {
   checkOpenCodeProviderStatus,
@@ -286,6 +288,7 @@ export const OpenCodeDriver: ProviderDriver<
     const latestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
     const digest = yield* Digest.Digest;
     const host = yield* ProviderHost.ProviderHost;
+    const platform = yield* HostProcess.Platform;
     const processEnv = yield* mergeProviderInstanceEnvironment(environment);
     const continuationIdentity = defaultProviderContinuationIdentity({
       driverKind: DRIVER_KIND,
@@ -543,7 +546,7 @@ export const OpenCodeDriver: ProviderDriver<
           if (!wasListed && (skillUpdates.get(directory) ?? 0) !== skillUpdatesBeforeRead) {
             yield* Queue.offer(skillRescans, cwd);
           }
-          const noSubscriptions = { subscriptionAccounts: [] };
+          const noSubscriptions = { subscriptionAccounts: [], copilotCredential: undefined };
           const subscriptions = external
             ? noSubscriptions
             : yield* Effect.all({
@@ -563,7 +566,33 @@ export const OpenCodeDriver: ProviderDriver<
                 Effect.timeout("5 seconds"),
                 Effect.orElseSucceed(() => noSubscriptions),
               );
-          return { ...workspace, ...subscriptions };
+          const { copilotCredential, ...subscriptionSnapshot } = subscriptions;
+          if (!copilotCredential) return { ...workspace, ...subscriptionSnapshot };
+          const directories = yield* host.managedBinaryDirectories ?? Effect.succeed([]);
+          const pathKey =
+            platform === "win32"
+              ? (Object.keys(processEnv).find((key) => key.toLowerCase() === "path") ?? "PATH")
+              : "PATH";
+          const cliPath = mergePathEntries(
+            processEnv[pathKey],
+            directories.join(platform === "win32" ? ";" : ":"),
+            platform,
+          );
+          const limits = yield* readCopilotUsageLimits({
+            command: "copilot",
+            env: { ...processEnv, [pathKey]: cliPath },
+            oauthToken: copilotCredential.token,
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          );
+          return {
+            ...workspace,
+            ...subscriptionSnapshot,
+            copilotUsageLimits: Object.fromEntries(
+              copilotCredential.modelProviderIds.map((id) => [id, limits]),
+            ),
+          };
         }).pipe(Effect.scoped),
       );
     const serverOwner = yield* OpenCodeServerOwner.make({

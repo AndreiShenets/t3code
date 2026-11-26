@@ -23,7 +23,12 @@ const Credential = Schema.Struct({
     type: Schema.String,
     methodID: Schema.optional(Schema.String),
     access: Schema.optional(Schema.String),
-    metadata: Schema.optional(Schema.Struct({ accountID: Schema.optional(Schema.String) })),
+    metadata: Schema.optional(
+      Schema.Struct({
+        accountID: Schema.optional(Schema.String),
+        enterpriseUrl: Schema.optional(Schema.String),
+      }),
+    ),
   }),
 });
 const Claims = Schema.Struct({
@@ -98,13 +103,30 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
     const accounts: NonNullable<ServerProviderWorkspaceSnapshot["subscriptionAccounts"]>[number][] =
       [];
     const tokenSharingModelProviders: string[] = [];
+    let copilotCredential: { modelProviderIds: string[]; token: string } | undefined;
     for (const provider of providers) {
       const matching = credentials.filter(
         (credential) => credential.integrationID === provider.integrationID,
       );
       if (matching.length !== 1) continue;
       const credential = matching[0]!.value;
-      if (provider.integrationID === "openai" && credential.type === "oauth") {
+      if (
+        provider.integrationID === "github-copilot" &&
+        credential.type === "oauth" &&
+        credential.methodID === "device" &&
+        credential.access &&
+        credential.metadata?.enterpriseUrl === undefined &&
+        !["apiKey", "authToken"].some((key) => provider.settings?.[key]) &&
+        !Object.keys(provider.headers ?? {}).some((key) => /authorization|api-key/i.test(key)) &&
+        (provider.settings?.baseURL === undefined ||
+          (typeof provider.settings.baseURL === "string" &&
+            /^https:\/\/api(?:\.(?:individual|business|enterprise))?\.githubcopilot\.com\/?$/.test(
+              provider.settings.baseURL,
+            )))
+      ) {
+        copilotCredential ??= { modelProviderIds: [], token: credential.access };
+        copilotCredential.modelProviderIds.push(provider.id);
+      } else if (provider.integrationID === "openai" && credential.type === "oauth") {
         if (
           ["apiKey", "authToken"].some((key) => provider.settings?.[key]) ||
           Object.keys(provider.headers ?? {}).some((key) => /authorization|api-key/i.test(key))
@@ -156,6 +178,7 @@ export const readOpenCodeSubscriptionAccounts = Effect.fn("OpenCode.readSubscrip
     }
     return {
       subscriptionAccounts: accounts,
+      ...(copilotCredential === undefined ? {} : { copilotCredential }),
       ...(tokenSharingModelProviders.length > 0 || input.codexUsageSource === null
         ? {
             codexUsageSource: {

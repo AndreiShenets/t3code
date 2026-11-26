@@ -205,6 +205,9 @@ export function upsertProviderWorkspaceSnapshot(
     ...(scopedSnapshot.codexUsageSource === undefined
       ? {}
       : { codexUsageSource: scopedSnapshot.codexUsageSource }),
+    ...(scopedSnapshot.copilotUsageLimits === undefined
+      ? {}
+      : { copilotUsageLimits: scopedSnapshot.copilotUsageLimits }),
     ...(models === undefined ? {} : { models }),
     ...(scopedSnapshot.workspaceModelsPending ? { modelsPending: true } : {}),
   } satisfies NonNullable<ServerProvider["workspaceSnapshots"]>[number];
@@ -1261,7 +1264,12 @@ export const layer = Layer.effect(
               ...candidate,
               workspaceSnapshots: candidate.workspaceSnapshots.map((snapshot) =>
                 snapshot.cwd === input.cwd
-                  ? { ...snapshot, subscriptionAccounts: undefined, codexUsageSource: undefined }
+                  ? {
+                      ...snapshot,
+                      subscriptionAccounts: undefined,
+                      codexUsageSource: undefined,
+                      copilotUsageLimits: undefined,
+                    }
                   : snapshot,
               ),
             };
