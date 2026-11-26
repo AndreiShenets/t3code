@@ -585,6 +585,8 @@
   "355234f96f858555": "Device stream stalled. Reconnecting…",
   "64b197cdb9380c6b": "Device stream connection failed. Reconnecting…",
   "569b183f80eb68df": "Device stream found no network candidates yet. Retrying…",
+  "5717fb8ba7e64068": "Today",
+  "cd88e18ab9eba9c8": "Today since midnight",
   "12cce1bb98aa42a8": "Device stream offer failed ({status}). Retrying…",
   "c5a9ce61ab77276b": "Device stream returned an invalid answer. Retrying…",
   "e25e5c200b5bfdb3": "Switching to WebRTC.",
