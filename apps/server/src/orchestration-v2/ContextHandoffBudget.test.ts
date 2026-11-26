@@ -293,6 +293,21 @@ describe("handoff budget", () => {
     }
   });
 
+  it("keeps session cost across model changes, but not different native sessions", () => {
+    const cost = { amount: 3.03, currency: "USD" };
+    const previousUsage = { usedTokens: 37_321, maxTokens: 258_400, cost };
+    for (const sameNativeThread of [true, false]) {
+      const usage = contextUsageForHandoff({
+        sameNativeThread,
+        sameSelection: false,
+        reuseTelemetry: false,
+        previousUsage,
+        knownModelWindow: 200_000,
+      });
+      assert.deepEqual(usage?.cost, sameNativeThread ? cost : undefined);
+    }
+  });
+
   it("keeps measured occupancy across a model change", () => {
     const previous = {
       usedTokens: 37_321,

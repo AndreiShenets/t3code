@@ -1,6 +1,11 @@
 import * as Schema from "effect/Schema";
 
-import { ForwardCompatibleArray, NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import {
+  ForwardCompatibleArray,
+  NonNegativeInt,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "./baseSchemas.ts";
 
 /** Bump for incompatible UsageSummary changes; skipped unknown array variants need no bump. */
 export const USAGE_CONTRACT_VERSION = 6 as const;
@@ -145,6 +150,8 @@ export const UsageSummaryInput = Schema.Struct({
   /** Accept an immediate answer from the last scan; its sources are marked refreshing. */
   provisional: Schema.optional(Schema.Boolean),
   modelFilter: Schema.optional(UsageModelFilter),
+  /** Keeps records of this thread's native sessions and its subagents' sessions. */
+  threadId: Schema.optional(ThreadId),
 });
 export type UsageSummaryInput = typeof UsageSummaryInput.Type;
 
@@ -160,6 +167,8 @@ export const UsageSummary = Schema.Struct({
   scanDurationMs: NonNegativeInt,
   /** The filter the server applied; absent means unfiltered, including servers that predate filters. */
   modelFilter: Schema.optional(UsageModelFilter),
+  /** The thread the server filtered by; absent from servers that predate thread filters. */
+  threadId: Schema.optional(ThreadId),
 });
 export type UsageSummary = typeof UsageSummary.Type;
 

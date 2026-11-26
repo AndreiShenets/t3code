@@ -80,9 +80,16 @@ describe("V2 context window presentation", () => {
     const snapshot = deriveLatestContextWindowSnapshot(
       [compactionEntry(null)],
       usageBeforeCompaction,
+      {
+        id: ProviderThreadId.make("provider-thread"),
+        contextUsage: { usedTokens: 985_000, cost: { amount: 0.42, currency: "USD" } },
+        updatedAt: DateTime.makeUnsafe("2026-06-19T23:55:00.000Z"),
+      },
+      0.08,
     );
     expect(snapshot?.usedTokens).toBe(2_000);
     expect(snapshot?.maxTokens).toBe(1_000_000);
+    expect(snapshot?.cost).toEqual({ amount: 0.5, currency: "USD" });
 
     // A report in the compaction's own millisecond is the provider's post-compaction usage.
     const reportedWithCompaction = decodeTokenUsage({
@@ -118,6 +125,35 @@ describe("V2 context window presentation", () => {
 });
 
 describe("live provider-turn usage (#8144)", () => {
+  it("includes delegated session cost without adding child context tokens", () => {
+    const snapshot = deriveLatestContextWindowSnapshot(
+      [],
+      decodeTokenUsage({ usedTokens: 42_000, updatedAt: "2026-10-22T12:00:00.000Z" }),
+      {
+        id: ProviderThreadId.make("provider-thread"),
+        contextUsage: { usedTokens: 42_000, cost: { amount: 0, currency: "USD" } },
+        updatedAt: DateTime.makeUnsafe("2026-10-22T11:59:00.000Z"),
+      },
+      0.2593974,
+    );
+    expect(snapshot?.cost).toEqual({ amount: 0.2593974, currency: "USD" });
+    expect(snapshot?.usedTokens).toBe(42_000);
+  });
+
+  it.each([0, 3.03])("retains session cost %d alongside live context tokens", (amount) => {
+    const snapshot = deriveLatestContextWindowSnapshot(
+      [],
+      decodeTokenUsage({ usedTokens: 42_000, updatedAt: "2026-10-22T12:00:00.000Z" }),
+      {
+        id: ProviderThreadId.make("provider-thread"),
+        contextUsage: { usedTokens: 0, cost: { amount, currency: "USD" } },
+        updatedAt: DateTime.makeUnsafe("2026-10-22T11:59:00.000Z"),
+      },
+    );
+    expect(snapshot?.usedTokens).toBe(42_000);
+    expect(snapshot?.cost).toEqual({ amount, currency: "USD" });
+  });
+
   it("prefers the provider's live report over compaction items", () => {
     const usage = decodeTokenUsage({
       usedTokens: 42_000,

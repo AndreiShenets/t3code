@@ -16,6 +16,7 @@ import { formatDuration, limitsNotice } from "@t3tools/shared/usageLimitsCopy";
 import { Link } from "@tanstack/react-router";
 import { msg, useGT, useLocale, useMessages } from "gt-react";
 import type { ReactNode } from "react";
+import { formatUsd } from "@t3tools/shared/usageFormat";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { useNowMinute } from "../../hooks/useNowMinute";
@@ -196,6 +197,40 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
   );
 }
 
+export function ThreadDetailsSessionCost({
+  cost,
+  onOpenUsage,
+}: {
+  readonly cost: NonNullable<ContextWindowSnapshot["cost"]>;
+  readonly onOpenUsage: () => void;
+}) {
+  const gt = useGT();
+  const value =
+    cost.currency === "USD" ? formatUsd(cost.amount) : `${cost.currency} ${cost.amount.toFixed(2)}`;
+  return (
+    <ThreadDetailsSection
+      headingId="thread-details-session-cost-heading"
+      title={gt("Session cost")}
+      showHeading={false}
+    >
+      <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
+        <UsageRow
+          label={gt("Session cost")}
+          fill={null}
+          tone={null}
+          value={value}
+          onClick={onOpenUsage}
+          tooltip={
+            <span className="text-foreground">
+              {gt("Includes reported delegated-agent costs.")}
+            </span>
+          }
+        />
+      </div>
+    </ThreadDetailsSection>
+  );
+}
+
 function LimitRow({
   window,
   now,
@@ -322,6 +357,7 @@ function UsageRow({
   tooltip,
   muted = false,
   opensUsage = false,
+  onClick,
 }: {
   readonly label: string;
   /** Bar fill from 0 to 100. Null hides the bar. */
@@ -334,13 +370,15 @@ function UsageRow({
   readonly tooltip: ReactNode;
   readonly muted?: boolean;
   readonly opensUsage?: boolean;
+  /** Makes the row a button; clicks show what the tooltip's last line names. */
+  readonly onClick?: () => void;
 }) {
   const gt = useGT();
   const rowProps = {
     "aria-label": gt("{label}: {value}", { label, value: ariaValue }),
     className: cn(
       "col-span-3 grid h-6 grid-cols-subgrid items-center rounded-lg px-2.5 outline-none hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-black/[0.035] dark:hover:bg-white/[0.08] dark:data-popup-open:bg-white/[0.08]",
-      opensUsage
+      opensUsage || onClick
         ? "group cursor-pointer active:bg-black/[0.06] dark:active:bg-white/[0.12]"
         : "cursor-default",
     ),
@@ -349,7 +387,13 @@ function UsageRow({
     <Tooltip>
       <TooltipTrigger
         render={
-          opensUsage ? <Link to="/usage" {...rowProps} /> : <div tabIndex={0} {...rowProps} />
+          opensUsage ? (
+            <Link to="/usage" {...rowProps} />
+          ) : onClick ? (
+            <button type="button" onClick={onClick} {...rowProps} />
+          ) : (
+            <div tabIndex={0} {...rowProps} />
+          )
         }
       >
         <span className="max-w-28 truncate text-muted-foreground group-hover:text-foreground">
@@ -402,7 +446,9 @@ function UsageRow({
       <TooltipPopup side="left" sideOffset={16}>
         <div className="flex flex-col gap-0.5">
           {tooltip}
-          {opensUsage ? <span className="text-muted-foreground">{gt("Open usage")}</span> : null}
+          {opensUsage || onClick ? (
+            <span className="text-muted-foreground">{gt("Open usage")}</span>
+          ) : null}
         </div>
       </TooltipPopup>
     </Tooltip>
