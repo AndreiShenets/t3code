@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
@@ -1567,7 +1568,7 @@ describe("DesktopWindow", () => {
           assert.isTrue(webPreferences.contextIsolation);
           assert.equal(
             webPreferences.preload,
-            "/repo/apps/desktop/dist-electron/preview-pick-preload.cjs",
+            NodePath.join(environmentInput.dirname, "preview-pick-preload.cjs"),
           );
         }).pipe(Effect.provide(layer));
       }),
