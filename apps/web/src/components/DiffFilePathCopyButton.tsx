@@ -5,14 +5,14 @@ import { useRef } from "react";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { ANCHORED_COPY_TOAST_TIMEOUT_MS, showAnchoredCopyErrorToast } from "./ui/anchoredCopyToast";
 import { Button } from "./ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { SharedTooltipTrigger } from "./ui/shared-tooltip";
 
 export function DiffFilePathCopyButton({
   filePath,
   workspaceRoot,
 }: {
   filePath: string;
-  workspaceRoot?: string | undefined;
+  workspaceRoot: string | undefined;
 }) {
   const gt = useGT();
   const ref = useRef<HTMLButtonElement>(null);
@@ -22,26 +22,26 @@ export function DiffFilePathCopyButton({
   });
 
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            ref={ref}
-            size="icon-micro"
-            variant="ghost-muted"
-            aria-label={gt("Copy file path")}
-            onClick={(event) => {
-              event.stopPropagation();
-              copyToClipboard(formatFilePathForClipboard(filePath, workspaceRoot), undefined);
-            }}
-          />
-        }
-      >
-        {isCopied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
-      </TooltipTrigger>
-      <TooltipPopup>
-        <p>{isCopied ? gt("Copied") : gt("Copy path")}</p>
-      </TooltipPopup>
-    </Tooltip>
+    <SharedTooltipTrigger
+      render={
+        <Button
+          ref={ref}
+          size="icon-micro"
+          variant="ghost-muted"
+          aria-label={gt("Copy file path")}
+          onClick={(event) => {
+            event.stopPropagation();
+            copyToClipboard(formatFilePathForClipboard(filePath, workspaceRoot), undefined);
+          }}
+        />
+      }
+      label={
+        <>
+          <p>{isCopied ? gt("Copied") : gt("Copy path")}</p>
+        </>
+      }
+    >
+      {isCopied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
+    </SharedTooltipTrigger>
   );
 }
