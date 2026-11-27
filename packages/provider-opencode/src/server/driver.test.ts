@@ -718,7 +718,7 @@ it.layer(layer)("OpenCodeDriver runtime selection", (it) => {
       Effect.sync(() => {
         const data = event.replace(
           '"directory":"/work"',
-          `"directory":${JSON.stringify(directory)}`,
+          `"directory":${JSON.stringify(NodePath.resolve(directory))}`,
         );
         const frame = new TextEncoder().encode(`data: ${data}\n\n`);
         for (const stream of streams) {
