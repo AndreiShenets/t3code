@@ -30,11 +30,7 @@ import {
   updateReleasePackageVersions,
 } from "./update-release-package-versions.ts";
 import { applyWebBrandAssets } from "./apply-web-brand-assets.ts";
-import {
-  BRAND_ASSET_PATHS,
-  resolveWebAssetBrandForChannel,
-  type WebAssetBrand,
-} from "./lib/brand-assets.ts";
+import { resolveWebAssetBrandForChannel, type WebAssetBrand } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import {
   findInlinedExternalPackages,
@@ -2766,21 +2762,11 @@ export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
   return resolveWebAssetBrandForChannel(resolveDesktopUpdateChannel(version));
 }
 
-export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
-  if (resolveDesktopUpdateChannel(version) === "nightly") {
-    return {
-      macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
-      linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
-      windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
-    };
-  }
-
-  return {
-    macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
-    linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
-    windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
-  };
-}
+const desktopBuildIconAssets: DesktopBuildIconAssets = {
+  macIconPng: "assets/as-code/icon-macos-1024.png",
+  linuxIconPng: "assets/as-code/icon-1024.png",
+  windowsIconIco: "apps/web/public/favicon.ico",
+};
 
 export function resolveMockUpdateServerUrl(mockUpdateServerPort: number | undefined): string {
   return `http://localhost:${mockUpdateServerPort ?? 3000}`;
@@ -2799,8 +2785,8 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "T3 Code (Nightly)"
-    : (desktopPackageJson.productName ?? "T3 Code");
+    ? "AS Code (Nightly)"
+    : (desktopPackageJson.productName ?? "AS Code");
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -3740,7 +3726,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
 
   const appVersion =
     options.version ?? resolveTaggedSourceVersion(repoRoot, serverPackageJson.version);
-  const iconAssets = resolveDesktopBuildIconAssets(appVersion);
+  const iconAssets = desktopBuildIconAssets;
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
