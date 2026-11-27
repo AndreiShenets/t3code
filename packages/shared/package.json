@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./usageSeries": {
+      "types": "./src/usageSeries.ts",
+      "import": "./src/usageSeries.ts"
+    },
     "./png": {
       "types": "./src/png.ts",
       "import": "./src/png.ts"
