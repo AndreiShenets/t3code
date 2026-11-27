@@ -4168,6 +4168,7 @@ export default function ChatView(props: ChatViewProps) {
                     )
                   }
                   gitCwd={gitCwd}
+                  mcpProvider={activeProviderStatus}
                   workspaceMutationId={workspaceRevision.revision}
                   isGitRepo={isGitRepo}
                   offersWorkspaceModes={workspaceModesOffered}
