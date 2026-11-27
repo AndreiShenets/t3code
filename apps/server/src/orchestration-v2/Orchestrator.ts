@@ -529,6 +529,9 @@ export interface OrchestratorV2Shape {
     ReadonlyArray<ThreadId>,
     OrchestratorV2Error
   >;
+  readonly listNativeSessionIds: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<string>, OrchestratorV2Error>;
   readonly countThreads: () => Effect.Effect<number, OrchestratorV2Error>;
   readonly listActiveShellIndex: () => Effect.Effect<
     ReadonlyArray<ActiveShellIndexEntry>,
@@ -17641,6 +17644,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     ),
     getShellSnapshot: Effect.fn("OrchestratorV2.getShellSnapshot")(function (options) {
       return projectionStore.getShellSnapshot(options).pipe(Effect.mapError(shellProjectionError));
+    }),
+    listNativeSessionIds: Effect.fn("OrchestratorV2.listNativeSessionIds")(function (threadId) {
+      return projectionStore
+        .listNativeSessionIds(threadId)
+        .pipe(Effect.mapError(shellProjectionError));
     }),
     listActiveSubagentThreadIds: Effect.fn("OrchestratorV2.listActiveSubagentThreadIds")(
       function () {

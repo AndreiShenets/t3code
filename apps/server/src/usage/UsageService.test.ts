@@ -18,6 +18,7 @@ import {
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
+  ThreadId,
   UsageDay,
   type UsageSource,
   type UsageSummary,
@@ -3176,6 +3177,41 @@ describe("UsageService", () => {
             ratesDocument: rates,
           }),
         ),
+      );
+    }),
+  );
+
+  it.effect("keeps only the requested sessions and echoes the thread", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      yield* Effect.promise(() =>
+        NodeFSP.writeFile(
+          transcript,
+          claudeLine(1, 3, "claude-fable-5", "thread-session") +
+            claudeLine(2, 5, "claude-fable-5", "subagent-session") +
+            claudeLine(3, 7, "claude-fable-5", "other-session"),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const service = yield* UsageService.make;
+        const threadId = ThreadId.make("thread-1");
+        const [all, thread, none] = yield* Effect.all(
+          [
+            service.readSummary(WINDOW),
+            service.readSummary({ ...WINDOW, threadId }, ["thread-session", "subagent-session"]),
+            service.readSummary({ ...WINDOW, threadId }, []),
+          ],
+          { concurrency: "unbounded" },
+        );
+        assert.strictEqual(totalOutputTokens(all), 15);
+        assert.strictEqual(all.threadId, undefined);
+        assert.strictEqual(totalOutputTokens(thread), 8);
+        assert.strictEqual(thread.sources[0]?.distinctSessions, 2);
+        assert.strictEqual(thread.threadId, threadId);
+        assert.deepStrictEqual(none.buckets, []);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(layerService({ prefix: "usage-service-session-filter", home, settings })),
       );
     }),
   );

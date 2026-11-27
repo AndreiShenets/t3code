@@ -31,54 +31,87 @@ export interface EnvironmentUsageStatus {
   readonly summary: UsageSummary | null;
 }
 
+function environmentUsageStatus(
+  get: Atom.AtomContext,
+  environmentId: EnvironmentId,
+  input: UsageSummaryInput,
+): EnvironmentUsageStatus | null {
+  const presentation = get(environmentPresentations.presentationsAtom).get(environmentId);
+  if (presentation === undefined) return null;
+  const isConnected = presentation.connection.phase === "connected";
+  const sessionResult = get(environmentSession.sessionStateAtom(environmentId));
+  const access = resolveUsageAccess({
+    connectionPhase: presentation.connection.phase,
+    session: AsyncResult.getOrElse(sessionResult, () => null),
+    hasSessionError: sessionResult._tag === "Failure",
+  });
+  if (!access.canReadDiagnostics) {
+    return {
+      environmentId,
+      label: presentation.entry.target.label,
+      isConnected,
+      ...access,
+      summary: null,
+    };
+  }
+  const result = get(
+    serverEnvironment.usageSummary({
+      environmentId,
+      input: usageSummaryInput(input, get(serverEnvironment.usageModelFilterAtom(environmentId))),
+    }),
+  );
+  return {
+    environmentId,
+    label: presentation.entry.target.label,
+    isPending: result.waiting,
+    canReadDiagnostics: true,
+    isConnected,
+    error: result._tag === "Failure" ? m(msg("This environment could not report usage.")) : null,
+    summary: AsyncResult.getOrElse(result, () => null),
+  };
+}
+
 const usageByWindowAtom = Atom.family((windowKey: string) =>
   Atom.make((get): readonly EnvironmentUsageStatus[] => {
     const input = JSON.parse(windowKey) as UsageSummaryInput;
-    const presentations = get(environmentPresentations.presentationsAtom);
-
-    const statuses: EnvironmentUsageStatus[] = [];
-    for (const [environmentId, presentation] of presentations) {
-      const isConnected = presentation.connection.phase === "connected";
-      const sessionResult = get(environmentSession.sessionStateAtom(environmentId));
-      const access = resolveUsageAccess({
-        connectionPhase: presentation.connection.phase,
-        session: AsyncResult.getOrElse(sessionResult, () => null),
-        hasSessionError: sessionResult._tag === "Failure",
-      });
-      if (!access.canReadDiagnostics) {
-        statuses.push({
-          environmentId,
-          label: presentation.entry.target.label,
-          isConnected,
-          ...access,
-          summary: null,
-        });
-        continue;
-      }
-      const result = get(
-        serverEnvironment.usageSummary({
-          environmentId,
-          input: usageSummaryInput(
-            input,
-            get(serverEnvironment.usageModelFilterAtom(environmentId)),
-          ),
-        }),
-      );
-      const summary = AsyncResult.getOrElse(result, () => null);
-      statuses.push({
-        environmentId,
-        label: presentation.entry.target.label,
-        isPending: result.waiting,
-        canReadDiagnostics: true,
-        isConnected,
-        error:
-          result._tag === "Failure" ? m(msg("This environment could not report usage.")) : null,
-        summary,
-      });
-    }
-    return statuses;
+    return [...get(environmentPresentations.presentationsAtom).keys()].flatMap(
+      (environmentId) => environmentUsageStatus(get, environmentId, input) ?? [],
+    );
   }).pipe(Atom.withLabel(`web-usage:window:${windowKey}`)),
 );
+
+const threadUsageAtom = Atom.family((key: string) =>
+  Atom.make((get): EnvironmentUsageStatus | null => {
+    const { environmentId, input } = JSON.parse(key) as {
+      readonly environmentId: EnvironmentId;
+      readonly input: UsageSummaryInput;
+    };
+    return environmentUsageStatus(get, environmentId, input);
+  }).pipe(Atom.withLabel(`web-usage:thread:${key}`)),
+);
+
+/** One environment's usage for a window filtered by `input.threadId`. */
+export function useThreadUsage(
+  environmentId: EnvironmentId,
+  input: UsageSummaryInput,
+): EnvironmentUsageStatus | null {
+  return useAtomValue(threadUsageAtom(JSON.stringify({ environmentId, input })));
+}
+
+/** Re-reads one environment's thread usage, refreshing rates first as the Usage page does. */
+export function refreshThreadUsage(
+  environmentId: EnvironmentId,
+  input: UsageSummaryInput,
+): Promise<void> {
+  if (!readEnvironmentScope(environmentId, AuthDiagnosticsReadScope)) return Promise.resolve();
+  return refreshUsage({
+    registry: appAtomRegistry,
+    server: serverEnvironment,
+    presentations: environmentPresentations,
+    environmentIds: [environmentId],
+    input,
+  });
+}
 
 export interface UsageView {
   readonly merged: MergedUsage;
