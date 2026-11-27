@@ -1,5 +1,5 @@
 import { assert, describe, expect, it } from "vite-plus/test";
-import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { STATIC_KEYBINDING_COMMANDS, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import {
   compileResolvedKeybindingsConfig,
   DEFAULT_RESOLVED_KEYBINDINGS,
@@ -7,6 +7,7 @@ import {
   parseKeybindingShortcut,
 } from "@t3tools/shared/keybindings";
 
+import type { MessageResolver } from "../../i18n/messages";
 import { resolveShortcutCommand } from "../../keybindings";
 import { m } from "../../i18n/messages";
 
@@ -172,6 +173,15 @@ describe("KeybindingsSettings.logic", () => {
       ),
     );
     expect(unassigned.find((row) => row.key === "f8")?.defaultKey).toBe("mod+n");
+  });
+
+  it("gives every built-in command a translatable label", () => {
+    const translated = (() => "translated") as unknown as MessageResolver;
+    expect(
+      STATIC_KEYBINDING_COMMANDS.filter(
+        (command) => commandLabel(command, translated) !== "translated",
+      ),
+    ).toEqual([]);
   });
 
   it("shares a stable editor for resolved duplicates but separates commands, shortcuts, and conditions", () => {
