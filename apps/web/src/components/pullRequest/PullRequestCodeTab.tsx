@@ -540,10 +540,8 @@ function PullRequestCodeTab({
   const referenceKey = pullRequestReviewKey(reference);
   // A commit opened from the timeline or left selected across a force-push may no longer be
   // part of the pull request; read it as "All commits" instead of requesting its diff.
-  const commit =
-    selectedCommitOid !== null && detail.commits.some((entry) => entry.oid === selectedCommitOid)
-      ? selectedCommitOid
-      : null;
+  const selectedCommit = detail.commits.find((entry) => entry.oid === selectedCommitOid);
+  const commit = selectedCommit?.oid ?? null;
   const scopeKey = JSON.stringify([environmentId, referenceKey, commit]);
   // The panel keeps this mounted across pull requests, so an open composer would otherwise
   // survive the switch and attach its comment to whichever one is on screen when it is sent.
@@ -832,7 +830,7 @@ function PullRequestCodeTab({
       })
     : testFilteredFiles;
   const hiddenReviewedFileCount = testFilteredFiles.length - files.length;
-  const filePaths = loadedFiles.map((file) => resolveFileDiffPath(file));
+  const filePaths = testFilteredFiles.map((file) => resolveFileDiffPath(file));
   const nextCursor = loadedSlices.at(-1)?.nextCursor ?? null;
   const draftFile =
     draft === null
@@ -1466,8 +1464,26 @@ function PullRequestCodeTab({
     </div>
   );
 
-  const selectedCommit = orderedCommits.find((entry) => entry.oid === commit);
   const scopeLabel = selectedCommit ? selectedCommit.messageHeadline : gt("All commits");
+  const reportedFileCount = selectedCommit ? selectedCommit.changedFiles : detail.changedFiles;
+  const scopeFileCount = hideTestFiles ? 0 : (reportedFileCount ?? 0);
+  const fileCount = Math.max(scopeFileCount, testFilteredFiles.length);
+  const fileCountSuffix =
+    nextCursor !== null && (scopeFileCount === 0 || scopeFileCount < fileCount) ? "+" : "";
+  const usePullRequestViewedCount =
+    viewedFilesStore === "host" &&
+    commit === null &&
+    !hideTestFiles &&
+    filesViewed.viewedCount <= fileCount;
+  const viewedCount = usePullRequestViewedCount
+    ? filesViewed.viewedCount
+    : filePaths.filter(isFileViewed).length;
+  const viewedCountSuffix =
+    !usePullRequestViewedCount &&
+    (nextCursor !== null || testFilteredFiles.length < fileCount) &&
+    viewedCount < filesViewed.viewedCount
+      ? "+"
+      : "";
   const hiddenTestFilesLabel =
     hiddenTestFileCount > 0
       ? gt("{count, plural, one {{count} test file hidden} other {{count} test files hidden}}", {
@@ -1543,9 +1559,9 @@ function PullRequestCodeTab({
           <span className="flex shrink-0 items-center gap-1.5">
             <span className="tabular-nums">
               {gt("{count, plural, one {{count} file} other {{count} files}}", {
-                count: files.length,
+                count: hideReviewedFiles ? files.length : fileCount,
               })}
-              {nextCursor === null ? "" : "+"}
+              {hideReviewedFiles && nextCursor !== null ? "+" : fileCountSuffix}
             </span>
             {hiddenTestFilesLabel !== null && (files.length > 0 || nextCursor !== null) ? (
               <span className="hidden items-center gap-1.5 @2xl:flex">
@@ -1579,7 +1595,9 @@ function PullRequestCodeTab({
           {filesViewed.enabled && loadedFiles.length > 0 ? (
             <span className="flex min-w-0 items-center gap-1 tabular-nums">
               <span className="shrink-0">
-                {filePaths.filter(isFileViewed).length} / {loadedFiles.length}
+                {viewedCount}
+                {viewedCountSuffix} / {fileCount}
+                {fileCountSuffix}
               </span>
               <span className="truncate">
                 {viewedFilesStore === "environment"
