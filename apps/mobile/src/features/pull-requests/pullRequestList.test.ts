@@ -25,7 +25,6 @@ import {
   scopedPullRequestListKey,
   shownPullRequestListPages,
   pullRequestListRowsAreEqual,
-  pullRequestListFacets,
   withAnsweredPullRequestStats,
   withListedPullRequests,
   withShownPullRequestStats,
