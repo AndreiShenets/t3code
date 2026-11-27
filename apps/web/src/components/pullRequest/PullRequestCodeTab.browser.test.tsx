@@ -86,6 +86,7 @@ const mocks = vi.hoisted(() => ({
   refreshed: false,
   diffCommits: [] as Array<string | undefined>,
   viewedPaths: null as ReadonlySet<string> | null,
+  stalePaths: new Set<string>(),
   viewedListeners: new Set<() => void>(),
 }));
 
@@ -111,7 +112,7 @@ vi.mock(import("./usePullRequestFilesViewed"), async () => {
         enabled: viewedPaths !== null,
         viewedCount: viewedPaths?.size ?? 0,
         isViewed: (path: string) => viewedPaths?.has(path) === true,
-        isStale: () => false,
+        isStale: (path: string) => mocks.stalePaths.has(path),
         setViewed: (path: string, viewed: boolean) => {
           const next = new Set(mocks.viewedPaths);
           if (viewed) next.add(path);
@@ -200,6 +201,7 @@ const detail: PullRequestDetailView = {
 
 function setup({ paged }: { paged: boolean }) {
   window.localStorage.removeItem("t3code.diffHideTestFiles");
+  window.localStorage.removeItem("t3code.pullRequestHideReviewedFiles");
   __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
   mocks.paged = paged;
   mocks.shortPages = false;
@@ -208,6 +210,7 @@ function setup({ paged }: { paged: boolean }) {
   mocks.refreshed = false;
   mocks.diffCommits = [];
   mocks.viewedPaths = null;
+  mocks.stalePaths = new Set();
   mocks.viewedListeners.clear();
 }
 
@@ -270,6 +273,7 @@ it("restores saved Viewed folds, follows cleared marks, and allows explicit expa
   using _preferences = {
     [Symbol.dispose]() {
       __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
+      window.localStorage.removeItem("t3code.pullRequestHideReviewedFiles");
     },
   };
   mocks.viewedPaths = new Set(["a.ts"]);
@@ -308,6 +312,32 @@ it("restores saved Viewed folds, follows cleared marks, and allows explicit expa
   await expect
     .element(screen.getByRole("button", { name: "Expand diff", exact: true }))
     .toHaveAttribute("aria-expanded", "false");
+
+  const hideReviewed = screen.getByRole("button", { name: "Hide reviewed files", exact: true });
+  await expect.element(hideReviewed).toHaveAttribute("aria-pressed", "false");
+  await hideReviewed.click();
+  await expect
+    .element(screen.getByText("All files are hidden by the current filters."))
+    .toBeVisible();
+  await expect.element(screen.getByText("a.ts", { exact: true })).not.toBeInTheDocument();
+  await expect.element(screen.getByText("1 / 1", { exact: true })).toBeVisible();
+
+  await screen.getByRole("button", { name: "1 reviewed file hidden", exact: true }).click();
+  await expect.element(screen.getByRole("checkbox", { name: "Viewed" })).toBeChecked();
+  await hideReviewed.click();
+  deliverViewedPaths(new Set());
+  await expect.element(screen.getByRole("checkbox", { name: "Viewed" })).not.toBeChecked();
+  screen.getByRole("checkbox", { name: "Viewed" }).element().focus();
+  await userEvent.keyboard(" ");
+  await expect
+    .element(screen.getByText("All files are hidden by the current filters."))
+    .toBeVisible();
+  await hideReviewed.click();
+  await expect.element(screen.getByRole("checkbox", { name: "Viewed" })).toBeChecked();
+  await hideReviewed.click();
+  mocks.stalePaths.add("a.ts");
+  deliverViewedPaths(new Set());
+  await expect.element(screen.getByRole("checkbox", { name: "Changed" })).toBeVisible();
 });
 
 // regression: #13279 a Viewed answer that lands after a link reveals a file must not fold it
@@ -365,10 +395,12 @@ it("scrolls to a file asked for as the tab opens", async () => {
 
 it("pages forward to a file asked for that is not loaded yet, then scrolls to it", async () => {
   setup({ paged: true });
+  mocks.viewedPaths = new Set(["late.test.ts"]);
   __setClientSettingsForTests({ ...DEFAULT_CLIENT_SETTINGS, diffFilesCollapsed: true });
   using _preferences = {
     [Symbol.dispose]() {
       window.localStorage.removeItem("t3code.diffHideTestFiles");
+      window.localStorage.removeItem("t3code.pullRequestHideReviewedFiles");
       __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
     },
   };
@@ -376,6 +408,7 @@ it("pages forward to a file asked for that is not loaded yet, then scrolls to it
   await using screen = await render(tab(0), { container });
   await expect.element(screen.getByText("early-0.ts", { exact: true }).first()).toBeVisible();
   await screen.getByRole("button", { name: "Hide test files" }).click();
+  await screen.getByRole("button", { name: "Hide reviewed files", exact: true }).click();
 
   const url = `${detail.url}/files#diff-${bytesToHex(sha256(new TextEncoder().encode("late.test.ts")))}R4-R5`;
   const settled = vi.fn();
@@ -388,6 +421,53 @@ it("pages forward to a file asked for that is not loaded yet, then scrolls to it
   await screen.rerender(tab(0, { path: "early-0.ts", nonce: 1 }));
   await expectFileHeaderShown(screen, container, "early-0.ts");
   await screen.rerender(tab(0, { path: "early-0.ts", nonce: 1 }, url, settled));
+  await expectFileHeaderShown(screen, container, "late.test.ts");
+});
+
+it("pages past reviewed files and applies both filters to the diff and file tree", async () => {
+  setup({ paged: true });
+  __setClientSettingsForTests({ ...DEFAULT_CLIENT_SETTINGS, diffFilesCollapsed: true });
+  using _preferences = {
+    [Symbol.dispose]() {
+      window.localStorage.removeItem("t3code.diffHideTestFiles");
+      window.localStorage.removeItem("t3code.pullRequestHideReviewedFiles");
+      window.localStorage.removeItem("t3code.pullRequestFileTreeOpen");
+      __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
+    },
+  };
+  mocks.viewedPaths = new Set(
+    Array.from({ length: 40 }, (_, index) =>
+      index === 1 ? "early-1.test.ts" : `early-${index}.ts`,
+    ),
+  );
+  const container = pagedContainer();
+  await using screen = await render(tab(0), { container });
+  await screen.getByRole("button", { name: "Hide reviewed files", exact: true }).click();
+
+  await expectFileHeaderShown(screen, container, "late.test.ts");
+  await expect.element(screen.getByText("1 file", { exact: true })).toBeVisible();
+  await expect.element(screen.getByText("40 / 41", { exact: true })).toBeVisible();
+  await screen.getByRole("button", { name: "Show file tree" }).click();
+  await expect.element(screen.getByRole("treeitem", { name: "late.test.ts" })).toBeVisible();
+  await expect.element(screen.getByText("early-0.ts", { exact: true })).not.toBeInTheDocument();
+  await screen.getByRole("button", { name: "Hide test files" }).click();
+  await expect.element(screen.getByText("0 files", { exact: true })).toBeVisible();
+  await expect.element(screen.getByText("2 test files hidden", { exact: true })).toBeVisible();
+  await expect
+    .element(screen.getByRole("treeitem", { name: "late.test.ts" }))
+    .not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("button", { name: "39 reviewed files hidden", exact: true }))
+    .toBeVisible();
+  await expect.element(screen.getByText("40 / 41", { exact: true })).toBeVisible();
+  await screen.getByRole("button", { name: "Show test files", exact: true }).click();
+  await expectFileHeaderShown(screen, container, "late.test.ts");
+
+  await screen.rerender(<div />);
+  await screen.rerender(tab(0));
+  await expect
+    .element(screen.getByRole("button", { name: "Hide reviewed files", exact: true }))
+    .toHaveAttribute("aria-pressed", "true");
   await expectFileHeaderShown(screen, container, "late.test.ts");
 });
 
