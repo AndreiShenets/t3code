@@ -53,6 +53,15 @@ A turn's diff shows only that turn's own edits, commits, and conflict fixes—ex
 - **Commit links**: Links to local commits open in the Diff pane (follows **Settings → Diffs → Open pull requests in T3 Code**; `Cmd/Ctrl+Click` opens in browser).
 - **Multi-repo projects**: Use the repository picker in the Diff pane and expand per-repo rows in thread details. See [Projects with several repositories](./multi-repo-projects.md).
 
+### Tab width and whitespace
+
+On web and desktop, file and diff views use the applicable `.editorconfig` for `tab_width`,
+falling back to `indent_size` or two columns. Pull requests use the reviewed revision's
+configuration; workspace views use the current files.
+
+To see spaces as dots and tabs as arrows, enable **Settings → General → Show whitespace
+characters**. The setting is off by default and saved per device or browser.
+
 ## Create, review, and merge pull requests
 
 - **Create**: Commit, push, and open PRs from a thread's Git actions. Configure AI-generated commit/PR writing style in **Settings → Source control & issues → Commits & pull requests** (**Repository conventions** or **Custom instructions**).
