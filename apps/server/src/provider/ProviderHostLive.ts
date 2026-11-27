@@ -1,10 +1,13 @@
+import { acpRegistryManagedBinaryDirectories } from "@t3tools/provider-acp-registry/server";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { ProviderCredentialError } from "@t3tools/provider-core/server/errors";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 
 import { resolveAttachmentPath } from "../attachmentStore.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -26,6 +29,9 @@ export const layer = Layer.effect(
     const secrets = yield* ServerSecretStore.ServerSecretStore;
     const digest = yield* Digest.Digest;
     const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const platform = yield* HostProcess.Platform;
+    const architecture = yield* HostProcess.Architecture;
     // Optional so standalone provider layers in tests probe at once.
     const lifecycleEvents = yield* Effect.serviceOption(
       ServerLifecycleEvents.ServerLifecycleEvents,
@@ -49,6 +55,15 @@ export const layer = Layer.effect(
         providerStatusCacheDir: config.providerStatusCacheDir,
         attachmentsDir: config.attachmentsDir,
       },
+      managedBinaryDirectories: acpRegistryManagedBinaryDirectories({
+        cacheDir: config.providerStatusCacheDir,
+        toolsDir: path.join(config.baseDir, "tools"),
+        platform,
+        architecture,
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+      ),
       settings: {
         get: serverSettings.getSettings,
         withSnapshot: serverSettings.withSettingsSnapshot,

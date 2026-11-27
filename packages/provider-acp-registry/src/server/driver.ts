@@ -30,6 +30,7 @@ import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { AcpRegistryAdapterV2Driver, type AcpRegistryAdapterV2DriverEnv } from "./adapter.ts";
 import { makeAcpRegistryTextGeneration } from "./textGeneration.ts";
 import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
+import { readCopilotUsageLimits } from "@t3tools/provider-core/server/copilotUsageLimits";
 import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import {
@@ -850,7 +851,38 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
         Effect.provideService(Path.Path, path),
         Effect.provideService(SecureRandom.SecureRandom, random),
       );
-      return { provider, modelsFromModelSelect: yield* Ref.get(modelsFromSelectRef) };
+      const isCopilot =
+        effectiveConfig.source === "local"
+          ? /(?:^|[\\/])copilot(?:\.exe|\.cmd)?$/i.test(effectiveConfig.commandPath)
+          : effectiveConfig.agentId === "github-copilot-cli";
+      const usageLimits =
+        isCopilot && provider.status === "ready" && provider.auth.status !== "unauthenticated"
+          ? yield* Effect.gen(function* () {
+              const { spawn } = yield* catalog.resolve(
+                effectiveConfig,
+                host.paths.cwd,
+                processEnvironment,
+              );
+              return yield* readCopilotUsageLimits({
+                command: spawn.command,
+                args: spawn.args,
+                env: spawn.env ?? processEnvironment,
+              });
+            }).pipe(
+              Effect.scoped,
+              Effect.provideService(FileSystem.FileSystem, fileSystem),
+              Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+              Effect.catch((error) =>
+                Effect.logWarning("Could not resolve the Copilot executable for quota", error).pipe(
+                  Effect.as(undefined),
+                ),
+              ),
+            )
+          : undefined;
+      return {
+        provider: usageLimits === undefined ? provider : { ...provider, usageLimits },
+        modelsFromModelSelect: yield* Ref.get(modelsFromSelectRef),
+      };
     });
     const hasRegistryAgent =
       effectiveConfig.enabled &&
