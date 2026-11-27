@@ -163,6 +163,7 @@ it("renders the outdated label in the UI language", async () => {
         canReply
         canResolve={false}
         canReact={false}
+        capabilities={capabilities}
         environmentId={EnvironmentId.make("environment")}
         reference={{ projectId: ProjectId.make("project"), repository: "owner/repo", number: 1 }}
         completionScope={null}
