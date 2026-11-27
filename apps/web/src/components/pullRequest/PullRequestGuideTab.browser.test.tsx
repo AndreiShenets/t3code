@@ -196,6 +196,7 @@ it("leaves J and K to floating layers, side chats, and IME while stepping inside
       <GuideTour
         environmentId={EnvironmentId.make("environment")}
         reference={{ ...reference, number: 2 }}
+        headSha="head"
         guide={threeStopGuide}
         banner={null}
         active
