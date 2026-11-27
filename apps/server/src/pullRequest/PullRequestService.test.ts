@@ -5142,6 +5142,8 @@ it.effect("reads unchanged EditorConfig files at the reviewed revision", () =>
       providers: [
         fakePullRequestProvider(SourceControlProviderKind.make("github"), {
           ...activityListing(commit, "B".repeat(40), "c".repeat(64)),
+          getChangeRequest: () =>
+            Effect.succeed({ ...hostedChangeRequest("Body"), headSha: commit }),
           getDiff: () =>
             Effect.sync(() => {
               diffReads += 1;
@@ -5231,6 +5233,47 @@ it.effect("reads unchanged EditorConfig files at the reviewed revision", () =>
       `${"B".repeat(40)}:.editorconfig`,
       `${"c".repeat(64)}:.editorconfig`,
     ]);
+  }),
+);
+
+it.effect("reads EditorConfig at the PR head when the host lists no activity commits", () =>
+  Effect.gen(function* () {
+    const head = "a".repeat(40);
+    const reads: Array<string | undefined> = [];
+    const service = yield* makeService({
+      projects: AZURE_PAIR,
+      providers: [
+        fakePullRequestProvider(SourceControlProviderKind.make("azure-devops"), {
+          ...activityListing(),
+          getChangeRequest: () => Effect.succeed({ ...hostedChangeRequest("Body"), headSha: head }),
+          getDiffFileContents: ({ commit }) =>
+            Effect.sync(() => {
+              reads.push(commit);
+              return { oldContents: "", newContents: "[*.cs]\nindent_size = 4" };
+            }),
+        }),
+      ],
+    });
+    const input = {
+      ...AZURE_PLATFORM,
+      commit: head,
+      changeType: "new" as const,
+      oldPath: ".editorconfig",
+      newPath: ".editorconfig",
+    };
+
+    const result = yield* service.diffFileContents(input);
+    assert.strictEqual(result.newContents, "[*.cs]\nindent_size = 4");
+
+    for (const rejected of [
+      { ...input, commit: "b".repeat(40) },
+      { ...input, oldPath: "unchanged.cs", newPath: "unchanged.cs" },
+    ]) {
+      const error = yield* service.diffFileContents(rejected).pipe(Effect.flip);
+      assert.strictEqual(error._tag, "PullRequestOperationError");
+      assert.match(error.message, /This commit is not part of the change request/);
+    }
+    assert.deepStrictEqual(reads, [head]);
   }),
 );
 

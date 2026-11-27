@@ -3744,12 +3744,12 @@ export const make = Effect.gen(function* () {
     );
     return { key, read };
   };
-  // A host reads a commit's diff from the repository, not from the change request, so a named
-  // commit is forwarded only as the one oid the change request's own commit list gives for it.
+  // A host reads a commit's diff from the repository, so resolve it against the PR itself.
   const withListedCommit = <I extends PullRequestRef & { readonly commit?: string | undefined }>(
     operation: string,
     input: I,
     read: (input: I) => Effect.Effect<PullRequestActivity, PullRequestError>,
+    readHead?: (input: I) => Effect.Effect<string | undefined, PullRequestError>,
   ): Effect.Effect<I, PullRequestError> => {
     const wanted = input.commit?.toLowerCase();
     if (wanted === undefined) return Effect.succeed(input);
@@ -3759,15 +3759,21 @@ export const make = Effect.gen(function* () {
           ? commits.filter((commit) => commit.oid.toLowerCase().startsWith(wanted))
           : [];
         const [commit] = listed;
-        return commit !== undefined && listed.length === 1
-          ? Effect.succeed({ ...input, commit: commit.oid })
-          : Effect.fail(
-              new PullRequestOperationError({
-                operation,
-                detail: "This commit is not part of the change request.",
-                reason: "not-found",
-              }),
-            );
+        if (commit !== undefined && listed.length === 1)
+          return Effect.succeed({ ...input, commit: commit.oid });
+        const notListed = Effect.fail(
+          new PullRequestOperationError({
+            operation,
+            detail: "This commit is not part of the change request.",
+            reason: "not-found",
+          }),
+        );
+        if (listed.length !== 0 || readHead === undefined) return notListed;
+        return readHead(input).pipe(
+          Effect.flatMap((head) =>
+            head?.toLowerCase() === wanted ? Effect.succeed({ ...input, commit: head }) : notListed,
+          ),
+        );
       }),
     );
   };
@@ -4199,10 +4205,19 @@ export const make = Effect.gen(function* () {
   // Pinned display configuration is the only unchanged-file exception: PR read access
   // must not grant general repository reads through the project's own credential.
   const listedActivity = credentialCached(activity);
-  const diffFileContents: PullRequestService["Service"]["diffFileContents"] = (input) =>
-    withListedCommit("diffFileContents", input, listedActivity).pipe(
+  const readEditorConfigHead = credentialCached((input: PullRequestRef) =>
+    detail({ ...input, allowStale: false }).pipe(Effect.map(({ headSha }) => headSha)),
+  );
+  const diffFileContents: PullRequestService["Service"]["diffFileContents"] = (input) => {
+    const editorConfig = isEditorConfigSnapshot(input);
+    return withListedCommit(
+      "diffFileContents",
+      input,
+      listedActivity,
+      editorConfig ? readEditorConfigHead : undefined,
+    ).pipe(
       Effect.flatMap((listedInput) =>
-        (isEditorConfigSnapshot(input) ? Effect.succeed(true) : changesFile(listedInput)).pipe(
+        (editorConfig ? Effect.succeed(true) : changesFile(listedInput)).pipe(
           Effect.flatMap((changed) =>
             changed
               ? readDiffFileContents(listedInput)
@@ -4217,6 +4232,7 @@ export const make = Effect.gen(function* () {
         ),
       ),
     );
+  };
 
   return PullRequestService.of({
     withSharedProjectReads,
