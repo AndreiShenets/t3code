@@ -9,6 +9,7 @@ import type {
 import { msg } from "gt-react-native";
 
 import type { AppSymbolName } from "../../components/ui/AppSymbol";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 import { m, type MessageResolver } from "../../i18n/messages";
 import { PullRequestGlyph } from "./pullRequestGlyphs";
 
@@ -256,7 +257,9 @@ export function pullRequestReviewSummary(
     return {
       title:
         approved.length === 1 && approved[0]?.author
-          ? resolve(msg("Approved by {login}", { login: approved[0].author.login }))
+          ? resolve(
+              msg("Approved by {login}", { login: getPullRequestActorName(approved[0].author) }),
+            )
           : resolve(msg("Reviews approved")),
       count: resolve(
         msg("{count, plural, one {{count} approved} other {{count} approved}}", {

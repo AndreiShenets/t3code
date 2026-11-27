@@ -137,6 +137,7 @@ export function usePullRequestListFilters(props: {
   readonly value: PullRequestListControls;
   readonly onChange: (value: PullRequestListControls) => void;
   readonly authors: readonly string[];
+  readonly authorNames: Readonly<Record<string, string>>;
   readonly labels: readonly string[];
   /** Dot colors by lowercased label name, for the labels that have one. */
   readonly labelColors: Readonly<Record<string, string>>;
@@ -356,7 +357,7 @@ export function usePullRequestListFilters(props: {
       Object.fromEntries([
         ["", m(msg("All authors"))],
         ["me", m(msg("Me", { $context: "author filter, the current user" }))],
-        ...authors.map((login) => [login, login]),
+        ...authors.map((login) => [login, props.authorNames[login] ?? login]),
       ]),
       author ?? "",
     ),

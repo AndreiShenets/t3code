@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { type ElementType, useState } from "react";
+import { getPullRequestActorName } from "@t3tools/shared/sourceControl";
 
 import { getSourceControlPresentationForKind } from "~/sourceControlPresentation";
 import { useDebouncedValue } from "~/state/queries";
@@ -352,7 +353,9 @@ function PullRequestAuthorChoices({
           <MenuRadioItem key={option.actor.login.toLowerCase()} value={option.actor.login}>
             <span className="flex min-w-0 items-center gap-2">
               <PullRequestActorAvatar actor={option.actor} />
-              <span className="min-w-0 flex-1 truncate">{option.actor.login}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {getPullRequestActorName(option.actor)}
+              </span>
               {option.mergedCount > 0 ? (
                 <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                   {gt("{count, plural, one {{count} merge loaded} other {{count} merges loaded}}", {
@@ -386,6 +389,7 @@ function PullRequestAuthorFilter({
   scope: ReadonlyArray<PullRequestFilterOptionScope>;
   onChange: (author: string | undefined) => void;
 }) {
+  const selected = selectedPullRequestAuthor(options, [], value);
   const gt = useGT();
   return (
     <MenuSub>
@@ -395,7 +399,7 @@ function PullRequestAuthorFilter({
           <T>Author</T>
         </span>
         <span className="min-w-0 max-w-32 truncate text-xs text-muted-foreground">
-          {value ?? gt("Anyone")}
+          {selected ? getPullRequestActorName(selected.actor) : (value ?? gt("Anyone"))}
         </span>
       </MenuSubTrigger>
       <MenuSubPopup>
