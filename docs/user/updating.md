@@ -10,6 +10,20 @@ Click the **Update** button at the bottom of the sidebar (web or desktop) to upd
 - Confirmation dialogs show which machines are skipped (offline or manual-only) and how many active threads will pause/resume.
 - Choose **Later** on the desktop restart countdown to restart when ready.
 
+## Custom Windows builds
+
+Custom Windows x64 builds check releases from `AndreiShenets/t3code`, including prereleases,
+15 seconds after startup and every four minutes. You can also check from the sidebar's custom-build
+control or **Settings → General → Custom build**. Download the offered build, then install it when
+you are ready to interrupt running agents. The installer is verified against the release's
+`SHA256SUMS` before it opens.
+
+Normal upstream update checks default to Nightly and respect an explicitly selected update track. Installing an official
+nightly replaces the customizations, including this control; reinstall a custom build to restore them.
+Custom builds with embedded UTC build times offer an official nightly only if its release timestamp is newer,
+so older nightlies do not light up the update indicator. Stable-track updates are unchanged. If either timestamp is
+unavailable or invalid, normal update checks apply.
+
 ## Switch between Stable and Nightly
 
 In the desktop app, change **Settings → About → Update track** to switch connected machines together.
