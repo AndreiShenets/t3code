@@ -1060,10 +1060,16 @@ it.effect.each([
   {
     name: "a clean filter now applies through info/attributes",
     reuses: false,
-    change: ({ git, write }: CaptureIndexChange) =>
-      write(".git/info/attributes", "*.txt filter=upper\n").pipe(
-        Effect.andThen(git(["config", "filter.upper.clean", "tr a-z A-Z"])),
+    setup: ({ git, write }: CaptureIndexChange) =>
+      write(
+        ".git/filter-upper.cjs",
+        'process.stdout.write(require("node:fs").readFileSync(0, "utf8").toUpperCase());\n',
+      ).pipe(
+        Effect.andThen(git(["config", "filter.upper.clean", "node .git/filter-upper.cjs"])),
+        Effect.andThen(git(["config", "filter.upper.required", "true"])),
       ),
+    change: ({ write }: CaptureIndexChange) =>
+      write(".git/info/attributes", "*.txt filter=upper\n"),
   },
   {
     name: "its conversion config changed",
